@@ -2,38 +2,30 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
-import Header, { showCenterCard } from "@/components/Header";
-import { postApi, Post, Comment, ApiException } from "@/lib/api";
+import { useEffect, useState, useCallback, useRef } from "react";
+import Header from "@/components/Header";
+import { useCenterCard } from "@/components/CenterCard";
+import Markdown from "@/components/Markdown";
+import CommentSection from "@/components/CommentSection";
+import { InlinePrefixBadge } from "@/components/PrefixBadge";
+import { postApi, Comment, ApiException } from "@/lib/api";
 import { useStore } from "@/lib/store";
-import { marked } from "marked";
-
-function timeAgo(ts?: string) {
-  if (!ts) return "";
-  const d = new Date(ts);
-  const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return "刚刚";
-  if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-const CATEGORY_LABELS: Record<string, string> = {
-  general: "综合", talk: "闲聊", question: "求助", share: "分享", creative: "创作",
-};
+import { categoryColor, categoryLabel, formatTime } from "@/lib/constants";
 
 export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { user, userId } = useStore();
-  const [post, setPost] = useState<Post | null>(null);
+  const { show } = useCenterCard();
+  const [post, setPost] = useState<any | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [liked, setLiked] = useState(false);
   const [favorited, setFavorited] = useState(false);
   const [commentText, setCommentText] = useState("");
-  const [replyTo, setReplyTo] = useState<Comment | null>(null);
+  const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -58,9 +50,9 @@ export default function PostDetailPage() {
     try {
       const r = await postApi.like(id);
       setLiked(r.liked);
-      setPost((p) => (p ? { ...p, likes: r.likes } : p));
+      setPost((p: any) => (p ? { ...p, likes: r.likes } : p));
     } catch (e: any) {
-      showCenterCard(`<p>${e.message}</p>`);
+      show(<p>{e.message}</p>);
     }
   };
 
@@ -70,20 +62,31 @@ export default function PostDetailPage() {
       const r = await postApi.favorite(id);
       setFavorited(r.favorited);
     } catch (e: any) {
-      showCenterCard(`<p>${e.message}</p>`);
+      show(<p>{e.message}</p>);
     }
   };
 
   const submitComment = async () => {
     if (!userId) return router.push("/login");
-    if (!commentText.trim()) return;
+    const content = commentText.trim();
+    if (!content) return;
     try {
-      const r = await postApi.createComment(id, commentText.trim(), replyTo?.id);
+      const r = await postApi.createComment(id, content, replyTo?.id);
       setComments((prev) => [...prev, r.comment]);
       setCommentText("");
       setReplyTo(null);
     } catch (e: any) {
-      showCenterCard(`<p>${e.message}</p>`);
+      show(<p>{e.message}</p>);
+    }
+  };
+
+  const deleteComment = async (cid: string) => {
+    if (!window.confirm("确定删除这条评论吗？")) return;
+    try {
+      await postApi.deleteComment(cid);
+      setComments((prev) => prev.filter((c) => c.id !== cid));
+    } catch (e: any) {
+      show(<p>{e.message}</p>);
     }
   };
 
@@ -93,7 +96,7 @@ export default function PostDetailPage() {
       await postApi.remove(id);
       router.push("/forum");
     } catch (e: any) {
-      showCenterCard(`<p>${e.message}</p>`);
+      show(<p>{e.message}</p>);
     }
   };
 
@@ -103,77 +106,114 @@ export default function PostDetailPage() {
     const detail = window.prompt("补充说明（可选）") || "";
     try {
       await postApi.report(id, reason, detail);
-      showCenterCard(`<p style="text-align:center">举报成功，感谢反馈！</p>`);
+      show(<p style={{ textAlign: "center" }}>举报成功，感谢反馈！</p>);
     } catch (e: any) {
-      showCenterCard(`<p>${e.message}</p>`);
+      show(<p>{e.message}</p>);
     }
   };
 
-  if (loading) return <><Header /><div className="forum-loading" style={{ padding: 40 }}>加载中...</div></>;
-  if (!post) return <><Header /><div className="forum-loading" style={{ padding: 40 }}>{err || "帖子不存在"}</div></>;
+  if (loading) return <><Header /><div className="post-loading" style={{ padding: 40 }}>加载中...</div></>;
+  if (!post) return <><Header /><div className="post-error" style={{ padding: 40 }}>{err || "帖子不存在"}</div></>;
+
+  const catColor = categoryColor(post.category);
+  const catLabel = categoryLabel(post.category);
+  const mainCount = comments.filter((c) => !c.parent_id).length;
+
+  const sharePost = async () => {
+    const url = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: post.title, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        show(<p style={{ textAlign: "center" }}>链接已复制</p>);
+      }
+    } catch {
+      /* 用户取消分享 */
+    }
+  };
 
   return (
     <>
       <Header />
-      <div className="forum-container" style={{ maxWidth: 900 }}>
-        <article className="post-detail-card">
-          <div className="post-detail-meta">
-            <span className="post-card-category">{CATEGORY_LABELS[post.category] || post.category || "综合"}</span>
-            <Link className="post-card-author" href={`/users/${post.user_id}`}>{post.user_name}</Link>
-            <span className="post-card-time">{timeAgo(post.created_at)}</span>
-          </div>
-          <h1 className="post-detail-title">{post.title}</h1>
-          <div className="markdown-body post-detail-content" dangerouslySetInnerHTML={{ __html: marked.parse(post.content || "", { async: false }) as string }} />
+      <div className="post-detail-container">
+        <div className="post-detail-header">
+          <a href="javascript:history.back()" className="post-back-btn">
+            <i className="fa fa-arrow-left"></i> 返回
+          </a>
+        </div>
 
-          <div className="post-detail-actions">
-            <button className={`action-btn ${liked ? "active" : ""}`} onClick={doLike}>
-              <i className="fa fa-heart"></i> {liked ? "已赞" : "点赞"} ({post.likes})
+        <article className="post-content">
+          <div className="post-meta-top">
+            <span className="post-category-badge" style={{ background: `${catColor}22`, color: catColor }}>{catLabel}</span>
+          </div>
+          <h1 className="post-title">{post.title}</h1>
+
+          <div className="post-author-row">
+            <Link href={`/users/${post.user_id}`} className="post-author-avatar">
+              <img src={post.user_avatar || ""} alt="" loading="lazy" />
+            </Link>
+            <div className="post-author-info">
+              <Link href={`/users/${post.user_id}`} className="post-author-name Username">
+                {post.user_name || "匿名"}
+                <InlinePrefixBadge userId={post.user_id} />
+              </Link>
+              <div className="post-author-meta">
+                <span>{formatTime(post.created_at)}</span>
+                <span>·</span>
+                <span><i className="fa fa-eye"></i> {post.views || 0}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="post-body-html">
+            <Markdown content={post.content} />
+          </div>
+
+          <div className="post-actions">
+            <button className={`post-action-btn ${liked ? "liked" : ""}`} id="post-like-btn" onClick={doLike}>
+              <i className="fa fa-thumbs-up"></i>
+              <span id="post-like-count">{post.likes || 0}</span>
             </button>
-            <button className={`action-btn ${favorited ? "active" : ""}`} onClick={doFavorite}>
-              <i className="fa fa-star"></i> {favorited ? "已收藏" : "收藏"}
+            <button className={`post-action-btn ${favorited ? "favorited" : ""}`} id="post-favorite-btn" onClick={doFavorite}>
+              <i className="fa fa-bookmark"></i>
+              <span className="post-action-label">收藏</span>
             </button>
-            <button className="action-btn" onClick={reportPost}><i className="fa fa-flag"></i> 举报</button>
-            {userId === post.user_id && (
-              <button className="action-btn danger" onClick={deletePost}><i className="fa fa-trash"></i> 删除</button>
+            <button className="post-action-btn" onClick={() => inputRef.current?.focus()}>
+              <i className="fa fa-comment"></i>
+              <span>{mainCount}</span>
+            </button>
+            <button className="post-action-btn" onClick={sharePost}>
+              <i className="fa fa-share-alt"></i>
+              <span className="post-action-label">分享</span>
+            </button>
+            {(!userId || post.user_id !== userId) && (
+              <button className="post-action-btn" onClick={reportPost}>
+                <i className="fa fa-flag"></i>
+                <span className="post-action-label">举报</span>
+              </button>
+            )}
+            {userId && post.user_id === userId && (
+              <button className="post-action-btn post-delete-btn" onClick={deletePost}>
+                <i className="fa fa-trash-o"></i>
+                <span className="post-action-label">删除</span>
+              </button>
             )}
           </div>
         </article>
 
-        <section className="comments-section">
-          <h2 className="comments-title"><i className="fa fa-comments"></i> 评论 ({comments.length})</h2>
-
-          <div className="comment-editor">
-            {replyTo && (
-              <div className="comment-reply-hint">
-                回复 @{replyTo.user_name} <button onClick={() => setReplyTo(null)}>取消</button>
-              </div>
-            )}
-            <textarea className="form-editor" rows={3} placeholder={userId ? "写下你的评论..." : "登录后参与评论"} value={commentText} disabled={!userId} onChange={(e) => setCommentText(e.target.value)} />
-            <button className="submit-button" disabled={!userId} onClick={submitComment}>发表评论</button>
-          </div>
-
-          <div className="comment-list">
-            {comments.length === 0 ? (
-              <div className="forum-loading">暂无评论，快来抢沙发~</div>
-            ) : (
-              comments.map((c) => (
-                <div className="comment-item" key={c.id}>
-                  <img className="comment-avatar" src={c.user_avatar} alt="" loading="lazy" />
-                  <div className="comment-body">
-                    <div className="comment-meta">
-                      <Link className="comment-author" href={`/users/${c.user_id}`}>{c.user_name}</Link>
-                      <span className="comment-time">{timeAgo(c.created_at)}</span>
-                      {userId && (
-                        <button className="comment-reply-btn" onClick={() => { setReplyTo(c); setCommentText(`@${c.user_name} `); }}>回复</button>
-                      )}
-                    </div>
-                    <p className="comment-content">{c.content}</p>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
+        <div className="comment-section">
+          <CommentSection
+            comments={comments}
+            userId={userId}
+            inputRef={inputRef}
+            replyTo={replyTo}
+            setReplyTo={setReplyTo}
+            onChangeReplyText={setCommentText}
+            onSubmit={submitComment}
+            onDelete={deleteComment}
+          />
+        </div>
       </div>
     </>
   );

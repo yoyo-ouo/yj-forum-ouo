@@ -1,28 +1,37 @@
 "use client";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import Header from "@/components/Header";
 
 function GoToInner() {
   const params = useSearchParams();
   const target = params.get("to") || "";
   const safe = /^https?:\/\//i.test(target);
   return (
-    <div style={{ display: "flex", minHeight: "60vh", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ maxWidth: 520, padding: 32, borderRadius: 12, background: "var(--color-bg-secondary, #fff)", textAlign: "center", boxShadow: "0 1px 3px rgba(0,0,0,.08)" }}>
-        <h2 style={{ marginBottom: 12 }}>即将离开妖精论坛</h2>
-        {safe ? (
-          <>
-            <p style={{ marginBottom: 20 }}>你正在访问外部链接：<br /><strong style={{ wordBreak: "break-all" }}>{target}</strong></p>
-            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-              <a className="submit-button" href={target} target="_blank" rel="noopener noreferrer">继续前往</a>
-              <button className="submit-button secondary" onClick={() => history.back()}>返回</button>
-            </div>
-          </>
-        ) : (
-          <p>无效的链接地址</p>
-        )}
+    <>
+      <Header />
+      <div className="goto-container">
+        <div className="goto-card">
+          <div className="goto-icon">
+            <i className="fa fa-exclamation-triangle"></i>
+          </div>
+          <h2>即将离开妖精论坛</h2>
+          <p className="goto-tip">无法验证以下链接的安全性，是否确认跳转？</p>
+          <div className="goto-url" id="goto-url-box">{safe ? target : "（未提供跳转目标）"}</div>
+          <div className="goto-actions">
+            <button className="goto-btn goto-btn-cancel" onClick={() => window.history.back()}>
+              <i className="fa fa-arrow-left"></i> 返回上一页
+            </button>
+            {safe && (
+              <a className="goto-btn goto-btn-confirm" id="goto-confirm" href={target} target="_blank" rel="nofollow noopener noreferrer">
+                <i className="fa fa-external-link"></i> 继续访问
+              </a>
+            )}
+          </div>
+          <p className="goto-warn">提示：该链接由用户发布，请注意防范钓鱼、诈骗等风险。</p>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

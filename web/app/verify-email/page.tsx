@@ -4,10 +4,11 @@ import { Suspense } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
-import { request } from "@/lib/api";
+import { useStore } from "@/lib/store";
 
 function VerifyInner() {
   const params = useSearchParams();
+  const { userId } = useStore();
   const token = params.get("token") || "";
   const [status, setStatus] = useState<"loading" | "ok" | "fail">("loading");
   const [msg, setMsg] = useState("");
@@ -24,24 +25,34 @@ function VerifyInner() {
   }, [token]);
 
   return (
-    <div style={{ textAlign: "center", padding: "60px 20px" }}>
+    <>
       <Header />
-      {status === "loading" && <div className="forum-loading">验证中...</div>}
-      {status === "ok" && (
-        <div style={{ padding: 32, background: "#fff", borderRadius: 12, maxWidth: 400, margin: "0 auto", boxShadow: "0 1px 3px rgba(0,0,0,.08)" }}>
-          <h3 style={{ color: "#10b981" }}><i className="fa fa-check-circle"></i> {msg}</h3>
-          <p>你的邮箱已通过验证，现在可以使用完整功能。</p>
-          <Link className="submit-button" style={{ marginTop: 16 }} href="/">返回首页</Link>
-        </div>
-      )}
-      {status === "fail" && (
-        <div style={{ padding: 32, background: "#fff", borderRadius: 12, maxWidth: 400, margin: "0 auto", boxShadow: "0 1px 3px rgba(0,0,0,.08)" }}>
-          <h3 style={{ color: "#ef4444" }}><i className="fa fa-times-circle"></i> 验证失败</h3>
-          <p>{msg}</p>
-          <Link className="submit-button secondary" style={{ marginTop: 16 }} href="/">返回首页</Link>
-        </div>
-      )}
-    </div>
+      <div className="verify-container">
+        {status === "loading" && <div className="post-loading">验证中...</div>}
+        {status === "ok" && (
+          <div className="verify-card success">
+            <div className="verify-icon">
+              <i className="fa fa-check-circle"></i>
+            </div>
+            <h2>验证成功</h2>
+            <p>{msg} 您的邮箱已成功验证，感谢您的使用！</p>
+            <Link className="verify-btn" href={userId ? `/users/${userId}` : "/login"}>
+              {userId ? "返回个人主页" : "返回登录"}
+            </Link>
+          </div>
+        )}
+        {status === "fail" && (
+          <div className="verify-card failed">
+            <div className="verify-icon">
+              <i className="fa fa-times-circle"></i>
+            </div>
+            <h2>验证失败</h2>
+            <p>{msg} 验证链接已过期或无效，请重新操作。</p>
+            <Link className="verify-btn" href="/login">返回登录</Link>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 

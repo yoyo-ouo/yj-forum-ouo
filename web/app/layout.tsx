@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "font-awesome/css/font-awesome.min.css";
+import "github-markdown-css/github-markdown.css";
 import { StoreProvider } from "@/lib/store";
+import { CenterCardProvider } from "@/components/CenterCard";
 
 export const metadata: Metadata = {
   title: "妖精论坛",
@@ -41,7 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body id="body">
         <StoreProvider>
-          {children}
+          <CenterCardProvider>{children}</CenterCardProvider>
         </StoreProvider>
       </body>
     </html>

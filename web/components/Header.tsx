@@ -5,26 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { miscApi } from "@/lib/api";
-
-// 全局弹窗卡片（WindowsCardWithCenterSreen 等价物）
-export function showCenterCard(html: string) {
-  const card = document.getElementById("WindowsCardWithCenterSreen");
-  const text = document.getElementById("WindowsCardWithCenterSreenText");
-  if (!card || !text) return;
-  text.innerHTML = html;
-  card.style.display = "flex";
-  card.classList.add("show");
-}
-
-export function hideCenterCard() {
-  const card = document.getElementById("WindowsCardWithCenterSreen");
-  if (!card) return;
-  card.style.display = "none";
-  card.classList.remove("show");
-}
+import { useCenterCard } from "./CenterCard";
+import Footer from "./Footer";
 
 export default function Header() {
   const { theme, setTheme, user, userId, logout } = useStore();
+  const { show } = useCenterCard();
   const router = useRouter();
   const pathname = usePathname();
   const [search, setSearch] = useState("");
@@ -35,6 +21,7 @@ export default function Header() {
   const [showBug, setShowBug] = useState(false);
   const [voteStats, setVoteStats] = useState<{ v1: number; v2: number } | null>(null);
   const settingsRef = useRef<HTMLLIElement>(null);
+  const deferredPromptRef = useRef<Event | null>(null);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -44,6 +31,33 @@ export default function Header() {
     };
     document.addEventListener("click", onClick);
     return () => document.removeEventListener("click", onClick);
+  }, []);
+
+  // 关闭移动端菜单（路由切换后）
+  useEffect(() => {
+    setShowMobileMenu(false);
+  }, [pathname]);
+
+  // PWA 安装：捕获 beforeinstallprompt（与 legacy base.html 一致）
+  useEffect(() => {
+    const onBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      deferredPromptRef.current = e;
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+  }, []);
+
+  // 首页点击 Escape 关闭
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowDonate(false);
+        setShowVote(false);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, []);
 
   // 投票统计加载
@@ -62,18 +76,58 @@ export default function Header() {
     try {
       const r = await miscApi.vote(choice);
       setVoteStats(r.stats);
-      showCenterCard(`<div style="text-align:center;padding:12px"><p>投票成功！</p><p>V1: ${r.stats.v1} | V2: ${r.stats.v2}</p></div>`);
+      show(
+        <div style={{ textAlign: "center", padding: 12 }}>
+          <p>投票成功！</p>
+          <p>V1: {r.stats.v1} | V2: {r.stats.v2}</p>
+        </div>
+      );
     } catch (e: any) {
-      showCenterCard(`<p style="text-align:center">${e.message}</p>`);
+      show(<p style={{ textAlign: "center" }}>{e.message}</p>);
     }
   };
 
   const showEasterEgg = async () => {
     try {
       const egg = await miscApi.easterEgg();
-      showCenterCard(`<h3 style="margin:0 0 12px">${egg.Name}</h3><div>${egg.Text}</div>`);
+      show(
+        <>
+          <h3 style={{ margin: "0 0 12px" }}>{egg.Name}</h3>
+          <div>{egg.Text}</div>
+        </>
+      );
     } catch {
-      showCenterCard(`<p>彩蛋获取失败</p>`);
+      show(<p>彩蛋获取失败</p>);
+    }
+  };
+
+  const installPWA = () => {
+    const promptEvent = deferredPromptRef.current as any;
+    if (promptEvent && typeof promptEvent.prompt === "function") {
+      promptEvent.prompt();
+      promptEvent.userChoice
+        ?.then((result: { outcome: string }) => {
+          if (result && result.outcome === "accepted") {
+            try {
+              localStorage.setItem("pwa_installed", "1");
+            } catch {}
+          }
+          deferredPromptRef.current = null;
+        })
+        .catch(() => {
+          show(<p style={{ textAlign: "center" }}>当前浏览器不支持安装</p>);
+        });
+    } else {
+      show(
+        <div style={{ textAlign: "center", padding: "6px 4px 2px" }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 8 }}>
+            当前浏览器不支持安装
+          </div>
+          <div style={{ fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+            您的浏览器暂不支持安装论坛客户端 (PWA)。建议使用 Chrome / Edge / Safari 最新版本再次尝试。
+          </div>
+        </div>
+      );
     }
   };
 
@@ -144,6 +198,12 @@ export default function Header() {
                 <span>V2新版本</span>
               </button>
             </li>
+            <li className="header-collapsible" id="pwa-install-li">
+              <button className="header-btn" id="pwa-install-btn" onClick={installPWA}>
+                <i className="fa fa-download"></i>
+                <span>安装论坛客户端</span>
+              </button>
+            </li>
             <li className="header-menu-toggle">
               <button className="header-btn" type="button" onClick={() => setShowMobileMenu(!showMobileMenu)}>
                 <i className="fa fa-bars"></i>
@@ -194,37 +254,31 @@ export default function Header() {
               </Link>
             </li>
           </ul>
-          {showMobileMenu && (
-            <div className="header-mobile-menu" id="headerMobileMenu">
-              <Link className="mobile-menu-item" href="/WIKI"><i className="fa fa-book"></i> WIKI</Link>
-              <a className="mobile-menu-item" href="//hei.navifox.net"><i className="fa fa-home"></i> 会馆</a>
-              <a className="mobile-menu-item" href="https://yaonews.unknownmp.top/" target="_blank" rel="noopener"><i className="fa fa-newspaper-o"></i> 日刊</a>
-              <button className="mobile-menu-item" onClick={() => setShowDonate(true)}><i className="fa fa-heart"></i> 赞赏</button>
-              <button className="mobile-menu-item" onClick={() => setShowBug(true)}><i className="fa fa-bug"></i> Bug举报</button>
-              <button className="mobile-menu-item" onClick={() => setShowVote(true)}><i className="fa fa-random"></i> V2新版本</button>
-              <button className="mobile-menu-item" onClick={showEasterEgg}><i className="fa fa-gift"></i> 彩蛋</button>
-              <div className="mobile-menu-divider"></div>
-              <div className="mobile-menu-title">主题</div>
-              <button className="mobile-menu-item mobile-theme-btn" onClick={() => setTheme("day")}><i className="fa fa-sun-o"></i> 亮色</button>
-              <button className="mobile-menu-item mobile-theme-btn" onClick={() => setTheme("night")}><i className="fa fa-moon-o"></i> 暗色</button>
-              <button className="mobile-menu-item mobile-theme-btn" onClick={() => setTheme("default")}><i className="fa fa-desktop"></i> 默认</button>
-              <div className="mobile-menu-divider"></div>
-              {user && (
-                <button className="mobile-menu-item" onClick={logout}><i className="fa fa-sign-out"></i> 退出登录</button>
-              )}
-            </div>
-          )}
+          <div className={`header-mobile-menu ${showMobileMenu ? "open" : ""}`} id="headerMobileMenu">
+            <Link className="mobile-menu-item" href="/WIKI"><i className="fa fa-book"></i> WIKI</Link>
+            <a className="mobile-menu-item" href="//hei.navifox.net"><i className="fa fa-home"></i> 会馆</a>
+            <a className="mobile-menu-item" href="https://yaonews.unknownmp.top/" target="_blank" rel="noopener"><i className="fa fa-newspaper-o"></i> 日刊</a>
+            <button className="mobile-menu-item" onClick={() => setShowDonate(true)}><i className="fa fa-heart"></i> 赞赏</button>
+            <button className="mobile-menu-item" onClick={() => setShowBug(true)}><i className="fa fa-bug"></i> Bug举报</button>
+            <button className="mobile-menu-item" onClick={() => setShowVote(true)}><i className="fa fa-random"></i> V2新版本</button>
+            <button className="mobile-menu-item" id="pwa-install-mobile" onClick={installPWA}><i className="fa fa-download"></i> 安装论坛客户端</button>
+            <button className="mobile-menu-item" onClick={showEasterEgg}><i className="fa fa-gift"></i> 彩蛋</button>
+            <div className="mobile-menu-divider"></div>
+            <div className="mobile-menu-title">主题</div>
+            <button className="mobile-menu-item mobile-theme-btn" onClick={() => setTheme("day")}><i className="fa fa-sun-o"></i> 亮色</button>
+            <button className="mobile-menu-item mobile-theme-btn" onClick={() => setTheme("night")}><i className="fa fa-moon-o"></i> 暗色</button>
+            <button className="mobile-menu-item mobile-theme-btn" onClick={() => setTheme("default")}><i className="fa fa-desktop"></i> 默认</button>
+            <div className="mobile-menu-divider"></div>
+            {user && (
+              <button className="mobile-menu-item" onClick={logout}><i className="fa fa-sign-out"></i> 退出登录</button>
+            )}
+          </div>
         </div>
       </header>
 
-      <div id="ui">{/* 页面内容由各 page 渲染 */}</div>
+      <div id="ui">{/* 页面内容渲染 */}</div>
 
       <div id="footer-spacer"></div>
-
-      <div id="WindowsCardWithCenterSreen">
-        <button className="windows-card-close" onClick={hideCenterCard}>&times;</button>
-        <div id="WindowsCardWithCenterSreenText" className="windows-card"></div>
-      </div>
 
       <Footer />
 
@@ -278,6 +332,7 @@ export default function Header() {
 }
 
 function BugReportDialog({ onClose }: { onClose: () => void }) {
+  const { show } = useCenterCard();
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
   const [steps, setSteps] = useState("");
@@ -289,10 +344,10 @@ function BugReportDialog({ onClose }: { onClose: () => void }) {
     setSubmitting(true);
     try {
       await miscApi.reportBug({ title, detail, steps, contact, page_url: window.location.href });
-      showCenterCard(`<p style="text-align:center">Bug 提交成功，感谢反馈！</p>`);
+      show(<p style={{ textAlign: "center" }}>Bug 提交成功，感谢反馈！</p>);
       onClose();
     } catch (e: any) {
-      showCenterCard(`<p style="text-align:center">${e.message}</p>`);
+      show(<p style={{ textAlign: "center" }}>{e.message}</p>);
     } finally {
       setSubmitting(false);
     }
@@ -305,42 +360,15 @@ function BugReportDialog({ onClose }: { onClose: () => void }) {
         <button className="donate-close" onClick={onClose}>&times;</button>
         <h3 className="donate-title"><i className="fa fa-bug"></i> Bug 报告</h3>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-          <input className="form-editor" placeholder="标题（必填）" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
-          <textarea className="form-editor" placeholder="问题详情（必填）" rows={4} maxLength={5000} value={detail} onChange={(e) => setDetail(e.target.value)} />
-          <textarea className="form-editor" placeholder="复现步骤（可选）" rows={3} maxLength={3000} value={steps} onChange={(e) => setSteps(e.target.value)} />
-          <input className="form-editor" placeholder="联系方式（可选）" maxLength={200} value={contact} onChange={(e) => setContact(e.target.value)} />
-          <button className="submit-button" disabled={submitting} onClick={submit}>
+          <input className="report-detail-input" placeholder="标题（必填）" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
+          <textarea className="report-detail-input textarea" placeholder="问题详情（必填）" rows={4} maxLength={5000} value={detail} onChange={(e) => setDetail(e.target.value)} />
+          <textarea className="report-detail-input textarea" placeholder="复现步骤（可选）" rows={3} maxLength={3000} value={steps} onChange={(e) => setSteps(e.target.value)} />
+          <input className="report-detail-input" placeholder="联系方式（可选）" maxLength={200} value={contact} onChange={(e) => setContact(e.target.value)} />
+          <button className="report-submit" disabled={submitting} onClick={submit}>
             {submitting ? "提交中..." : "提交"}
           </button>
         </div>
       </div>
     </div>
-  );
-}
-
-function Footer() {
-  return (
-    <footer id="footer">
-      <Link href="/privacy" id="FooterPrivacy">隐私</Link>
-      <br />
-      <br />
-      联系方式<br />
-      邮箱：3890320020@qq.com<br />
-      <a href="https://github.com/crazying-dev">Github（大号）：crazying-dev</a><br />
-      小红书：<a href="https://xhslink.com/m/7yCXhVvmCaJ">卡里</a><br />
-      站长的个人站点：<a href="https://crazying-dev.top" target="_blank" rel="noopener">crazying-dev.top</a><br />
-      公众号：
-      <span className="qr-hover-wrap">
-        <span id="Footer公众号">悬停扫码</span>
-        <img className="qr-img" src="/assets/img/OfficialAccount.jpg" alt="公众号二维码" />
-      </span>
-      <br />
-      <br />
-      <span className="footer-disclaimer">
-        <i className="fa fa-info-circle"></i> 本二创无官方授权，仅粉丝公益创作
-      </span>
-      <br />
-      <br />
-    </footer>
   );
 }

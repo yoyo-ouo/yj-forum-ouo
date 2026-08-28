@@ -1,16 +1,17 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Header from "@/components/Header";
 
-const GIFS = ["/assets/live2d/standby.gif", "/assets/live2d/hey.gif", "/assets/live2d/wake.gif", "/assets/live2d/jump.gif", "/assets/live2d/iron.gif"];
-const NAMES = ["待机", "嘿咻", "惊醒", "起跳", "铁片"];
+const GIFS = [
+  { src: "/assets/live2d/standby.gif", name: "待机" },
+  { src: "/assets/live2d/hey.gif", name: "嘿咻" },
+  { src: "/assets/live2d/wake.gif", name: "惊醒" },
+  { src: "/assets/live2d/jump.gif", name: "起跳" },
+  { src: "/assets/live2d/iron.gif", name: "铁片" },
+];
 
 export default function Live2DPage() {
   const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setIdx((i) => (i + 1) % GIFS.length), 4000);
-    return () => clearInterval(t);
-  }, []);
   return (
     <div style={{ paddingTop: "70px" }}>
       <Header />
@@ -36,11 +37,29 @@ export default function Live2DPage() {
 
         <div className="live2d-container">
           <div className="live2d-canvas-wrapper">
-            <img src={GIFS[idx]} alt={NAMES[idx]} style={{ width: "100%", borderRadius: 12 }} />
-            <div className="live2d-loading" style={{ textAlign: "center", marginTop: 8, fontSize: 13, color: "#999" }}>
-              动作：{NAMES[idx]}（自动轮播，每4秒切换）
+            <img src={GIFS[idx].src} alt={GIFS[idx].name} style={{ width: "100%", borderRadius: 12 }} />
+            <div className="live2d-loading" id="live2d-loading" style={{ position: "static", display: "block", textAlign: "center", marginTop: 8, fontSize: 13, color: "#999" }}>
+              动作：{GIFS[idx].name}（点击下方卡片切换）
             </div>
           </div>
+        </div>
+
+        <div className="live2d-actions-section">
+          <h3 className="live2d-actions-title">动作示例</h3>
+          <div className="live2d-actions-grid">
+            {GIFS.map((g, i) => (
+              <button key={g.name} className={`live2d-action-card ${i === idx ? "active" : ""}`} onClick={() => setIdx(i)}>
+                <div className="live2d-action-gif">
+                  <img src={g.src} alt={g.name} loading="lazy" />
+                </div>
+                <span className="live2d-action-name">{g.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="wiki-footer">
+          <p>点击模型可以互动哦~</p>
         </div>
       </div>
     </div>

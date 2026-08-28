@@ -1,22 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
 import Header from "@/components/Header";
+import PostCard from "@/components/PostCard";
+import Link from "next/link";
 import { postApi, Post } from "@/lib/api";
-
-const CATEGORY_LABELS: Record<string, string> = {
-  general: "综合", talk: "闲聊", question: "求助", share: "分享", creative: "创作",
-};
-function timeAgo(ts?: string) {
-  if (!ts) return "";
-  const d = new Date(ts);
-  const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return "刚刚";
-  if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 const TABS = [
   { key: "all", label: "全部" },
@@ -82,29 +70,9 @@ export default function ForumPage() {
           {loading && pageRef.current === 1 ? (
             <div className="forum-loading">加载中...</div>
           ) : posts.length === 0 ? (
-            <div className="forum-loading">暂无帖子</div>
+            <div className="forum-empty">暂无帖子</div>
           ) : (
-            posts.map((p) => (
-              <Link className="post-card" href={`/post/${p.id}`} key={p.id}>
-                <div className="post-card-avatar-wrap">
-                  <img className="post-card-avatar" src={p.user_avatar} alt="" loading="lazy" />
-                </div>
-                <div className="post-card-body">
-                  <div className="post-card-meta">
-                    <span className="post-card-category">{CATEGORY_LABELS[p.category] || p.category || "综合"}</span>
-                    <span className="post-card-author">{p.user_name}</span>
-                    <span className="post-card-time">{timeAgo(p.created_at)}</span>
-                  </div>
-                  <h3 className="post-card-title">{p.title}</h3>
-                  <p className="post-card-summary">{p.summary?.replace(/\n/g, " ")}</p>
-                  <div className="post-card-footer">
-                    <span className="post-card-views"><i className="fa fa-eye"></i> {p.views}</span>
-                    <span className="post-card-likes"><i className="fa fa-heart"></i> {p.likes}</span>
-                    <span className="post-card-comments"><i className="fa fa-comment-o"></i> 评论</span>
-                  </div>
-                </div>
-              </Link>
-            ))
+            posts.map((p) => <PostCard key={p.id} post={p} />)
           )}
         </div>
 

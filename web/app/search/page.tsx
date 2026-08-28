@@ -5,11 +5,9 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense } from "react";
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
+import PostCard from "@/components/PostCard";
+import { ProfilePrefixBadge } from "@/components/PrefixBadge";
 import { miscApi, Post, UserBrief } from "@/lib/api";
-
-const CATEGORY_LABELS: Record<string, string> = {
-  general: "综合", talk: "闲聊", question: "求助", share: "分享", creative: "创作",
-};
 
 function SearchInner() {
   const params = useSearchParams();
@@ -23,11 +21,11 @@ function SearchInner() {
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  const doSearch = async (k: string, type: "both", page = 1, append = false) => {
+  const doSearch = async (k: string, page = 1, append = false) => {
     setSearching(true);
     setSearched(true);
     try {
-      const r = await miscApi.search(k, type, page, 20);
+      const r = await miscApi.search(k, "both", page, 20);
       if (append) {
         setPosts((p) => [...p, ...(r.posts || [])]);
       } else {
@@ -47,7 +45,7 @@ function SearchInner() {
     const k = params.get("k");
     if (k) {
       setKw(k);
-      doSearch(k, "both", 1, false);
+      doSearch(k, 1, false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
@@ -60,7 +58,7 @@ function SearchInner() {
 
   const loadMore = () => {
     const page = tab === "posts" ? Math.ceil(posts.length / 20) + 1 : Math.ceil(users.length / 20) + 1;
-    doSearch(kw, "both", page, true);
+    doSearch(kw, page, true);
   };
 
   return (
@@ -102,46 +100,43 @@ function SearchInner() {
             {searching && posts.length === 0 ? (
               <div className="forum-loading">加载中...</div>
             ) : posts.length === 0 ? (
-              <div className="forum-loading">未找到相关帖子</div>
+              <div className="forum-empty">未找到相关帖子</div>
             ) : (
-              posts.map((p) => (
-                <Link className="post-card" href={`/post/${p.id}`} key={p.id}>
-                  <div className="post-card-avatar-wrap">
-                    <img className="post-card-avatar" src={p.user_avatar} alt="" loading="lazy" />
-                  </div>
-                  <div className="post-card-body">
-                    <div className="post-card-meta">
-                      <span className="post-card-category">{CATEGORY_LABELS[p.category] || p.category || "综合"}</span>
-                      <span className="post-card-author">{p.user_name}</span>
-                    </div>
-                    <h3 className="post-card-title">{p.title}</h3>
-                    <p className="post-card-summary">{p.summary?.replace(/\n/g, " ")}</p>
-                  </div>
-                </Link>
-              ))
+              posts.map((p) => <PostCard key={p.id} post={p} />)
             )}
           </div>
 
-          <div className="forum-user-list" id="search-user-list" style={{ display: tab === "users" ? "block" : "none" }}>
+          <div className="forum-user-list" id="search-user-list">
             {searching && users.length === 0 ? (
               <div className="forum-loading">加载中...</div>
             ) : users.length === 0 ? (
-              <div className="forum-loading">未找到相关用户</div>
+              <div className="forum-empty">未找到相关用户</div>
             ) : (
-              users.map((u) => (
-                <Link className="post-card" href={`/users/${u.id}`} key={u.id}>
-                  <div className="post-card-avatar-wrap">
-                    <img className="post-card-avatar" src={u.avatar} alt="" loading="lazy" />
-                  </div>
-                  <div className="post-card-body">
-                    <div className="post-card-meta">
-                      <span className="post-card-author">{u.name}</span>
-                      {u.vip === "1" && <span className="post-card-category">VIP</span>}
-                    </div>
-                    <p className="post-card-summary">{u.intro || ""}</p>
-                  </div>
-                </Link>
-              ))
+              <div style={{ display: tab === "users" ? "block" : "none" }}>
+                {users.map((u) => {
+                  const vipIcon = u.vip !== "0" ? (
+                    <img
+                      src="https://op-kdocs.wpscdn.cn/odimg/web/2024-03-26-12-26/vipnew_hover.svg"
+                      className="prefix-badge-svg"
+                      style={{ width: 22, height: 22 }}
+                      alt="VIP"
+                    />
+                  ) : null;
+                  return (
+                    <Link className="search-user-item" href={`/users/${u.id}`} key={u.id} style={{ display: "flex" }}>
+                      <div className="search-user-avatar-wrapper">
+                        <img src={u.avatar} className="search-user-avatar" loading="lazy" alt={u.name} />
+                        {vipIcon}
+                        <ProfilePrefixBadge prefix={u.prefix} />
+                      </div>
+                      <div className="search-user-info">
+                        <div className="search-user-name" style={{ whiteSpace: "nowrap" }}>{u.name}</div>
+                        <div className="search-user-time">注册于 未知</div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
             )}
           </div>
 
