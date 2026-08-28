@@ -125,7 +125,11 @@ function SearchInner() {
                   return (
                     <Link className="search-user-item" href={`/users/${u.id}`} key={u.id} style={{ display: "flex" }}>
                       <div className="search-user-avatar-wrapper">
-                        <img src={u.avatar} className="search-user-avatar" loading="lazy" alt={u.name} />
+                        {u.avatar ? (
+                          <img src={u.avatar} className="search-user-avatar" loading="lazy" alt={u.name} />
+                        ) : (
+                          <i className="fa fa-user avatar-fallback search-user-avatar-fallback"></i>
+                        )}
                         {vipIcon}
                         <ProfilePrefixBadge prefix={u.prefix} />
                       </div>

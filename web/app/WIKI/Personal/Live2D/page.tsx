@@ -13,7 +13,7 @@ const GIFS = [
 export default function Live2DPage() {
   const [idx, setIdx] = useState(0);
   return (
-    <div style={{ paddingTop: "70px" }}>
+    <>
       <Header />
       <div className="wiki-page">
         <div className="wiki-header">
@@ -62,6 +62,6 @@ export default function Live2DPage() {
           <p>点击模型可以互动哦~</p>
         </div>
       </div>
-    </div>
+    </>
   );
 }

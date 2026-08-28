@@ -61,7 +61,11 @@ export default function FollowListModal({
               return (
                 <div className="follow-user-item" key={u.id}>
                   <Link href={`/users/${u.id}`} className="follow-user-avatar">
-                    <img src={u.avatar} alt={u.name} />
+                    {u.avatar ? (
+                      <img src={u.avatar} alt={u.name} />
+                    ) : (
+                      <i className="fa fa-user avatar-fallback"></i>
+                    )}
                     {vipBadge}
                   </Link>
                   <div className="follow-user-info">

@@ -54,7 +54,7 @@ export default function PostCreatePage() {
       <Header />
       <div className="post-create-container">
         <div className="post-create-header">
-          <a href="javascript:history.back()" className="post-create-back">
+          <a href="/forum" className="post-create-back" onClick={(e) => { e.preventDefault(); router.back(); }}>
             <i className="fa fa-arrow-left"></i> 返回
           </a>
           <h1 className="post-create-title">发布新帖子</h1>

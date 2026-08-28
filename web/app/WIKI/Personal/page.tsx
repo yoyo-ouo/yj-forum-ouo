@@ -2,7 +2,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 export default function PersonalPage() {
   return (
-    <div style={{ paddingTop: "70px" }}>
+    <>
       <Header />
       <div className="wiki-page">
         <div className="wiki-header"><h2>罗小黑战记个人开发</h2><h6 style={{ color: "red" }}>未经授权禁止商用！！</h6></div>
@@ -18,6 +18,6 @@ export default function PersonalPage() {
         </div>
         <div className="wiki-footer"><p>更多内容持续更新中...</p></div>
       </div>
-    </div>
+    </>
   );
 }

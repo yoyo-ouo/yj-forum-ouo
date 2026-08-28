@@ -28,7 +28,11 @@ function CommentItem({
   return (
     <div className={`comment-item ${isReply ? "comment-item-reply" : ""}`} data-comment-id={c.id}>
       <Link href={`/users/${c.user_id}`} className="comment-avatar">
-        <img src={c.user_avatar || ""} alt="" loading="lazy" />
+        {c.user_avatar ? (
+          <img src={c.user_avatar} alt="" loading="lazy" />
+        ) : (
+          <i className="fa fa-user avatar-fallback"></i>
+        )}
       </Link>
       <div className="comment-body">
         <div className="comment-header">

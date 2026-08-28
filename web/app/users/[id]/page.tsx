@@ -108,7 +108,11 @@ export default function UserPage() {
         <div className="user-profile-card">
           <div className="user-profile-avatar-wrapper">
             <div className="user-profile-avatar">
-              <img id="user-profile-avatar-img" src={profile.avatar || ""} alt="用户头像" />
+              {profile.avatar ? (
+                <img id="user-profile-avatar-img" src={profile.avatar} alt="用户头像" />
+              ) : (
+                <i className="fa fa-user avatar-fallback avatar-fallback-lg"></i>
+              )}
             </div>
             <ProfilePrefixBadge prefix={profile.prefix} />
           </div>

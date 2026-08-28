@@ -3,7 +3,7 @@ import Header from "@/components/Header";
 
 export default function WikiIndexPage() {
   return (
-    <div style={{ paddingTop: "70px" }}>
+    <>
       <Header />
       <div className="wiki-page">
         <div className="wiki-header"><h2>罗小黑战记 Wiki</h2></div>
@@ -23,6 +23,6 @@ export default function WikiIndexPage() {
         </div>
         <div className="wiki-footer"><p>更多内容持续更新中...</p></div>
       </div>
-    </div>
+    </>
   );
 }

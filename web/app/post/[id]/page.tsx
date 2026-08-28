@@ -138,7 +138,7 @@ export default function PostDetailPage() {
       <Header />
       <div className="post-detail-container">
         <div className="post-detail-header">
-          <a href="javascript:history.back()" className="post-back-btn">
+          <a href="/forum" className="post-back-btn" onClick={(e) => { e.preventDefault(); router.back(); }}>
             <i className="fa fa-arrow-left"></i> 返回
           </a>
         </div>
@@ -151,7 +151,11 @@ export default function PostDetailPage() {
 
           <div className="post-author-row">
             <Link href={`/users/${post.user_id}`} className="post-author-avatar">
-              <img src={post.user_avatar || ""} alt="" loading="lazy" />
+              {post.user_avatar ? (
+                <img src={post.user_avatar} alt="" loading="lazy" />
+              ) : (
+                <i className="fa fa-user avatar-fallback"></i>
+              )}
             </Link>
             <div className="post-author-info">
               <Link href={`/users/${post.user_id}`} className="post-author-name Username">

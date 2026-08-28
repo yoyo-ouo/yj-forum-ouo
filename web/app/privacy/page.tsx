@@ -2,7 +2,7 @@ import Header from "@/components/Header";
 
 export default function PrivacyPage() {
   return (
-    <div style={{ paddingTop: "70px" }}>
+    <>
       <Header />
       <div className="privacy-page">
         <div className="privacy-header">
@@ -16,6 +16,6 @@ export default function PrivacyPage() {
         <div className="privacy-section"><h3><span className="section-icon">五</span>联系我们</h3><p>如有任何问题，请通过以下方式联系我们：</p><p className="contact-email">邮箱：3890320020@qq.com</p></div>
         <div className="privacy-footer"><p>最后更新日期：2026年6月27日</p></div>
       </div>
-    </div>
+    </>
   );
 }

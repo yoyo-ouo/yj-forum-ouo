@@ -13,7 +13,11 @@ export default function PostCard({ post, showTime = true }: { post: Post; showTi
     <Link className="post-card" href={`/post/${post.id}`}>
       <div className="post-card-left">
         <div className="post-card-avatar">
-          <img src={post.user_avatar || ""} alt="" loading="lazy" />
+          {post.user_avatar ? (
+            <img src={post.user_avatar} alt="" loading="lazy" />
+          ) : (
+            <i className="fa fa-user avatar-fallback"></i>
+          )}
         </div>
       </div>
       <div className="post-card-body">

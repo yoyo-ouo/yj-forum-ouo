@@ -1,7 +1,7 @@
 import Header from "@/components/Header";
 export default function LiunxPage() {
   return (
-    <div style={{ paddingTop: "70px" }}>
+    <>
       <Header />
       <div className="wiki-page mouse-linux-page">
         <div className="wiki-header">
@@ -20,6 +20,6 @@ export default function LiunxPage() {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
