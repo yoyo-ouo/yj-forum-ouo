@@ -5,11 +5,21 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import PostCard from "@/components/PostCard";
 import FollowListModal from "@/components/FollowListModal";
+import UserProfileModal from "@/components/UserProfileModal";
 import { ProfilePrefixBadge } from "@/components/PrefixBadge";
+import CategoryBadge from "@/components/ui/CategoryBadge";
 import { useToast } from "@/components/Toast";
 import { UserAvatar } from "@/components/ui/UserAvatar";
-import { userApi, postApi, User, Post, UserBrief, ApiException } from "@/lib/api";
+import { userApi, postApi, User, Post, UserBrief, ReplyItem, ApiException } from "@/lib/api";
+import { ageDisplay } from "@/lib/constants";
 import { useStore } from "@/lib/store";
+
+function fmtDate(v?: string) {
+  if (!v) return "-";
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return "-";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 export default function UserPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,6 +35,11 @@ export default function UserPage() {
   const [loading, setLoading] = useState(true);
   const [showFollowList, setShowFollowList] = useState<null | "following" | "followers">(null);
   const [followUsers, setFollowUsers] = useState<UserBrief[]>([]);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<"posts" | "comments">("posts");
+  const [postView, setPostView] = useState<"posts" | "favorites">("posts");
+  const [comments, setComments] = useState<ReplyItem[] | null>(null);
+  const [favorites, setFavorites] = useState<Post[] | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -44,6 +59,32 @@ export default function UserPage() {
   }, [id, userId, toast]);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadComments = useCallback(async () => {
+    try {
+      const r = await userApi.comments(id, 1, 50);
+      setComments(r.comments || []);
+    } catch {
+      setComments([]);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (activeTab === "comments" && comments === null) loadComments();
+  }, [activeTab, comments, loadComments]);
+
+  const loadFavorites = useCallback(async () => {
+    try {
+      const r = await userApi.favorites(id, 1, 50);
+      setFavorites(r.posts || []);
+    } catch {
+      setFavorites([]);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (postView === "favorites" && favorites === null) loadFavorites();
+  }, [postView, favorites, loadFavorites]);
 
   const toggleFollow = async () => {
     if (!me) return router.push("/auth");
@@ -66,29 +107,26 @@ export default function UserPage() {
   const sendVerifyEmail = async () => {
     try {
       await userApi.verifyEmail();
-      toast("验证码已发送至你的邮箱，请在用户资料中填写", "success");
-    } catch (e: any) {
-      toast(e.message, "error");
-    }
-  };
-
-  const updateProfile = async () => {
-    const intro = window.prompt("修改个性签名", profile?.intro || "");
-    if (intro === null) return;
-    try {
-      await userApi.updateMe({ intro });
+      const code = window.prompt("验证码已发送至你的邮箱，请输入收到的 6 位验证码：");
+      if (!code) return;
+      await userApi.verifyEmailConfirm(code.trim());
+      toast("邮箱验证成功", "success");
       await refreshUser();
       load();
     } catch (e: any) {
-      toast(e.message, "error");
+      toast(e instanceof ApiException ? e.message : "操作失败", "error");
     }
+  };
+
+  const onProfileSaved = async () => {
+    await refreshUser();
+    load();
   };
 
   const onToggleFollowInList = async (u: UserBrief) => {
     try {
       await userApi.follow(u.id);
-      const r = await userApi.following(id);
-      setFollowUsers(r.users || []);
+      setFollowUsers((list) => list.map((x) => (x.id === u.id ? { ...x, is_following: !x.is_following } : x)));
     } catch { /* 忽略 */ }
   };
 
@@ -113,28 +151,29 @@ export default function UserPage() {
           </div>
           <div className="user-profile-info">
             <h2>
-              <div id="user-profile-name" className="user-name-clickable Username" title="点击查看详情" onClick={isSelf ? updateProfile : undefined}>
+              <div id="user-profile-name" className="user-name-clickable Username" title="点击查看详情" onClick={() => setShowProfileModal(true)}>
                 {profile.name}
               </div>
               {vipIcon}
-              {profile.email_verified === 1 && (
-                <span id="user-profile-email-verified" className="email-verified-badge">
-                  <i className="fa fa-check-circle"></i> 已验证
-                </span>
-              )}
             </h2>
             <p className="user-profile-intro" id="user-profile-intro">{profile.intro || "这个人很懒，什么都没留下~"}</p>
             <div className="user-profile-meta">
-              <span className="user-meta-item" id="user-profile-gender">
+              <span className="user-meta-item user-meta-clickable" id="user-profile-gender" title="点击查看详情" onClick={() => setShowProfileModal(true)}>
                 <i className="fa fa-user"></i> {profile.gender === 1 ? "男" : profile.gender === 2 ? "女" : "保密"}
               </span>
-              <span className="user-meta-item" id="user-profile-age">
-                <i className="fa fa-birthday-cake"></i> {profile.age || "保密"}
+              <span className="user-meta-item user-meta-clickable" id="user-profile-age" title="点击查看详情" onClick={() => setShowProfileModal(true)}>
+                <i className="fa fa-birthday-cake"></i> {ageDisplay(profile.age)}
               </span>
-              {isSelf && profile.email_verified === 0 && (
-                <button type="button" className="user-meta-item user-meta-clickable email-verify-btn" id="user-profile-verify-email" onClick={sendVerifyEmail}>
-                  <i className="fa fa-envelope"></i> 验证邮箱
-                </button>
+              {profile.email_verified === 1 ? (
+                <span className="user-meta-item email-verified-badge" id="user-profile-email-verified-meta" title="邮箱已验证">
+                  <i className="fa fa-envelope"></i> 已验证
+                </span>
+              ) : (
+                isSelf && (
+                  <button type="button" className="user-meta-item user-meta-clickable email-verify-btn" id="user-profile-verify-email" onClick={sendVerifyEmail}>
+                    <i className="fa fa-envelope"></i> 验证邮箱
+                  </button>
+                )
               )}
             </div>
           </div>
@@ -168,24 +207,134 @@ export default function UserPage() {
         </div>
 
         <div className="user-profile-tabs">
-          <button className="profile-tab active" data-tab="posts">
+          <button className={`profile-tab ${activeTab === "posts" ? "active" : ""}`} data-tab="posts" onClick={() => setActiveTab("posts")}>
             <i className="fa fa-file-text"></i> 帖子列表
           </button>
-          <Link href="/post/create" className="profile-tab profile-tab-create">
-            <i className="fa fa-pencil"></i> 发布新帖
-          </Link>
+          <button className={`profile-tab ${activeTab === "comments" ? "active" : ""}`} data-tab="comments" onClick={() => setActiveTab("comments")}>
+            <i className="fa fa-comment-o"></i> 评论列表
+          </button>
+          {isSelf && (
+            <Link href="/post/create" className="profile-tab profile-tab-create">
+              <i className="fa fa-pencil"></i> 发布新帖
+            </Link>
+          )}
         </div>
 
         <div className="user-profile-content">
-          <div id="user-posts-list" className="user-posts-list">
-            {posts.length === 0 ? (
-              <p className="loading-text">还没有发布帖子</p>
+          {activeTab === "posts" ? (
+            <div>
+              {isSelf && (
+                <div className="profile-sub-tabs">
+                  <button
+                    className={`profile-sub-tab ${postView === "posts" ? "active" : ""}`}
+                    onClick={() => setPostView("posts")}
+                  >
+                    <i className="fa fa-file-text"></i> 帖子
+                  </button>
+                  <button
+                    className={`profile-sub-tab ${postView === "favorites" ? "active" : ""}`}
+                    onClick={() => setPostView("favorites")}
+                  >
+                    <i className="fa fa-bookmark"></i> 我的收藏
+                  </button>
+                </div>
+              )}
+              {postView === "posts" ? (
+                <div id="user-posts-list" className="user-posts-list">
+              {posts.length === 0 ? (
+                <p className="loading-text">还没有发布帖子</p>
+              ) : (
+                posts.map((p) => (
+                  <div className="post-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/post/${p.id}`)}>
+                    <h3 className="post-item-title">{p.title}</h3>
+                    <p className="post-item-summary">{(p.summary || "").replace(/<[^>]+>/g, "").substring(0, 200)}</p>
+                    <div className="post-item-footer">
+                      <CategoryBadge category={p.category} className="post-item-category" />
+                      <div className="post-item-stats">
+                        <span><i className="fa fa-eye"></i> {p.views || 0}</span>
+                        <span><i className="fa fa-thumbs-up"></i> {p.likes || 0}</span>
+                        <span><i className="fa fa-comment"></i> {p.comment_count ?? 0}</span>
+                        <span><i className="fa fa-clock-o"></i> {fmtDate(p.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              </div>
             ) : (
-              posts.map((p) => <PostCard key={p.id} post={p} showTime={false} />)
+              <div className="user-posts-list">
+                {favorites === null ? (
+                  <p className="loading-text">加载中...</p>
+                ) : favorites.length === 0 ? (
+                  <p className="loading-text">还没有收藏帖子</p>
+                ) : (
+                  favorites.map((p) => (
+                    <div className="post-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/post/${p.id}`)}>
+                      <div className="post-item-header">
+                        <img className="post-item-avatar" src={p.user_avatar} alt="" />
+                        <div className="post-item-header-body">
+                          <h3 className="post-item-title">{p.title}</h3>
+                          <div className="post-item-sub-meta">
+                            <span className="post-item-author Username"><i className="fa fa-user-circle-o"></i> {p.user_name}</span>
+                            <CategoryBadge category={p.category} className="post-item-category" />
+                          </div>
+                        </div>
+                      </div>
+                      <p className="post-item-summary">{(p.summary || "").replace(/<[^>]+>/g, "").substring(0, 200)}</p>
+                      <div className="post-item-footer post-item-footer-right">
+                        <div className="post-item-stats">
+                          <span><i className="fa fa-eye"></i> {p.views || 0}</span>
+                          <span><i className="fa fa-thumbs-up"></i> {p.likes || 0}</span>
+                          <span><i className="fa fa-comment"></i> {p.comment_count ?? 0}</span>
+                          <span><i className="fa fa-clock-o"></i> {fmtDate(p.created_at)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             )}
           </div>
+        ) : (
+          <div className="user-comments-list">
+            {comments === null ? (
+              <p className="loading-text">加载中...</p>
+            ) : comments.length === 0 ? (
+              <p className="loading-text">还没有发表评论</p>
+            ) : (
+              comments.map((c) => (
+                <Link
+                  className="comment-item"
+                  key={c.id}
+                  href={`/post/${c.post_id}#comment-${c.id}`}
+                  title="点击跳转到该评论"
+                >
+                  <div className="comment-avatar">
+                    <img src={c.user_avatar} alt="" />
+                  </div>
+                  <div className="comment-body">
+                    <div className="comment-header">
+                      <span className="comment-author">{c.user_name}</span>
+                      <span className="comment-time">{fmtDate(c.created_at)}</span>
+                    </div>
+                    <div className="comment-text">{c.content}</div>
+                    <div className="comment-footer">
+                      <span className="comment-post-link">
+                        <i className="fa fa-commenting-o"></i> 评论于「{c.post_title}」
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              ))
+            )}
+          </div>
+        )}
         </div>
       </div>
+
+      {showProfileModal && profile && (
+        <UserProfileModal profile={profile} isSelf={isSelf} onClose={() => setShowProfileModal(false)} onSaved={onProfileSaved} />
+      )}
 
       {showFollowList && (
         <FollowListModal

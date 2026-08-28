@@ -49,6 +49,28 @@ export function formatTime(ts?: string): string {
   return d.toLocaleString();
 }
 
+// 从出生日期（YYYYMMDD）自动计算岁数；兼容纯数字年龄；无则“保密”
+export function ageDisplay(age?: string): string {
+  const s = String(age || "").trim();
+  if (!s) return "保密";
+  if (/^\d{8}$/.test(s)) {
+    const y = parseInt(s.substring(0, 4), 10);
+    const m = parseInt(s.substring(4, 6), 10) - 1;
+    const d = parseInt(s.substring(6, 8), 10);
+    const dt = new Date(y, m, d);
+    if (!isNaN(dt.getTime())) {
+      const now = new Date();
+      let a = now.getFullYear() - dt.getFullYear();
+      const md = now.getMonth() - dt.getMonth();
+      if (md < 0 || (md === 0 && now.getDate() < dt.getDate())) a--;
+      return a + " 岁";
+    }
+  }
+  const n = parseInt(s, 10);
+  if (!isNaN(n)) return n + " 岁";
+  return "保密";
+}
+
 // 时间（搜索/用户列表）
 export function formatUserTime(ts?: string): string {
   if (!ts) return "";

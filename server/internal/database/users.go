@@ -178,7 +178,8 @@ func (d *DB) GetUserFavorites(ctx context.Context, userID string, page, pageSize
 	}
 	offset := (page - 1) * pageSize
 	rows, err := d.Query(ctx, `SELECT p.id, p.user_id, p.title, LEFT(p.content, 200), p.category, p.likes, p.views,
-		p.created_at, u.name, u.avatar
+		p.created_at, u.name, u.avatar,
+		(SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = 1) AS comment_count
 		FROM post_favorites f JOIN posts p ON f.post_id = p.id JOIN users u ON p.user_id = u.id
 		WHERE f.user_id = $1 AND p.status = 1 ORDER BY f.created_at DESC LIMIT $2 OFFSET $3`,
 		userID, pageSize, offset)
@@ -190,7 +191,7 @@ func (d *DB) GetUserFavorites(ctx context.Context, userID string, page, pageSize
 	for rows.Next() {
 		var p models.PostListItem
 		var createdAt *time.Time
-		if err := rows.Scan(&p.ID, &p.UserID, &p.Title, &p.Summary, &p.Category, &p.Likes, &p.Views, &createdAt, &p.UserName, &p.UserAvatar); err != nil {
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Title, &p.Summary, &p.Category, &p.Likes, &p.Views, &createdAt, &p.UserName, &p.UserAvatar, &p.CommentCount); err != nil {
 			return nil, err
 		}
 		p.CreatedAt = createdAt
@@ -230,16 +231,16 @@ func (d *DB) GetFollowStats(ctx context.Context, userID string) (models.FollowSt
 }
 
 // GetFollowingList 关注列表。
-func (d *DB) GetFollowingList(ctx context.Context, userID string, page, pageSize int) ([]models.UserBrief, error) {
-	return d.followList(ctx, "follower_id", userID, page, pageSize)
+func (d *DB) GetFollowingList(ctx context.Context, userID, viewerID string, page, pageSize int) ([]models.UserBrief, error) {
+	return d.followList(ctx, "follower_id", userID, viewerID, page, pageSize)
 }
 
 // GetFollowerList 粉丝列表。
-func (d *DB) GetFollowerList(ctx context.Context, userID string, page, pageSize int) ([]models.UserBrief, error) {
-	return d.followList(ctx, "following_id", userID, page, pageSize)
+func (d *DB) GetFollowerList(ctx context.Context, userID, viewerID string, page, pageSize int) ([]models.UserBrief, error) {
+	return d.followList(ctx, "following_id", userID, viewerID, page, pageSize)
 }
 
-func (d *DB) followList(ctx context.Context, side, userID string, page, pageSize int) ([]models.UserBrief, error) {
+func (d *DB) followList(ctx context.Context, side, userID, viewerID string, page, pageSize int) ([]models.UserBrief, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -251,10 +252,12 @@ func (d *DB) followList(ctx context.Context, side, userID string, page, pageSize
 	if side == "following_id" {
 		col = "follower_id"
 	}
-	rows, err := d.Query(ctx, `SELECT u.id, u.name, u.avatar, u.vip, u.prefix, u.intro
+	rows, err := d.Query(ctx, `SELECT u.id, u.name, u.avatar, u.vip, u.prefix, u.intro,
+		(u.id = $4) AS is_self,
+		EXISTS(SELECT 1 FROM user_follows f2 WHERE f2.follower_id = $4 AND f2.following_id = u.id) AS is_following
 		FROM user_follows f JOIN users u ON u.id = f.`+col+`
 		WHERE f.`+side+` = $1 ORDER BY f.created_at DESC LIMIT $2 OFFSET $3`,
-		userID, pageSize, offset)
+		userID, pageSize, offset, viewerID)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +265,7 @@ func (d *DB) followList(ctx context.Context, side, userID string, page, pageSize
 	var users []models.UserBrief
 	for rows.Next() {
 		var u models.UserBrief
-		if err := rows.Scan(&u.ID, &u.Name, &u.Avatar, &u.VIP, &u.Prefix, &u.Intro); err != nil {
+		if err := rows.Scan(&u.ID, &u.Name, &u.Avatar, &u.VIP, &u.Prefix, &u.Intro, &u.IsSelf, &u.IsFollowing); err != nil {
 			return nil, err
 		}
 		users = append(users, u)

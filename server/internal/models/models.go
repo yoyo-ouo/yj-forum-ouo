@@ -22,12 +22,14 @@ type User struct {
 
 // UserBrief 列表/关联场景的用户摘要。
 type UserBrief struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Avatar string `json:"avatar"`
-	VIP    string `json:"vip"`
-	Prefix string `json:"prefix"`
-	Intro  string `json:"intro"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Avatar      string `json:"avatar"`
+	VIP         string `json:"vip"`
+	Prefix      string `json:"prefix"`
+	Intro       string `json:"intro"`
+	IsSelf      bool   `json:"is_self"`
+	IsFollowing bool   `json:"is_following"`
 }
 
 // Post 帖子。
@@ -63,26 +65,28 @@ type Comment struct {
 
 // WorldMessage 世界频道消息。
 type WorldMessage struct {
-	ID         int64      `json:"id"`
-	SenderID   string     `json:"sender_id"`
-	SenderName string     `json:"sender_name"`
-	Content    string     `json:"content"`
-	ParentID   *int64     `json:"parent_id"`
-	CreatedAt  *time.Time `json:"created_at"`
+	ID           int64      `json:"id"`
+	SenderID     string     `json:"sender_id"`
+	SenderName   string     `json:"sender_name"`
+	SenderAvatar string     `json:"sender_avatar"`
+	Content      string     `json:"content"`
+	ParentID     *int64     `json:"parent_id"`
+	CreatedAt    *time.Time `json:"created_at"`
 }
 
 // PostListItem 列表用帖子（含 summary）。
 type PostListItem struct {
-	ID         string     `json:"id"`
-	UserID     string     `json:"user_id"`
-	Title      string     `json:"title"`
-	Summary    string     `json:"summary"`
-	Category   string     `json:"category"`
-	Likes      int        `json:"likes"`
-	Views      int        `json:"views"`
-	CreatedAt  *time.Time `json:"created_at"`
-	UserName   string     `json:"user_name"`
-	UserAvatar string     `json:"user_avatar"`
+	ID           string     `json:"id"`
+	UserID       string     `json:"user_id"`
+	Title        string     `json:"title"`
+	Summary      string     `json:"summary"`
+	Category     string     `json:"category"`
+	Likes        int        `json:"likes"`
+	Views        int        `json:"views"`
+	CommentCount int        `json:"comment_count"`
+	CreatedAt    *time.Time `json:"created_at"`
+	UserName     string     `json:"user_name"`
+	UserAvatar   string     `json:"user_avatar"`
 }
 
 // ReplyItem 我收到的回复。

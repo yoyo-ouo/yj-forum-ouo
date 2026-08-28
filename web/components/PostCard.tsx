@@ -36,7 +36,7 @@ export default function PostCard({ post, showTime = true }: { post: Post; showTi
             <i className="fa fa-thumbs-up"></i> {post.likes || 0}
           </span>
           <span className="post-card-stats">
-            <i className="fa fa-comment"></i> 评论
+            <i className="fa fa-comment"></i> {post.comment_count ?? 0}
           </span>
         </div>
       </div>

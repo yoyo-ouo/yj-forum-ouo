@@ -17,7 +17,8 @@ func (d *DB) GetPostList(ctx context.Context, page, pageSize int, category strin
 	}
 	offset := (page - 1) * pageSize
 	base := `SELECT p.id, p.user_id, p.title, LEFT(p.content, 200), p.category, p.likes, p.views,
-	       p.created_at, u.name, u.avatar
+	       p.created_at, u.name, u.avatar,
+	       (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = 1) AS comment_count
 	FROM posts p JOIN users u ON p.user_id = u.id
 	WHERE p.status = 1`
 	args := []any{}
@@ -37,7 +38,7 @@ func (d *DB) GetPostList(ctx context.Context, page, pageSize int, category strin
 	for rows.Next() {
 		var p models.PostListItem
 		var createdAt *time.Time
-		if err := rows.Scan(&p.ID, &p.UserID, &p.Title, &p.Summary, &p.Category, &p.Likes, &p.Views, &createdAt, &p.UserName, &p.UserAvatar); err != nil {
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Title, &p.Summary, &p.Category, &p.Likes, &p.Views, &createdAt, &p.UserName, &p.UserAvatar, &p.CommentCount); err != nil {
 			return nil, err
 		}
 		p.CreatedAt = createdAt
@@ -52,7 +53,8 @@ func (d *DB) GetRandomPosts(ctx context.Context, limit int) ([]models.PostListIt
 		limit = 200
 	}
 	rows, err := d.Query(ctx, `SELECT p.id, p.user_id, p.title, LEFT(p.content, 200), p.category, p.likes, p.views,
-		p.created_at, u.name, u.avatar
+		p.created_at, u.name, u.avatar,
+		(SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = 1) AS comment_count
 		FROM posts p JOIN users u ON p.user_id = u.id
 		WHERE p.status = 1 ORDER BY RANDOM() LIMIT $1`, limit)
 	if err != nil {
@@ -63,7 +65,7 @@ func (d *DB) GetRandomPosts(ctx context.Context, limit int) ([]models.PostListIt
 	for rows.Next() {
 		var p models.PostListItem
 		var createdAt *time.Time
-		if err := rows.Scan(&p.ID, &p.UserID, &p.Title, &p.Summary, &p.Category, &p.Likes, &p.Views, &createdAt, &p.UserName, &p.UserAvatar); err != nil {
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Title, &p.Summary, &p.Category, &p.Likes, &p.Views, &createdAt, &p.UserName, &p.UserAvatar, &p.CommentCount); err != nil {
 			return nil, err
 		}
 		p.CreatedAt = createdAt
@@ -112,8 +114,11 @@ func (d *DB) GetUserPosts(ctx context.Context, userID string, page, pageSize int
 		pageSize = 20
 	}
 	offset := (page - 1) * pageSize
-	rows, err := d.Query(ctx, `SELECT id, title, LEFT(content, 200), category, likes, views, created_at
-		FROM posts WHERE user_id = $1 AND status = 1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+	rows, err := d.Query(ctx, `SELECT p.id, p.user_id, p.title, LEFT(p.content, 200), p.category, p.likes, p.views,
+		p.created_at, u.name, u.avatar,
+		(SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = 1) AS comment_count
+		FROM posts p JOIN users u ON p.user_id = u.id
+		WHERE p.user_id = $1 AND p.status = 1 ORDER BY p.created_at DESC LIMIT $2 OFFSET $3`,
 		userID, pageSize, offset)
 	if err != nil {
 		return nil, err
@@ -123,7 +128,7 @@ func (d *DB) GetUserPosts(ctx context.Context, userID string, page, pageSize int
 	for rows.Next() {
 		var p models.PostListItem
 		var createdAt *time.Time
-		if err := rows.Scan(&p.ID, &p.Title, &p.Summary, &p.Category, &p.Likes, &p.Views, &createdAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Title, &p.Summary, &p.Category, &p.Likes, &p.Views, &createdAt, &p.UserName, &p.UserAvatar, &p.CommentCount); err != nil {
 			return nil, err
 		}
 		p.CreatedAt = createdAt

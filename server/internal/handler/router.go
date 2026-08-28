@@ -44,6 +44,7 @@ func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth
 	api.POST("/users/me/verify-email/confirm", authH.AuthRequired(), miscH.VerifyCodeEmail)
 	api.GET("/users/:id", authH.UserProfile)
 	api.GET("/users/:id/posts", authH.UserPosts)
+	api.GET("/users/:id/comments", authH.UserComments)
 	api.GET("/users/:id/favorites", authH.UserFavorites)
 	api.POST("/users/:id/follow", authH.AuthRequired(), authH.ToggleFollow)
 	api.GET("/users/:id/following", authH.Following)

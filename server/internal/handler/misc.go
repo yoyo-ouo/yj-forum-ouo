@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/big"
 	"net/http"
 	"os"
@@ -60,7 +61,9 @@ func (h *MiscHandler) SendRegisterCode(c *gin.Context) {
 		return
 	}
 	code := genCode(6)
-	_ = h.DB.CreateVerifyCode(c.Request.Context(), emailAddr, code, "register", 5)
+	if err := h.DB.CreateVerifyCode(c.Request.Context(), emailAddr, code, "register", 5); err != nil {
+		log.Printf("[CODE] register code insert failed (%s): %v", emailAddr, err)
+	}
 	h.sendCode(c, "注册验证码", emailAddr, code)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "验证码已发送"})
 }
@@ -78,7 +81,9 @@ func (h *MiscHandler) SendVerifyEmailCode(c *gin.Context) {
 		return
 	}
 	code := genCode(6)
-	_ = h.DB.CreateVerifyCode(c.Request.Context(), u.Email, code, "email_verify", 5)
+	if err := h.DB.CreateVerifyCode(c.Request.Context(), u.Email, code, "email_verify", 5); err != nil {
+		log.Printf("[CODE] email_verify code insert failed (%s): %v", u.Email, err)
+	}
 	h.sendCode(c, "邮箱验证码", u.Email, code)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "验证码已发送"})
 }
@@ -94,7 +99,9 @@ func (h *MiscHandler) SendResetPasswordCode(c *gin.Context) {
 	}
 	emailAddr := strings.ToLower(strings.TrimSpace(req.Email))
 	code := genCode(6)
-	_ = h.DB.CreateVerifyCode(c.Request.Context(), emailAddr, code, "password_reset", 5)
+	if err := h.DB.CreateVerifyCode(c.Request.Context(), emailAddr, code, "password_reset", 5); err != nil {
+		log.Printf("[CODE] password_reset code insert failed (%s): %v", emailAddr, err)
+	}
 	h.sendCode(c, "重置密码验证码", emailAddr, code)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "验证码已发送（若邮箱存在）"})
 }

@@ -40,6 +40,7 @@ export interface Post {
   category: string;
   likes: number;
   views: number;
+  comment_count?: number;
   status?: number;
   created_at?: string;
   user_name: string;
@@ -58,10 +59,16 @@ export interface Comment {
   user_avatar: string;
 }
 
+// 评论列表项：带所属帖子标题（个人中心评论列表用）
+export interface ReplyItem extends Comment {
+  post_title?: string;
+}
+
 export interface WorldMessage {
   id: number;
   sender_id: string;
   sender_name: string;
+  sender_avatar?: string;
   content: string;
   parent_id?: number | null;
   created_at?: string;
@@ -74,6 +81,8 @@ export interface UserBrief {
   vip?: string;
   prefix?: string;
   intro?: string;
+  is_self?: boolean;
+  is_following?: boolean;
 }
 
 export interface SearchResult {
@@ -92,10 +101,11 @@ const API_BASE = "/api/v1";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = API_BASE + path;
+  const isForm = typeof FormData !== "undefined" && options.body instanceof FormData;
   const res = await fetch(url, {
     credentials: "include",
     headers: {
-      "Content-Type": "application/json",
+      ...(isForm ? {} : { "Content-Type": "application/json" }),
       ...(options.headers || {}),
     },
     ...options,
@@ -136,6 +146,8 @@ export const userApi = {
     request<{ users: UserBrief[] }>(`/users/${id}/following?page=${page}&page_size=${pageSize}`),
   followers: (id: string, page = 1, pageSize = 20) =>
     request<{ users: UserBrief[] }>(`/users/${id}/followers?page=${page}&page_size=${pageSize}`),
+  comments: (id: string, page = 1, pageSize = 20) =>
+    request<{ comments: ReplyItem[]; total: number }>(`/users/${id}/comments?page=${page}&page_size=${pageSize}`),
   updateMe: (data: Record<string, unknown>) =>
     request<{ success: boolean }>("/users/me", { method: "PATCH", body: JSON.stringify(data) }),
   replies: (page = 1, pageSize = 50) =>
@@ -143,6 +155,11 @@ export const userApi = {
   verifyEmail: () => request<{ message: string }>("/users/me/verify-email", { method: "POST" }),
   verifyEmailConfirm: (code: string) =>
     request<{ message: string }>("/users/me/verify-email/confirm", { method: "POST", body: JSON.stringify({ code }) }),
+  uploadAvatar: (file: File) => {
+    const fd = new FormData();
+    fd.append("avatar", file);
+    return request<{ avatar: string }>("/users/me/avatar", { method: "POST", body: fd });
+  },
 };
 
 // ---- 帖子 ----
@@ -173,12 +190,10 @@ export const worldApi = {
     request<{ success: boolean }>("/world/messages", { method: "POST", body: JSON.stringify({ content, parent_id: parentId ?? null }) }),
 };
 
-// ---- 搜索/投票/杂项 ----
+// ---- 搜索/杂项 ----
 export const miscApi = {
   search: (k: string, type = "both", page = 1, pageSize = 20) =>
     request<SearchResult>(`/search?k=${encodeURIComponent(k)}&type=${type}&page=${page}&page_size=${pageSize}`),
-  vote: (choice: string) => request<{ stats: { v1: number; v2: number } }>("/votes/version", { method: "POST", body: JSON.stringify({ choice }) }),
-  voteStats: () => request<{ stats: { v1: number; v2: number } }>("/votes/version/stats"),
   reportBug: (data: { title: string; detail: string; steps?: string; contact?: string; page_url?: string }) =>
     request<{ id: number }>("/reports/bug", { method: "POST", body: JSON.stringify(data) }),
   easterEgg: () => request<{ ID: string; Name: string; Text: string }>("/easter-egg"),

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useToast } from "@/components/Toast";
+import Modal from "@/components/ui/Modal";
 import Markdown from "@/components/Markdown";
 import CommentSection from "@/components/CommentSection";
 import { UserAvatar, UserName } from "@/components/ui/UserAvatar";
@@ -26,7 +27,8 @@ export default function PostDetailPage() {
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [showReport, setShowReport] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -45,6 +47,22 @@ export default function PostDetailPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // 从个人中心评论卡片跳转：滚动定位到目标评论并高亮
+  useEffect(() => {
+    if (comments.length === 0) return;
+    const m = window.location.hash.match(/^#comment-(.+)/);
+    if (!m) return;
+    const timer = setTimeout(() => {
+      const el = document.querySelector(`[data-comment-id="${CSS.escape(m[1])}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("comment-highlight");
+        setTimeout(() => el.classList.remove("comment-highlight"), 2500);
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [comments]);
 
   const doLike = async () => {
     if (!userId) return router.push("/auth");
@@ -70,14 +88,18 @@ export default function PostDetailPage() {
   const submitComment = async () => {
     if (!userId) return router.push("/auth");
     const content = commentText.trim();
-    if (!content) return;
+    if (!content) {
+      toast("请先输入内容", "warning");
+      return;
+    }
     try {
       const r = await postApi.createComment(id, content, replyTo?.id);
       setComments((prev) => [...prev, r.comment]);
       setCommentText("");
       setReplyTo(null);
+      toast(replyTo ? "回复发送成功" : "评论发送成功", "success");
     } catch (e: any) {
-      toast(e.message, "error");
+      toast(e instanceof ApiException ? e.message : "发送失败，请稍后再试", "error");
     }
   };
 
@@ -96,18 +118,6 @@ export default function PostDetailPage() {
     try {
       await postApi.remove(id);
       router.push("/forum");
-    } catch (e: any) {
-      toast(e.message, "error");
-    }
-  };
-
-  const reportPost = async () => {
-    const reason = window.prompt("请填写举报原因（必填）");
-    if (!reason) return;
-    const detail = window.prompt("补充说明（可选）") || "";
-    try {
-      await postApi.report(id, reason, detail);
-      toast("举报成功，感谢反馈！", "success");
     } catch (e: any) {
       toast(e.message, "error");
     }
@@ -183,7 +193,7 @@ export default function PostDetailPage() {
               <span className="post-action-label">分享</span>
             </button>
             {(!userId || post.user_id !== userId) && (
-              <button className="post-action-btn" onClick={reportPost}>
+              <button className="post-action-btn" onClick={() => setShowReport(true)}>
                 <i className="fa fa-flag"></i>
                 <span className="post-action-label">举报</span>
               </button>
@@ -210,6 +220,71 @@ export default function PostDetailPage() {
           />
         </div>
       </div>
+      {showReport && <ReportPostDialog postId={id} onClose={() => setShowReport(false)} />}
     </>
+  );
+}
+
+/** 举报帖子弹窗（还原 legacy showReportDialog：单选原因 + 补充说明 + 取消/提交） */
+function ReportPostDialog({ postId, onClose }: { postId: string; onClose: () => void }) {
+  const { toast } = useToast();
+  const [reason, setReason] = useState("spam");
+  const [detail, setDetail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const reasons = [
+    { value: "spam", label: "垃圾广告" },
+    { value: "abuse", label: "辱骂攻击" },
+    { value: "porn", label: "色情低俗" },
+    { value: "illegal", label: "违法违规" },
+    { value: "infringement", label: "侵权抄袭" },
+    { value: "other", label: "其他" },
+  ];
+
+  const submit = async () => {
+    if (submitting) return;
+    if (!reason) {
+      toast("请选择举报原因", "warning");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await postApi.report(postId, reason, detail.trim());
+      toast("举报成功，感谢反馈！", "success");
+      onClose();
+    } catch (e: any) {
+      toast(e instanceof ApiException ? e.message : "举报失败", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} cardStyle={{ maxWidth: 480 }}>
+      <h3 className="donate-title"><i className="fa fa-flag"></i> 举报帖子</h3>
+      <div className="report-reason-list">
+        {reasons.map((r) => (
+          <label className="report-reason-item" key={r.value}>
+            <input type="radio" name="report-reason" value={r.value} checked={reason === r.value} onChange={() => setReason(r.value)} />
+            {r.label}
+          </label>
+        ))}
+      </div>
+      <textarea
+        className="report-detail-input textarea"
+        id="report-detail"
+        placeholder="补充说明（可选，最多500字）"
+        maxLength={500}
+        rows={4}
+        value={detail}
+        onChange={(e) => setDetail(e.target.value)}
+      />
+      <div className="report-actions">
+        <button className="report-cancel" onClick={onClose}>取消</button>
+        <button className="report-submit" disabled={submitting} onClick={submit}>
+          {submitting ? "提交中..." : "提交举报"}
+        </button>
+      </div>
+    </Modal>
   );
 }

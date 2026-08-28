@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import type { UserBrief } from "@/lib/api";
 import Modal from "./ui/Modal";
@@ -22,12 +21,9 @@ export default function FollowListModal({
   onTabChange: (tab: "following" | "followers") => void;
   onToggleFollow: (user: UserBrief) => Promise<void>;
 }) {
-  const [followedMap, setFollowedMap] = useState<Record<string, boolean>>({});
-
   const activeTab = title === "关注列表" ? "following" : "followers";
 
   const toggle = async (u: UserBrief) => {
-    setFollowedMap((p) => ({ ...p, [u.id]: p[u.id] ? false : true }));
     await onToggleFollow(u);
   };
 
@@ -67,12 +63,12 @@ export default function FollowListModal({
                   <Link href={`/users/${u.id}`} className="follow-user-name Username">{u.name}</Link>
                   <p className="follow-user-intro">{u.intro || "这个人很懒，什么都没留下~"}</p>
                 </div>
-                {!isSelf && (
+                {!isSelf && !u.is_self && (
                   <button
-                    className={`follow-btn ${followedMap[u.id] ? "followed" : ""}`}
+                    className={`follow-btn ${u.is_following ? "followed" : ""}`}
                     onClick={() => toggle(u)}
                   >
-                    {followedMap[u.id] ? "已关注" : "关注"}
+                    {u.is_following ? "已关注" : "关注"}
                   </button>
                 )}
               </div>

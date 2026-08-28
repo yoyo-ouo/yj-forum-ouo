@@ -104,3 +104,37 @@ func (d *DB) GetRepliesToMyComments(ctx context.Context, userID string, page, pa
 	}
 	return replies, total, rows.Err()
 }
+
+// GetUserComments 用户发表的评论。
+func (d *DB) GetUserComments(ctx context.Context, userID string, page, pageSize int) ([]models.ReplyItem, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	var total int
+	_ = d.QueryRow(ctx, `SELECT COUNT(*) FROM comments WHERE user_id = $1 AND status = 1`, userID).Scan(&total)
+	rows, err := d.Query(ctx, `SELECT c.id, c.post_id, c.user_id, c.content, c.parent_id, c.likes, c.status,
+		c.created_at, u.name, u.avatar, p.title
+		FROM comments c JOIN users u ON c.user_id = u.id
+		JOIN posts p ON c.post_id = p.id
+		WHERE c.user_id = $1 AND c.status = 1
+		ORDER BY c.created_at DESC LIMIT $2 OFFSET $3`, userID, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var replies []models.ReplyItem
+	for rows.Next() {
+		var r models.ReplyItem
+		var createdAt *time.Time
+		if err := rows.Scan(&r.ID, &r.PostID, &r.UserID, &r.Content, &r.ParentID, &r.Likes, &r.Status, &createdAt, &r.UserName, &r.UserAvatar, &r.PostTitle); err != nil {
+			return nil, 0, err
+		}
+		r.CreatedAt = createdAt
+		replies = append(replies, r)
+	}
+	return replies, total, rows.Err()
+}

@@ -16,19 +16,32 @@ export default function WorldPage() {
   const [messages, setMessages] = useState<WorldMessage[]>([]);
   const [content, setContent] = useState("");
   const [connected, setConnected] = useState(false);
+  const [latency, setLatency] = useState<number | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: number; name: string } | null>(null);
   const [running, setRunning] = useState(true);
   const listRef = useRef<HTMLDivElement>(null);
+  const connectedRef = useRef(false);
 
   const load = useCallback(async () => {
+    const t0 = performance.now();
     try {
       const r = await worldApi.messages();
       setMessages(r || []);
+      setLatency(Math.round(performance.now() - t0));
       setConnected(true);
+      if (!connectedRef.current) {
+        connectedRef.current = true;
+        toast("已连接", "success");
+      }
     } catch {
       setConnected(false);
+      setLatency(null);
+      if (connectedRef.current) {
+        connectedRef.current = false;
+        toast("连接已断开", "error");
+      }
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (!running) return;
@@ -54,6 +67,19 @@ export default function WorldPage() {
     }
   };
 
+  const toggleConnection = () => {
+    if (running) {
+      setRunning(false);
+      setConnected(false);
+      setLatency(null);
+      connectedRef.current = false;
+      toast("已断开", "info");
+    } else {
+      setRunning(true);
+      toast("正在连接...", "info");
+    }
+  };
+
   const messageParent = useCallback(
     (m: WorldMessage) => {
       if (!m.parent_id) return null;
@@ -67,8 +93,8 @@ export default function WorldPage() {
       <div className="world-chat-container">
         <div className="world-chat-header">
           <h3><i className="fa fa-globe"></i> 世界频道</h3>
-          <span className={`world-chat-status ${connected ? "" : "off"}`} id="world-chat-status">
-            {connected ? "已连接" : "未连接"}
+          <span className={`world-chat-status ${connected ? (latency !== null && latency > 300 ? "slow" : "on") : "off"}`} id="world-chat-status">
+            {connected ? (latency !== null ? `已连接 · ${latency}ms` : "已连接") : "断开"}
           </span>
         </div>
 
@@ -84,9 +110,9 @@ export default function WorldPage() {
                 return (
                   <div className={`world-msg ${isMe ? "world-msg-me" : ""}`} data-msg-id={m.id} key={m.id}>
                     <div className="world-msg-avatar">
-                      {m.sender_id ? (
+                      {m.sender_avatar ? (
                         <Link href={`/users/${m.sender_id}`} className="world-msg-avatar-link">
-                          <i className="fa fa-user world-msg-avatar-fa"></i>
+                          <img src={m.sender_avatar} alt="" className="world-msg-avatar-img" />
                         </Link>
                       ) : (
                         <i className="fa fa-user world-msg-avatar-fa"></i>
@@ -138,8 +164,8 @@ export default function WorldPage() {
           <button id="world-chat-send" onClick={send} disabled={!userId}>
             <i className="fa fa-paper-plane"></i> 发送
           </button>
-          <button id="world-chat-toggle" onClick={() => setRunning((r) => !r)}>
-            {running ? "暂停" : "开始获取"}
+          <button id="world-chat-toggle" onClick={toggleConnection}>
+            {running ? "断开" : "重新连接"}
           </button>
         </div>
       </div>

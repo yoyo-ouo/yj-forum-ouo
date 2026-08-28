@@ -18,7 +18,7 @@ func (d *DB) CreateVerifyToken(ctx context.Context, userID, tokenType string, ex
 	}
 	token := randomToken(48)
 	_, err := d.Exec(ctx, `INSERT INTO verify_tokens (user_id, token, token_type, expires_at)
-		VALUES ($1,$2,$3, NOW() + ($4 || ' minutes')::interval)`, userID, token, tokenType, expiresMinutes)
+		VALUES ($1,$2,$3, NOW() + $4 * INTERVAL '1 minute')`, userID, token, tokenType, expiresMinutes)
 	if err != nil {
 		return "", err
 	}
@@ -50,7 +50,7 @@ func (d *DB) CreateVerifyCode(ctx context.Context, email, code, purpose string, 
 		expiresMinutes = 5
 	}
 	_, err := d.Exec(ctx, `INSERT INTO verify_codes (email, code, purpose, expires_at)
-		VALUES ($1,$2,$3, NOW() + ($4 || ' minutes')::interval)`, email, code, purpose, expiresMinutes)
+		VALUES ($1,$2,$3, NOW() + $4 * INTERVAL '1 minute')`, email, code, purpose, expiresMinutes)
 	return err
 }
 
@@ -143,7 +143,9 @@ func (d *DB) SearchPosts(ctx context.Context, keyword string, page, pageSize int
 	_ = d.QueryRow(ctx, "SELECT COUNT(*) FROM posts p "+where, args...).Scan(&total)
 	// 相关性: title 100, content 50, 简化: 标题命中优先
 	rows, err := d.Query(ctx, `SELECT p.id, p.user_id, p.title, LEFT(p.content, 200), p.category, p.likes, p.views,
-		p.created_at, u.name, u.avatar FROM posts p JOIN users u ON p.user_id = u.id `+where+` ORDER BY p.created_at DESC LIMIT $`+itoa(len(args)+1)+` OFFSET $`+itoa(len(args)+2),
+		p.created_at, u.name, u.avatar,
+		(SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = 1) AS comment_count
+		FROM posts p JOIN users u ON p.user_id = u.id `+where+` ORDER BY p.created_at DESC LIMIT $`+itoa(len(args)+1)+` OFFSET $`+itoa(len(args)+2),
 		append(args, pageSize, offset)...)
 	if err != nil {
 		return nil, 0, false, err
@@ -153,7 +155,7 @@ func (d *DB) SearchPosts(ctx context.Context, keyword string, page, pageSize int
 	for rows.Next() {
 		var p models.PostListItem
 		var createdAt *time.Time
-		if err := rows.Scan(&p.ID, &p.UserID, &p.Title, &p.Summary, &p.Category, &p.Likes, &p.Views, &createdAt, &p.UserName, &p.UserAvatar); err != nil {
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Title, &p.Summary, &p.Category, &p.Likes, &p.Views, &createdAt, &p.UserName, &p.UserAvatar, &p.CommentCount); err != nil {
 			return nil, 0, false, err
 		}
 		p.CreatedAt = createdAt

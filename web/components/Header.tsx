@@ -16,19 +16,18 @@ export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const [search, setSearch] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
+  // 顶部栏下拉菜单："" = 收起，"more"/"theme"/"user" 对应 更多 / 主题 / 用户
+  const [openMenu, setOpenMenu] = useState<"" | "more" | "theme" | "user">("");
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showDonate, setShowDonate] = useState(false);
-  const [showVote, setShowVote] = useState(false);
   const [showBug, setShowBug] = useState(false);
-  const [voteStats, setVoteStats] = useState<{ v1: number; v2: number } | null>(null);
-  const settingsRef = useRef<HTMLLIElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
   const deferredPromptRef = useRef<Event | null>(null);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
-      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
-        setShowSettings(false);
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenu("");
       }
     };
     document.addEventListener("click", onClick);
@@ -50,29 +49,12 @@ export default function Header() {
     return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
   }, []);
 
-  // 投票统计加载
-  useEffect(() => {
-    if (showVote) {
-      miscApi.voteStats().then((r) => setVoteStats(r.stats)).catch(() => {});
-    }
-  }, [showVote]);
-
   // OAuth 授权等页不显示全局导航栏（Header 保持挂载，仅不渲染内容，避免导航时品牌图重载）
   if (pathname.startsWith("/oauth")) return null;
 
   const doSearch = () => {
     const k = search.trim();
     if (k) router.push(`/search?k=${encodeURIComponent(k)}`);
-  };
-
-  const submitVote = async (choice: string) => {
-    try {
-      const r = await miscApi.vote(choice);
-      setVoteStats(r.stats);
-      toast(`投票成功！V1: ${r.stats.v1} | V2: ${r.stats.v2}`, "success");
-    } catch (e: any) {
-      toast(e.message, "error");
-    }
   };
 
   const showEasterEgg = async () => {
@@ -119,7 +101,7 @@ export default function Header() {
       <header id="header">
         <Link className="header-left" href="/">
           <img src="/assets/img/favicon.png" alt="logo" id="logo" style={{ borderRadius: "50%" }} />
-          <h1>妖精论坛</h1>
+          <h1>妖精论坛重构预览版ov2</h1>
         </Link>
         <div className="header-center">
           <div id="search">
@@ -138,19 +120,7 @@ export default function Header() {
           </div>
         </div>
         <div className="header-right">
-          <ul>
-            <li className="header-collapsible">
-              <button className="header-btn" id="Easter-Egg" onClick={showEasterEgg}>
-                <i className="fa fa-gift"></i>
-                <span>彩蛋</span>
-              </button>
-            </li>
-            <li className="header-collapsible">
-              <Link className="header-btn" href="/WIKI">
-                <img src="/assets/img/wiki_avatar_l.png" alt="" id="WIKIForIcon" />
-                <span>WIKI</span>
-              </Link>
-            </li>
+          <ul ref={menuRef}>
             <li className="header-collapsible">
               <a className="header-btn" href="//hei.navifox.net">
                 <i className="fa fa-home"></i>
@@ -158,92 +128,115 @@ export default function Header() {
               </a>
             </li>
             <li className="header-collapsible">
-              <a className="header-btn" href="//gaz.yjlt.top/" target="_blank" rel="noopener">
-                <i className="fa fa-newspaper-o"></i>
-                <span>刊物</span>
-              </a>
-            </li>
-            <li className="header-collapsible">
-              <button className="header-btn" onClick={() => setShowDonate(true)}>
-                <i className="fa fa-heart"></i>
-                <span>赞赏</span>
+              <button className="header-btn" id="Easter-Egg" onClick={showEasterEgg}>
+                <i className="fa fa-gift"></i>
+                <span>彩蛋</span>
               </button>
             </li>
-            <li className="header-collapsible">
-              <button className="header-btn" onClick={() => setShowBug(true)}>
-                <i className="fa fa-bug"></i>
-                <span>Bug提交</span>
+            {/* 更多：次级功能收纳 */}
+            <li className={`header-collapsible header-setting ${openMenu === "more" ? "active" : ""}`}>
+              <button className="header-btn" onClick={() => setOpenMenu(openMenu === "more" ? "" : "more")}>
+                <i className="fa fa-ellipsis-h"></i>
+                <span>更多</span>
               </button>
-            </li>
-            <li className="header-collapsible">
-              <button className="header-btn" onClick={() => setShowVote(true)}>
-                <i className="fa fa-random"></i>
-                <span>V2新版本</span>
-              </button>
-            </li>
-            <li className="header-collapsible" id="pwa-install-li">
-              <button className="header-btn" id="pwa-install-btn" onClick={installPWA}>
-                <i className="fa fa-download"></i>
-                <span>安装论坛客户端</span>
-              </button>
+              {openMenu === "more" && (
+                <div className="setting-dropdown dropdown-center">
+                  <ul className="setting-dropdown-menu">
+                    <li className="setting-dropdown-title">更多功能</li>
+                    <li className="setting-dropdown-item" onClick={() => { setOpenMenu(""); router.push("/WIKI"); }}>
+                      <img src="/assets/img/wiki_avatar_l.png" alt="" />
+                      <span className="setting-item-text">WIKI</span>
+                    </li>
+                    <li className="setting-dropdown-item" onClick={() => { setOpenMenu(""); setShowDonate(true); }}>
+                      <i className="fa fa-heart"></i>
+                      <span className="setting-item-text">赞赏</span>
+                    </li>
+                    <li className="setting-dropdown-item" onClick={() => { setOpenMenu(""); setShowBug(true); }}>
+                      <i className="fa fa-bug"></i>
+                      <span className="setting-item-text">Bug提交</span>
+                    </li>
+                    <li className="setting-dropdown-item" id="pwa-install-li" onClick={() => { setOpenMenu(""); installPWA(); }}>
+                      <i className="fa fa-download"></i>
+                      <span className="setting-item-text">安装论坛客户端</span>
+                    </li>
+                  </ul>
+                </div>
+              )}
             </li>
             <li className="header-menu-toggle">
               <button className="header-btn" type="button" onClick={() => setShowMobileMenu(!showMobileMenu)}>
                 <i className="fa fa-bars"></i>
               </button>
             </li>
-            <li className="header-collapsible header-setting" ref={settingsRef}>
-              <button className="header-btn" onClick={() => setShowSettings(!showSettings)}>
-                <i className="fa fa-cog"></i>
-                <span>设置</span>
+            <li className={`header-collapsible header-setting ${openMenu === "theme" ? "active" : ""}`}>
+              <button className="header-btn" onClick={() => setOpenMenu(openMenu === "theme" ? "" : "theme")}>
+                <i className="fa fa-paint-brush"></i>
+                <span>主题</span>
               </button>
-              {showSettings && (
+              {openMenu === "theme" && (
                 <div className="setting-dropdown" id="settingDropdown">
                   <ul className="setting-dropdown-menu">
-                    <li className="setting-dropdown-title">主题</li>
-                    <li className={`setting-dropdown-item ${theme === "day" ? "active" : ""}`} data-value="day" onClick={() => setTheme("day")}>
+                    <li className="setting-dropdown-title">选择主题</li>
+                    <li className={`setting-dropdown-item ${theme === "day" ? "active" : ""}`} onClick={() => setTheme("day")}>
                       <span className="setting-item-icon"></span>
                       <span className="setting-item-text">亮色</span>
                     </li>
-                    <li className={`setting-dropdown-item ${theme === "night" ? "active" : ""}`} data-value="night" onClick={() => setTheme("night")}>
+                    <li className={`setting-dropdown-item ${theme === "night" ? "active" : ""}`} onClick={() => setTheme("night")}>
                       <span className="setting-item-icon"></span>
                       <span className="setting-item-text">暗色</span>
                     </li>
-                    <li className={`setting-dropdown-item ${theme === "default" ? "active" : ""}`} data-value="default" onClick={() => setTheme("default")}>
+                    <li className={`setting-dropdown-item ${theme === "default" ? "active" : ""}`} onClick={() => setTheme("default")}>
                       <span className="setting-item-icon"></span>
-                      <span className="setting-item-text">默认</span>
+                      <span className="setting-item-text">默认（跟随时间）</span>
                     </li>
-                    <li className="setting-dropdown-divider"></li>
-                    {user && (
-                      <li className="setting-dropdown-item" onClick={logout}>
-                        <span className="setting-item-icon"><i className="fa fa-sign-out"></i></span>
-                        <span className="setting-item-text">退出登录</span>
-                      </li>
-                    )}
                   </ul>
                 </div>
               )}
             </li>
-            <li>
-              <Link id="UserInfo" href={userId ? `/users/${userId}` : "/auth"}>
-                <div className="user-avatar" id="user-avatar">
-                  {user?.avatar ? (
-                    <img src={user.avatar} alt="" width={32} height={32} style={{ borderRadius: "50%" }} />
-                  ) : (
-                    <i className="fa fa-user"></i>
+            <li className={`header-setting ${openMenu === "user" ? "active" : ""}`}>
+              {user ? (
+                <>
+                  <button id="UserInfo" onClick={() => setOpenMenu(openMenu === "user" ? "" : "user")}>
+                    <div className="user-avatar" id="user-avatar">
+                      {user.avatar ? (
+                        <img src={user.avatar} alt="" width={32} height={32} style={{ borderRadius: "50%" }} />
+                      ) : (
+                        <i className="fa fa-user"></i>
+                      )}
+                    </div>
+                    <div id="user-name" className="Username">{user.name}</div>
+                  </button>
+                  {openMenu === "user" && (
+                    <div className="setting-dropdown">
+                      <ul className="setting-dropdown-menu">
+                        <li className="setting-dropdown-title">{user.name}</li>
+                        <li className="setting-dropdown-item" onClick={() => { setOpenMenu(""); router.push(`/users/${userId}`); }}>
+                          <i className="fa fa-user-circle-o"></i>
+                          <span className="setting-item-text">个人中心</span>
+                        </li>
+                        <li className="setting-dropdown-item" id="logoutBtn" onClick={() => { setOpenMenu(""); logout(); }}>
+                          <i className="fa fa-sign-out"></i>
+                          <span className="setting-item-text">退出登录</span>
+                        </li>
+                      </ul>
+                    </div>
                   )}
-                </div>
-                <div id="user-name" className="Username">{user ? user.name : "登录"}</div>
-              </Link>
+                </>
+              ) : (
+                <Link id="UserInfo" href="/auth">
+                  <div className="user-avatar" id="user-avatar">
+                    <i className="fa fa-user"></i>
+                  </div>
+                  <div id="user-name" className="Username">登录</div>
+                </Link>
+              )}
             </li>
           </ul>
           <div className={`header-mobile-menu ${showMobileMenu ? "open" : ""}`} id="headerMobileMenu">
             <Link className="mobile-menu-item" href="/WIKI"><i className="fa fa-book"></i> WIKI</Link>
             <a className="mobile-menu-item" href="//hei.navifox.net"><i className="fa fa-home"></i> 会馆</a>
-            <a className="mobile-menu-item" href="https://yaonews.unknownmp.top/" target="_blank" rel="noopener"><i className="fa fa-newspaper-o"></i> 日刊</a>
             <button className="mobile-menu-item" onClick={() => setShowDonate(true)}><i className="fa fa-heart"></i> 赞赏</button>
             <button className="mobile-menu-item" onClick={() => setShowBug(true)}><i className="fa fa-bug"></i> Bug举报</button>
-            <button className="mobile-menu-item" onClick={() => setShowVote(true)}><i className="fa fa-random"></i> V2新版本</button>
             <button className="mobile-menu-item" id="pwa-install-mobile" onClick={installPWA}><i className="fa fa-download"></i> 安装论坛客户端</button>
             <button className="mobile-menu-item" onClick={showEasterEgg}><i className="fa fa-gift"></i> 彩蛋</button>
             <div className="mobile-menu-divider"></div>
@@ -267,27 +260,6 @@ export default function Header() {
           <img src="/assets/img/help.png" alt="赞赏码" />
         </div>
         <p className="donate-tip">你的支持是我持续创作的动力 ❤️</p>
-      </Modal>
-
-      {/* 版本投票弹窗 */}
-      <Modal open={showVote} onClose={() => setShowVote(false)}>
-        <h3 className="donate-title"><i className="fa fa-random"></i> 版本选择</h3>
-        <p className="donate-subtitle">V2 新版本已上线，欢迎体验并投出你的一票</p>
-        <a className="version-vote-link" href="https://v2.yjlt.top" target="_blank" rel="noopener noreferrer">
-          <i className="fa fa-external-link"></i> 前往 V2 新版本 (v2.yjlt.top)
-        </a>
-        <div className="version-vote-options">
-          <button className="version-vote-btn v1" onClick={() => submitVote("v1")}>
-            <i className="fa fa-check-square-o"></i> V1 旧版
-          </button>
-          <button className="version-vote-btn v2" onClick={() => submitVote("v2")}>
-            <i className="fa fa-star"></i> V2 新版
-          </button>
-        </div>
-        <p className="version-vote-stats" id="version-vote-stats">
-          {voteStats ? `V1: ${voteStats.v1} 票 | V2: ${voteStats.v2} 票` : "加载中..."}
-        </p>
-        <p className="version-vote-tip">已登录按账号记录，游客按 IP 记录，可随时改投</p>
       </Modal>
 
       {/* Bug 举报弹窗 */}

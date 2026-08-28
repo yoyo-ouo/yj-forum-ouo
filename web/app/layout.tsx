@@ -9,14 +9,15 @@ import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 
 export const metadata: Metadata = {
-  title: "妖精论坛",
+  title: "妖精论坛重构预览版ov2",
   description: "妖精论坛 - 罗小黑战记社区",
-  icons: { icon: "/assets/img/favicon.png" },
+  // favicon 沿用 app/favicon.ico（Next.js 自动注入 <link rel="icon" type="image/x-icon" href="/favicon.ico">，与 legacy base.html 一致），不再重复声明 png 图标
   manifest: "/manifest.json",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#6A8C89",
+  // legacy base.html 中第二条 theme-color（#161b22）覆盖第一条，且 manifest theme_color 亦为 #161b22
+  themeColor: "#161b22",
   width: "device-width",
   initialScale: 1,
 };
@@ -51,9 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <CenterCardProvider>
               {/* 全局导航栏：跨页面保持挂载，避免导航时品牌图等重载 */}
               <Header />
-              {children}
-              {/* 页脚占位 + 页脚：放在页面内容之后，防止被 absolute 定位的 #footer 遮挡 */}
-              <div id="footer-spacer"></div>
+              <main className="app-main">{children}</main>
               <Footer />
             </CenterCardProvider>
           </ToastProvider>

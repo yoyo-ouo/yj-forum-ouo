@@ -1,11 +1,45 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Comment } from "@/lib/api";
 import { timeAgo } from "@/lib/constants";
 import { UserAvatar, UserName } from "./ui/UserAvatar";
 import Markdown from "./Markdown";
+
+// 表情包面板（当前仅 emoji 字符，按分类切换）
+const EMOJI_CATEGORIES: { name: string; icon: string; emojis: string[] }[] = [
+  {
+    name: "表情",
+    icon: "😀",
+    emojis: ["😀", "😁", "😂", "🤣", "😊", "😍", "🥰", "😘", "😎", "🤔", "😅", "😉", "🙃", "😭", "😢", "😡", "🤬", "😤", "😳", "🥺", "😴", "🤯", "😇", "🙄"],
+  },
+  {
+    name: "手势",
+    icon: "👍",
+    emojis: ["👍", "👎", "👏", "🙏", "💪", "🤝", "✌️", "🤞", "👌", "👊", "🖐️", "🙌", "🤙", "👋", "💅", "🫶"],
+  },
+  {
+    name: "爱心",
+    icon: "❤️",
+    emojis: ["❤️", "💔", "💕", "💖", "💘", "💝", "💯", "✨", "🔥", "⭐", "🌟", "💫", "⚡", "💥", "💤", "💦"],
+  },
+  {
+    name: "食物",
+    icon: "🍕",
+    emojis: ["🍎", "🍌", "🍉", "🍇", "🍓", "🍔", "🍕", "🍟", "🌭", "🍜", "🍣", "🍰", "🍦", "☕", "🍺", "🥤"],
+  },
+  {
+    name: "动物",
+    icon: "🐱",
+    emojis: ["🐱", "🐶", "🐼", "🐰", "🦊", "🐸", "🐷", "🐵", "🐯", "🦁", "🐦", "🐧", "🌹", "🌸", "🌵", "🌈"],
+  },
+  {
+    name: "活动",
+    icon: "🎉",
+    emojis: ["🎉", "🎊", "🎈", "🎁", "🏆", "🚀", "🎮", "🎯", "🎨", "🎤", "🎧", "⚽", "🏀", "🏸", "🎳", "🎲"],
+  },
+];
 
 /** 单条评论（与 legacy renderComment 结构 1:1，支持回复标识/删除/回复按钮） */
 function CommentItem({
@@ -82,7 +116,7 @@ export default function CommentSection({
 }: {
   comments: Comment[];
   userId: string | null;
-  inputRef: React.RefObject<HTMLInputElement | null>;
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
   replyTo: { id: string; name: string } | null;
   setReplyTo: (v: { id: string; name: string } | null) => void;
   onChangeReplyText: (text: string) => void;
@@ -90,6 +124,39 @@ export default function CommentSection({
   onDelete: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [emojiCat, setEmojiCat] = useState(0);
+  const emojiWrapRef = useRef<HTMLDivElement>(null);
+
+  // 点击外部关闭 emoji 面板
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (emojiWrapRef.current && !emojiWrapRef.current.contains(e.target as Node)) {
+        setShowEmoji(false);
+      }
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
+
+  const insertEmoji = (emoji: string) => {
+    const el = inputRef.current;
+    if (!el) {
+      onChangeReplyText(emoji);
+      return;
+    }
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? start;
+    const next = el.value.slice(0, start) + emoji + el.value.slice(end);
+    el.value = next;
+    onChangeReplyText(next);
+    const pos = start + emoji.length;
+    el.focus();
+    el.setSelectionRange(pos, pos);
+  };
+
+  // 带锚点跳转（#comment-xxx）时默认展开全部折叠回复，保证目标评论可见
+  const isAnchorScroll = typeof window !== "undefined" && window.location.hash.startsWith("#comment-");
 
   const { mainComments, replyMap, parentMap } = useMemo(() => {
     const parentMap: Record<string, Comment> = {};
@@ -130,10 +197,11 @@ export default function CommentSection({
             <button onClick={() => setReplyTo(null)}><i className="fa fa-times"></i></button>
           </div>
         )}
-        <input
+        <textarea
           ref={inputRef}
-          type="text"
           id="comment-input"
+          className="comment-input-textarea"
+          rows={3}
           placeholder={replyTo ? `回复 ${replyTo.name}...` : "写下你的评论..."}
           maxLength={500}
           onChange={(e) => onChangeReplyText(e.target.value)}
@@ -144,7 +212,44 @@ export default function CommentSection({
             }
           }}
         />
-        <button className="comment-send-btn" onClick={onSubmit}>发送</button>
+        <div className="comment-input-actions">
+          <div className="comment-emoji-wrap" ref={emojiWrapRef}>
+            <button
+              type="button"
+              className={`comment-emoji-btn ${showEmoji ? "active" : ""}`}
+              onClick={() => setShowEmoji((v) => !v)}
+              title="表情"
+            >
+              <i className="fa fa-smile-o"></i>
+            </button>
+            {showEmoji && (
+              <div className="comment-emoji-panel">
+                <div className="comment-emoji-grid">
+                  {EMOJI_CATEGORIES[emojiCat].emojis.map((e) => (
+                    <button type="button" className="comment-emoji-item" key={e} onClick={() => insertEmoji(e)}>
+                      {e}
+                    </button>
+                  ))}
+                </div>
+                <div className="comment-emoji-tabs">
+                  {EMOJI_CATEGORIES.map((c, i) => (
+                    <button
+                      type="button"
+                      className={`comment-emoji-tab ${i === emojiCat ? "active" : ""}`}
+                      key={c.name}
+                      onClick={() => setEmojiCat(i)}
+                      title={c.name}
+                    >
+                      <span className="comment-emoji-tab-icon">{c.icon}</span>
+                      <span className="comment-emoji-tab-label">{c.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <button className="comment-send-btn" onClick={onSubmit}>发送</button>
+        </div>
       </div>
       <div className="comment-list" id="comment-list">
         {comments.length === 0 ? (
@@ -183,7 +288,7 @@ export default function CommentSection({
                       <button className="comment-replies-toggle" data-parent-id={c.id} onClick={() => setExpanded((p) => ({ ...p, [c.id]: !p[c.id] }))}>
                         <i className="fa fa-chevron-down"></i> 展开{hiddenReplies.length}条回复
                       </button>
-                      <div className={`comment-replies-hidden ${expanded[c.id] ? "" : ""}`} data-parent-id={c.id} style={{ display: expanded[c.id] ? "block" : "none" }}>
+                      <div className={`comment-replies-hidden ${expanded[c.id] ? "" : ""}`} data-parent-id={c.id} style={{ display: expanded[c.id] || isAnchorScroll ? "block" : "none" }}>
                         {hiddenReplies.map((r) => (
                           <CommentItem
                             key={r.id}

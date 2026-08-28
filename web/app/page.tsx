@@ -4,14 +4,11 @@ import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import PostCard from "@/components/PostCard";
 import { ListLoading, ListEmpty } from "@/components/ui/ListState";
-import { postApi, userApi, Post } from "@/lib/api";
-import { useStore } from "@/lib/store";
+import { postApi, Post } from "@/lib/api";
 
 export default function HomePage() {
   const [posts, setPosts] = useState<Post[]>([]);
-  const [favorites, setFavorites] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const { userId } = useStore();
 
   const loadRandom = useCallback(async () => {
     try {
@@ -24,23 +21,9 @@ export default function HomePage() {
     }
   }, []);
 
-  const loadFavorites = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const r = await userApi.favorites(userId, 1, 10);
-      setFavorites(r.posts || []);
-    } catch {
-      setFavorites([]);
-    }
-  }, [userId]);
-
   useEffect(() => {
     loadRandom();
   }, [loadRandom]);
-
-  useEffect(() => {
-    loadFavorites();
-  }, [loadFavorites]);
 
   return (
     <>
@@ -69,19 +52,6 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-
-        {favorites.length > 0 && (
-          <section className="home-favorites" id="home-favorites">
-            <div className="home-feed-header">
-              <h2 className="home-feed-title">
-                <i className="fa fa-bookmark"></i> 我的收藏
-              </h2>
-            </div>
-            <div className="home-post-list">
-              {favorites.map((p) => <PostCard key={p.id} post={p} />)}
-            </div>
-          </section>
-        )}
 
         <section className="home-feed">
           <div className="home-feed-header">

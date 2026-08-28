@@ -82,6 +82,7 @@ type updateProfileReq struct {
 	Gender   *int    `json:"gender"`
 	Age      *string `json:"age"`
 	Intro    *string `json:"intro"`
+	Avatar   *string `json:"avatar"`
 	Password *string `json:"password"`
 }
 
@@ -114,6 +115,9 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 	}
 	if req.Intro != nil {
 		fields["intro"] = *req.Intro
+	}
+	if req.Avatar != nil && *req.Avatar != "" {
+		fields["avatar"] = *req.Avatar
 	}
 	if req.Password != nil && *req.Password != "" {
 		hash, err := auth.HashPassword(*req.Password)
@@ -165,10 +169,11 @@ func (h *AuthHandler) followList(c *gin.Context, kind string) {
 		users []models.UserBrief
 		err   error
 	)
+	viewer := h.CurrentUserFromCookie(c)
 	if kind == "following" {
-		users, err = h.DB.GetFollowingList(c.Request.Context(), id, page, pageSize)
+		users, err = h.DB.GetFollowingList(c.Request.Context(), id, viewer, page, pageSize)
 	} else {
-		users, err = h.DB.GetFollowerList(c.Request.Context(), id, page, pageSize)
+		users, err = h.DB.GetFollowerList(c.Request.Context(), id, viewer, page, pageSize)
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
@@ -193,6 +198,20 @@ func (h *AuthHandler) MyReplies(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "replies": replies, "total": total})
+}
+
+// ---- GET /api/v1/users/:id/comments ----
+
+// UserComments 用户发表的评论。
+func (h *AuthHandler) UserComments(c *gin.Context) {
+	id := c.Param("id")
+	page, pageSize := parsePage(c)
+	comments, total, err := h.DB.GetUserComments(c.Request.Context(), id, page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "comments": comments, "total": total, "page": page, "page_size": pageSize})
 }
 
 // ---- GET /api/v1/users/:id/favorites ----

@@ -90,6 +90,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 	_ = h.DB.MarkVerifyCodeUsed(c.Request.Context(), emailAddr, code, "register")
+	// 注册已通过邮箱验证码验证（证明邮箱归属），直接标记已认证
+	_ = h.DB.UpdateUserEmailVerified(c.Request.Context(), uid)
 
 	// 自动登录
 	h.issueSession(c, uid)

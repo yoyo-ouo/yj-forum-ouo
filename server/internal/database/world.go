@@ -12,8 +12,9 @@ func (d *DB) GetWorldMessages(ctx context.Context, limit int) ([]models.WorldMes
 	if limit < 1 || limit > 200 {
 		limit = 100
 	}
-	rows, err := d.Query(ctx, `SELECT id, sender_id, sender_name, content, parent_id, created_at
-		FROM world WHERE created_at > NOW() - INTERVAL '5 minutes' ORDER BY created_at DESC LIMIT $1`, limit)
+	rows, err := d.Query(ctx, `SELECT w.id, w.sender_id, w.sender_name, w.content, w.parent_id, w.created_at, u.avatar
+		FROM world w LEFT JOIN users u ON w.sender_id = u.id
+		WHERE w.created_at > NOW() - INTERVAL '5 minutes' ORDER BY w.created_at DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +23,7 @@ func (d *DB) GetWorldMessages(ctx context.Context, limit int) ([]models.WorldMes
 	for rows.Next() {
 		var m models.WorldMessage
 		var createdAt *time.Time
-		if err := rows.Scan(&m.ID, &m.SenderID, &m.SenderName, &m.Content, &m.ParentID, &createdAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.SenderID, &m.SenderName, &m.Content, &m.ParentID, &createdAt, &m.SenderAvatar); err != nil {
 			return nil, err
 		}
 		m.CreatedAt = createdAt

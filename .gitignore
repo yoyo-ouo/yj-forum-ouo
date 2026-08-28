@@ -194,3 +194,5 @@ data/
 *.local
 admin/
 clear_db.py
+# Go build artifacts
+server/bin/
