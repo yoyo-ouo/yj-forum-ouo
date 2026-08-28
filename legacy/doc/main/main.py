@@ -88,7 +88,7 @@ body{{margin:0;padding:0;background:#f0f2f5;font-family:-apple-system,BlinkMacSy
 </div></body></html>"""
 
 
-_secret = os.getenv(chr(39)+chr(83)+chr(69)+chr(67)+chr(82)+chr(69)+chr(84)+chr(95)+chr(75)+chr(69)+chr(89)+chr(39)+chr(41))
+_secret = os.getenv('SECRET_KEY')
 if not _secret:
 	import secrets as _secrets
 	_secret = _secrets.token_hex(32)

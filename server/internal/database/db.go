@@ -1,0 +1,159 @@
+// Package database 封装 PostgreSQL 访问（pgxpool）与业务查询。
+package database
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// DB 数据库访问对象。
+type DB struct {
+	Pool *pgxpool.Pool
+}
+
+// New 创建连接池；若 schema 未初始化则运行迁移。
+func New(ctx context.Context, dsn string) (*DB, error) {
+	poolCfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("解析 DATABASE_URL 失败: %w", err)
+	}
+	poolCfg.MaxConns = 10
+	poolCfg.MinConns = 1
+	poolCfg.MaxConnLifetime = 30 * time.Minute
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		return nil, fmt.Errorf("创建连接池失败: %w", err)
+	}
+	// 探测连接
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("数据库连接失败: %w", err)
+	}
+	return &DB{Pool: pool}, nil
+}
+
+func (d *DB) Close() { d.Pool.Close() }
+
+// 事务辅助
+func (d *DB) Tx(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	tx, err := d.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// Query 返回多行。
+func (d *DB) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	return d.Pool.Query(ctx, sql, args...)
+}
+
+// QueryRow 单行。
+func (d *DB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	return d.Pool.QueryRow(ctx, sql, args...)
+}
+
+// Exec 执行。
+func (d *DB) Exec(ctx context.Context, sql string, args ...any) (int64, error) {
+	tag, err := d.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// ---- ID 生成 ----
+
+var idMu sync.Mutex
+var idLastNano int64
+var idCounter int64
+
+// GenID 生成带前缀唯一 ID（时间戳纳秒 + 计数器，防同纳秒碰撞）。
+// 对齐 legacy: 前缀 + int(time.time() * 1e10)（纳秒 10 位），此处扩展 11 位。
+func GenID(prefix string) string {
+	idMu.Lock()
+	defer idMu.Unlock()
+	now := time.Now().UnixNano()
+	if now <= idLastNano {
+		idCounter++
+		now = idLastNano + idCounter
+	} else {
+		idLastNano = now
+		idCounter = 0
+	}
+	return fmt.Sprintf("%s%d", prefix, now)
+}
+
+// ---- HTML 净化（对齐 legacy safe_html）----
+
+var ( // 常见危险标签黑名单（对齐 legacy DANGEROUS_TAGS）
+	dangerousTags = map[string]bool{
+		"script": true, "iframe": true, "embed": true, "object": true,
+		"applet": true, "base": true, "form": true, "input": true,
+		"textarea": true, "select": true, "option": true, "button": true,
+		"link": true, "meta": true, "svg": true, "math": true, "style": true,
+	}
+)
+
+var (
+	reComment     = regexp.MustCompile(`(?is)<!--[\s\S]*?-->`)
+	reDangerOpen  = regexp.MustCompile(`(?is)<(?:SCRIPT|IFRAME|EMBED|OBJECT|APPLET|BASE|FORM|INPUT|TEXTAREA|SELECT|OPTION|BUTTON|LINK|META|SVG|MATH|STYLE)\b[^>]*>`)
+	reDangerClose = regexp.MustCompile(`(?is)</(?:SCRIPT|IFRAME|EMBED|OBJECT|APPLET|BASE|FORM|INPUT|TEXTAREA|SELECT|OPTION|BUTTON|LINK|META|SVG|MATH|STYLE)\s*>`)
+	reOnEvent     = regexp.MustCompile(`(?is)\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)`)
+	reJSProto     = regexp.MustCompile(`(?is)(href|src|action|formaction)\s*=\s*("javascript:[^"]*"|'javascript:[^']*'|javascript:[^\s>]+)`)
+	reDataProto   = regexp.MustCompile(`(?is)(href|src|action)\s*=\s*("data:text/html[^"]*"|'data:text/html[^']*')`)
+)
+
+// SafeHTML 净化用户提交内容。
+func SafeHTML(content string) string {
+	if content == "" {
+		return ""
+	}
+	content = htmlUnescape(content)
+	content = reComment.ReplaceAllString(content, "")
+	content = reDangerOpen.ReplaceAllString(content, "")
+	content = reDangerClose.ReplaceAllString(content, "")
+	content = reOnEvent.ReplaceAllString(content, "")
+	content = reJSProto.ReplaceAllString(content, "")
+	content = reDataProto.ReplaceAllString(content, "")
+	return content
+}
+
+func htmlUnescape(s string) string {
+	repl := strings.NewReplacer(
+		"&amp;", "&", "&lt;", "<", "&gt;", ">", "&quot;", `"`, "&#39;", "'",
+		"&nbsp;", "\u00a0", "&lt;", "<",
+	)
+	return repl.Replace(s)
+}
+
+// StripEasterEgg 去除用户名彩蛋标记（|[TIME] 与 <p...> 旧格式）。
+func StripEasterEgg(name string) string {
+	name = strings.ReplaceAll(name, "|[TIME]", "")
+	rePOpen := regexp.MustCompile(`(?is)<p[^>]*>`)
+	rePClose := regexp.MustCompile(`(?is)</p>`)
+	name = rePOpen.ReplaceAllString(name, "")
+	name = rePClose.ReplaceAllString(name, "")
+	return name
+}
+
+// logQueryError
+func logQueryError(op string, err error, extra ...string) {
+	if len(extra) > 0 {
+		log.Printf("[DB] %s 失败: %v (%s)", op, err, extra[0])
+	} else {
+		log.Printf("[DB] %s 失败: %v", op, err)
+	}
+}

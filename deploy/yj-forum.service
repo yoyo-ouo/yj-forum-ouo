@@ -1,0 +1,17 @@
+# 妖精论坛 v2 后端服务（Go）
+# 安装: cp deploy/yj-forum.service /etc/systemd/system/ && systemctl enable --now yj-forum
+[Unit]
+Description=YJ Forum v2 Backend (Go)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=yoyo
+WorkingDirectory=/opt/yj-forum/server
+EnvironmentFile=/opt/yj-forum/server/.env
+ExecStart=/opt/yj-forum/server/bin/yj-forum
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

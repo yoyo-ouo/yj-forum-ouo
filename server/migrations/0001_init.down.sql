@@ -1,0 +1,13 @@
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS version_votes;
+DROP TABLE IF EXISTS verify_codes;
+DROP TABLE IF EXISTS bug_reports;
+DROP TABLE IF EXISTS post_reports;
+DROP TABLE IF EXISTS verify_tokens;
+DROP TABLE IF EXISTS user_follows;
+DROP TABLE IF EXISTS post_favorites;
+DROP TABLE IF EXISTS post_likes;
+DROP TABLE IF EXISTS world;
+DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS posts;
+DROP TABLE IF EXISTS users;

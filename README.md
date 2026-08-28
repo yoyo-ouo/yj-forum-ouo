@@ -31,10 +31,13 @@
 <img src="https://raw.githubusercontent.com/crazying-dev/other/main/%E5%85%8D%E8%B4%A3%E5%A3%B0%E6%98%8E.png" alt="" style="width:1px;height:auto;border-radius:8px;">  
 临时测试用网址:[https://test.one.crazying-dev.top/](https://test.one.crazying-dev.top/)
 
-## 技术栈
-- 后端:Python / Flask 
-- 前端:HTML / CSS / JavaScript
-- 数据库:JSON / SQL
+## 技术栈（v2）
+- 后端:Go / Gin / pgx / golang-migrate  
+- 前端:Next.js (App Router) / TypeScript / React / Tailwind CSS  
+- 数据库:PostgreSQL（开发:本机 Docker PGSQL；生产:外部 PGSQL）  
+- 部署:自建服务器裸机 + systemd + Nginx 反代  
+
+> 旧版 Flask 实现已归档至 `legacy/`（1.0.24），仅供对照参考。
 
 ---
 
