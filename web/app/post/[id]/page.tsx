@@ -4,19 +4,21 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import Header from "@/components/Header";
-import { useCenterCard } from "@/components/CenterCard";
+import { useToast } from "@/components/Toast";
 import Markdown from "@/components/Markdown";
 import CommentSection from "@/components/CommentSection";
-import { InlinePrefixBadge } from "@/components/PrefixBadge";
+import { UserAvatar, UserName } from "@/components/ui/UserAvatar";
+import CategoryBadge from "@/components/ui/CategoryBadge";
+import BackButton from "@/components/ui/BackButton";
 import { postApi, Comment, ApiException } from "@/lib/api";
 import { useStore } from "@/lib/store";
-import { categoryColor, categoryLabel, formatTime } from "@/lib/constants";
+import { formatTime } from "@/lib/constants";
 
 export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { user, userId } = useStore();
-  const { show } = useCenterCard();
+  const { userId } = useStore();
+  const { toast } = useToast();
   const [post, setPost] = useState<any | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [liked, setLiked] = useState(false);
@@ -46,28 +48,28 @@ export default function PostDetailPage() {
   }, [load]);
 
   const doLike = async () => {
-    if (!userId) return router.push("/login");
+    if (!userId) return router.push("/auth");
     try {
       const r = await postApi.like(id);
       setLiked(r.liked);
       setPost((p: any) => (p ? { ...p, likes: r.likes } : p));
     } catch (e: any) {
-      show(<p>{e.message}</p>);
+      toast(e.message, "error");
     }
   };
 
   const doFavorite = async () => {
-    if (!userId) return router.push("/login");
+    if (!userId) return router.push("/auth");
     try {
       const r = await postApi.favorite(id);
       setFavorited(r.favorited);
     } catch (e: any) {
-      show(<p>{e.message}</p>);
+      toast(e.message, "error");
     }
   };
 
   const submitComment = async () => {
-    if (!userId) return router.push("/login");
+    if (!userId) return router.push("/auth");
     const content = commentText.trim();
     if (!content) return;
     try {
@@ -76,7 +78,7 @@ export default function PostDetailPage() {
       setCommentText("");
       setReplyTo(null);
     } catch (e: any) {
-      show(<p>{e.message}</p>);
+      toast(e.message, "error");
     }
   };
 
@@ -86,7 +88,7 @@ export default function PostDetailPage() {
       await postApi.deleteComment(cid);
       setComments((prev) => prev.filter((c) => c.id !== cid));
     } catch (e: any) {
-      show(<p>{e.message}</p>);
+      toast(e.message, "error");
     }
   };
 
@@ -96,7 +98,7 @@ export default function PostDetailPage() {
       await postApi.remove(id);
       router.push("/forum");
     } catch (e: any) {
-      show(<p>{e.message}</p>);
+      toast(e.message, "error");
     }
   };
 
@@ -106,17 +108,15 @@ export default function PostDetailPage() {
     const detail = window.prompt("补充说明（可选）") || "";
     try {
       await postApi.report(id, reason, detail);
-      show(<p style={{ textAlign: "center" }}>举报成功，感谢反馈！</p>);
+      toast("举报成功，感谢反馈！", "success");
     } catch (e: any) {
-      show(<p>{e.message}</p>);
+      toast(e.message, "error");
     }
   };
 
   if (loading) return <><Header /><div className="post-loading" style={{ padding: 40 }}>加载中...</div></>;
   if (!post) return <><Header /><div className="post-error" style={{ padding: 40 }}>{err || "帖子不存在"}</div></>;
 
-  const catColor = categoryColor(post.category);
-  const catLabel = categoryLabel(post.category);
   const mainCount = comments.filter((c) => !c.parent_id).length;
 
   const sharePost = async () => {
@@ -126,7 +126,7 @@ export default function PostDetailPage() {
         await navigator.share({ title: post.title, url });
       } else {
         await navigator.clipboard.writeText(url);
-        show(<p style={{ textAlign: "center" }}>链接已复制</p>);
+        toast("链接已复制", "success");
       }
     } catch {
       /* 用户取消分享 */
@@ -138,29 +138,22 @@ export default function PostDetailPage() {
       <Header />
       <div className="post-detail-container">
         <div className="post-detail-header">
-          <a href="/forum" className="post-back-btn" onClick={(e) => { e.preventDefault(); router.back(); }}>
-            <i className="fa fa-arrow-left"></i> 返回
-          </a>
+          <BackButton />
         </div>
 
         <article className="post-content">
           <div className="post-meta-top">
-            <span className="post-category-badge" style={{ background: `${catColor}22`, color: catColor }}>{catLabel}</span>
+            <CategoryBadge category={post.category} className="post-category-badge" />
           </div>
           <h1 className="post-title">{post.title}</h1>
 
           <div className="post-author-row">
             <Link href={`/users/${post.user_id}`} className="post-author-avatar">
-              {post.user_avatar ? (
-                <img src={post.user_avatar} alt="" loading="lazy" />
-              ) : (
-                <i className="fa fa-user avatar-fallback"></i>
-              )}
+              <UserAvatar src={post.user_avatar} />
             </Link>
             <div className="post-author-info">
               <Link href={`/users/${post.user_id}`} className="post-author-name Username">
-                {post.user_name || "匿名"}
-                <InlinePrefixBadge userId={post.user_id} />
+                <UserName name={post.user_name} userId={post.user_id} />
               </Link>
               <div className="post-author-meta">
                 <span>{formatTime(post.created_at)}</span>

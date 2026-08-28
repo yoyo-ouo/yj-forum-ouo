@@ -36,7 +36,7 @@ function VerifyInner() {
             </div>
             <h2>验证成功</h2>
             <p>{msg} 您的邮箱已成功验证，感谢您的使用！</p>
-            <Link className="verify-btn" href={userId ? `/users/${userId}` : "/login"}>
+            <Link className="verify-btn" href={userId ? `/users/${userId}` : "/auth"}>
               {userId ? "返回个人主页" : "返回登录"}
             </Link>
           </div>
@@ -48,7 +48,7 @@ function VerifyInner() {
             </div>
             <h2>验证失败</h2>
             <p>{msg} 验证链接已过期或无效，请重新操作。</p>
-            <Link className="verify-btn" href="/login">返回登录</Link>
+            <Link className="verify-btn" href="/auth">返回登录</Link>
           </div>
         )}
       </div>

@@ -4,6 +4,8 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
+import { AuthInput } from "@/components/ui/AuthInput";
+import { useToast, ToastType } from "@/components/Toast";
 import { authApi, ApiException } from "@/lib/api";
 import { useStore } from "@/lib/store";
 
@@ -13,6 +15,7 @@ function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
   const { refreshUser } = useStore();
+  const { toast } = useToast();
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -20,8 +23,6 @@ function LoginInner() {
   const [password2, setPassword2] = useState("");
   const [code, setCode] = useState("");
   const [remember, setRemember] = useState(true);
-  const [msg, setMsg] = useState("");
-  const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [pwdMatch, setPwdMatch] = useState<"" | "ok" | "no">("");
@@ -40,10 +41,10 @@ function LoginInner() {
     return () => clearInterval(t);
   }, [countdown]);
 
-  const showMsg = (m: string) => { setMsg(m); setErr(m); };
+  const showMsg = (m: string, type: ToastType = "error") => toast(m, type);
 
   const login = async () => {
-    if (!name || !password) return showMsg("请输入账号和密码");
+    if (!name || !password) return showMsg("请输入账号和密码", "warning");
     setBusy(true);
     try {
       const r = await authApi.login(name, password, remember);
@@ -57,12 +58,11 @@ function LoginInner() {
   };
 
   const sendRegisterCode = async () => {
-    if (!email) return showMsg("请输入邮箱");
+    if (!email) return showMsg("请输入邮箱", "warning");
     setBusy(true);
     try {
       await authApi.sendRegisterCode(email);
-      setMsg("验证码已发送，请查收邮箱");
-      setErr("");
+      showMsg("验证码已发送，请查收邮箱", "success");
       setCountdown(60);
     } catch (e) {
       showMsg(e instanceof ApiException ? e.message : "发送失败");
@@ -72,9 +72,9 @@ function LoginInner() {
   };
 
   const register = async () => {
-    if (!name || !email || !password || !code) return showMsg("请填写完整信息");
-    if (password.length < 8) return showMsg("密码至少8位");
-    if (password !== password2) return showMsg("两次密码不一致");
+    if (!name || !email || !password || !code) return showMsg("请填写完整信息", "warning");
+    if (password.length < 8) return showMsg("密码至少8位", "warning");
+    if (password !== password2) return showMsg("两次密码不一致", "warning");
     setBusy(true);
     try {
       await authApi.register(name, email, password, code);
@@ -88,12 +88,11 @@ function LoginInner() {
   };
 
   const sendResetCode = async () => {
-    if (!email) return showMsg("请输入邮箱");
+    if (!email) return showMsg("请输入邮箱", "warning");
     setBusy(true);
     try {
       await authApi.sendResetCode(email);
-      setMsg("验证码已发送（若邮箱存在）");
-      setErr("");
+      showMsg("验证码已发送（若邮箱存在）", "success");
       setCountdown(60);
     } catch (e) {
       showMsg(e instanceof ApiException ? e.message : "发送失败");
@@ -103,13 +102,13 @@ function LoginInner() {
   };
 
   const resetPassword = async () => {
-    if (!email || !code || !password) return showMsg("请填写完整信息");
-    if (password.length < 8) return showMsg("密码至少8位");
-    if (password !== password2) return showMsg("两次密码不一致");
+    if (!email || !code || !password) return showMsg("请填写完整信息", "warning");
+    if (password.length < 8) return showMsg("密码至少8位", "warning");
+    if (password !== password2) return showMsg("两次密码不一致", "warning");
     setBusy(true);
     try {
       await authApi.resetPassword(email, code, password);
-      showMsg("密码重置成功，请使用新密码登录");
+      showMsg("密码重置成功，请使用新密码登录", "success");
       setMode("login");
     } catch (e) {
       showMsg(e instanceof ApiException ? e.message : "重置失败");
@@ -120,8 +119,6 @@ function LoginInner() {
 
   const switchMode = (m: Mode) => {
     setMode(m);
-    setMsg("");
-    setErr("");
     setPwdMatch("");
   };
 
@@ -139,14 +136,8 @@ function LoginInner() {
               <h2>欢迎回来</h2>
               <p>登录您的妖精论坛账号</p>
             </div>
-            <div className="auth-input-group">
-              <span className="auth-icon"><i className="fa fa-user"></i></span>
-              <input type="text" placeholder="用户名或邮箱" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="auth-input-group">
-              <span className="auth-icon"><i className="fa fa-lock"></i></span>
-              <input type="password" placeholder="密码" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} />
-            </div>
+            <AuthInput icon="user" placeholder="用户名或邮箱" value={name} onChange={setName} />
+            <AuthInput icon="lock" type="password" placeholder="密码" value={password} onChange={setPassword} onKeyDown={(e) => e.key === "Enter" && login()} />
             <div className="auth-options">
               <label className="remember-me">
                 <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
@@ -155,7 +146,6 @@ function LoginInner() {
               <a href="#" className="forgot-password" onClick={(e) => { e.preventDefault(); switchMode("forgot"); }}>忘记密码？</a>
             </div>
             <button className="auth-btn primary" disabled={busy} onClick={login}>{busy ? "登录中..." : "登录"}</button>
-            <div className="auth-error">{err}</div>
           </div>
         )}
 
@@ -165,32 +155,22 @@ function LoginInner() {
               <h2>加入我们</h2>
               <p>创建您的妖精论坛账号</p>
             </div>
-            <div className="auth-input-group">
-              <span className="auth-icon"><i className="fa fa-user"></i></span>
-              <input type="text" placeholder="用户名（2-20个字符）" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="auth-input-group">
-              <span className="auth-icon"><i className="fa fa-envelope"></i></span>
-              <input type="email" placeholder="邮箱" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div className="auth-input-group">
-              <span className="auth-icon"><i className="fa fa-lock"></i></span>
-              <input
-                type="password"
-                placeholder="密码（至少8位，含字母和数字）"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setPwdMatch(password2 && e.target.value === password2 ? "ok" : password2 ? "no" : ""); }}
-              />
-            </div>
-            <div className="auth-input-group">
-              <span className="auth-icon"><i className="fa fa-lock"></i></span>
-              <input
-                type="password"
-                placeholder="确认密码"
-                value={password2}
-                onChange={(e) => { setPassword2(e.target.value); setPwdMatch(password && e.target.value === password ? "ok" : e.target.value ? "no" : ""); }}
-              />
-            </div>
+            <AuthInput icon="user" placeholder="用户名（2-20个字符）" value={name} onChange={setName} />
+            <AuthInput icon="envelope" type="email" placeholder="邮箱" value={email} onChange={setEmail} />
+            <AuthInput
+              icon="lock"
+              type="password"
+              placeholder="密码（至少8位，含字母和数字）"
+              value={password}
+              onChange={(v) => { setPassword(v); setPwdMatch(password2 && v === password2 ? "ok" : password2 ? "no" : ""); }}
+            />
+            <AuthInput
+              icon="lock"
+              type="password"
+              placeholder="确认密码"
+              value={password2}
+              onChange={(v) => { setPassword2(v); setPwdMatch(password && v === password ? "ok" : v ? "no" : ""); }}
+            />
             <div className="auth-input-group auth-code-group">
               <span className="auth-icon"><i className="fa fa-shield"></i></span>
               <input type="text" placeholder="验证码（6位数字）" maxLength={6} inputMode="numeric" pattern="[0-9]*" value={code} onChange={(e) => setCode(e.target.value)} />
@@ -199,7 +179,7 @@ function LoginInner() {
               </button>
             </div>
             <button className="auth-btn primary" disabled={busy} onClick={register}>{busy ? "注册中..." : "注册"}</button>
-            <div className="auth-error">{err || (pwdMatch === "no" ? "❌ 两次密码不一致" : pwdMatch === "ok" ? "✅ 密码一致" : "")}</div>
+            <div className="auth-error">{pwdMatch === "no" ? "❌ 两次密码不一致" : pwdMatch === "ok" ? "✅ 密码一致" : ""}</div>
           </div>
         )}
 
@@ -209,10 +189,7 @@ function LoginInner() {
               <h2>重置密码</h2>
               <p>输入邮箱获取验证码，设置新密码</p>
             </div>
-            <div className="auth-input-group">
-              <span className="auth-icon"><i className="fa fa-envelope"></i></span>
-              <input type="email" placeholder="注册邮箱" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
+            <AuthInput icon="envelope" type="email" placeholder="注册邮箱" value={email} onChange={setEmail} />
             <div className="auth-input-group auth-code-group">
               <span className="auth-icon"><i className="fa fa-shield"></i></span>
               <input type="text" placeholder="验证码（6位数字）" maxLength={6} inputMode="numeric" pattern="[0-9]*" value={code} onChange={(e) => setCode(e.target.value)} />
@@ -220,16 +197,9 @@ function LoginInner() {
                 {countdown > 0 ? `${countdown}s` : "获取验证码"}
               </button>
             </div>
-            <div className="auth-input-group">
-              <span className="auth-icon"><i className="fa fa-lock"></i></span>
-              <input type="password" placeholder="新密码（至少8位，含字母和数字）" value={password} onChange={(e) => setPassword(e.target.value)} />
-            </div>
-            <div className="auth-input-group">
-              <span className="auth-icon"><i className="fa fa-lock"></i></span>
-              <input type="password" placeholder="确认新密码" value={password2} onChange={(e) => setPassword2(e.target.value)} />
-            </div>
+            <AuthInput icon="lock" type="password" placeholder="新密码（至少8位，含字母和数字）" value={password} onChange={setPassword} />
+            <AuthInput icon="lock" type="password" placeholder="确认新密码" value={password2} onChange={setPassword2} />
             <button className="auth-btn primary" disabled={busy} onClick={resetPassword}>{busy ? "提交中..." : "重置密码"}</button>
-            <div className="auth-error">{err}</div>
             <button className="auth-btn secondary" style={{ marginTop: 12, background: "var(--color-bg-icon)", color: "var(--color-text-secondary)" }} onClick={() => switchMode("login")}>返回登录</button>
           </div>
         )}

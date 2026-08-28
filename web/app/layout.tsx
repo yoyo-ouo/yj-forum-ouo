@@ -4,6 +4,7 @@ import "font-awesome/css/font-awesome.min.css";
 import "github-markdown-css/github-markdown.css";
 import { StoreProvider } from "@/lib/store";
 import { CenterCardProvider } from "@/components/CenterCard";
+import { ToastProvider } from "@/components/Toast";
 import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
@@ -45,12 +46,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body id="body">
         <StoreProvider>
-          <CenterCardProvider>
-            {children}
-            {/* 页脚占位 + 页脚：放在页面内容之后，防止被 absolute 定位的 #footer 遮挡 */}
-            <div id="footer-spacer"></div>
-            <Footer />
-          </CenterCardProvider>
+          <ToastProvider>
+            <CenterCardProvider>
+              {children}
+              {/* 页脚占位 + 页脚：放在页面内容之后，防止被 absolute 定位的 #footer 遮挡 */}
+              <div id="footer-spacer"></div>
+              <Footer />
+            </CenterCardProvider>
+          </ToastProvider>
         </StoreProvider>
       </body>
     </html>

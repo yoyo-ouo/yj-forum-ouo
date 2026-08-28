@@ -7,7 +7,8 @@ import Header from "@/components/Header";
 import PostCard from "@/components/PostCard";
 import FollowListModal from "@/components/FollowListModal";
 import { ProfilePrefixBadge } from "@/components/PrefixBadge";
-import { useCenterCard } from "@/components/CenterCard";
+import { useToast } from "@/components/Toast";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { userApi, postApi, User, Post, UserBrief, ApiException } from "@/lib/api";
 import { useStore } from "@/lib/store";
 
@@ -15,7 +16,7 @@ export default function UserPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { user: me, userId, refreshUser } = useStore();
-  const { show } = useCenterCard();
+  const { toast } = useToast();
   const [profile, setProfile] = useState<User | null>(null);
   const [stats, setStats] = useState<any>(null);
   const [followStats, setFollowStats] = useState<any>(null);
@@ -37,21 +38,21 @@ export default function UserPage() {
       const p = await userApi.posts(id, 1, 20);
       setPosts(p.posts || []);
     } catch (e) {
-      show(<p>{e instanceof ApiException ? e.message : "用户不存在"}</p>);
+      toast(e instanceof ApiException ? e.message : "用户不存在", "error");
     } finally {
       setLoading(false);
     }
-  }, [id, userId, show]);
+  }, [id, userId, toast]);
 
   useEffect(() => { load(); }, [load]);
 
   const toggleFollow = async () => {
-    if (!me) return router.push("/login");
+    if (!me) return router.push("/auth");
     try {
       const r = await userApi.follow(id);
       setIsFollowing(r.following);
     } catch (e: any) {
-      show(<p>{e.message}</p>);
+      toast(e.message, "error");
     }
   };
 
@@ -66,9 +67,9 @@ export default function UserPage() {
   const sendVerifyEmail = async () => {
     try {
       await userApi.verifyEmail();
-      show(<p style={{ textAlign: "center" }}>验证码已发送至你的邮箱，请在用户资料中填写</p>);
+      toast("验证码已发送至你的邮箱，请在用户资料中填写", "success");
     } catch (e: any) {
-      show(<p>{e.message}</p>);
+      toast(e.message, "error");
     }
   };
 
@@ -80,7 +81,7 @@ export default function UserPage() {
       await refreshUser();
       load();
     } catch (e: any) {
-      show(<p>{e.message}</p>);
+      toast(e.message, "error");
     }
   };
 
@@ -108,11 +109,7 @@ export default function UserPage() {
         <div className="user-profile-card">
           <div className="user-profile-avatar-wrapper">
             <div className="user-profile-avatar">
-              {profile.avatar ? (
-                <img id="user-profile-avatar-img" src={profile.avatar} alt="用户头像" />
-              ) : (
-                <i className="fa fa-user avatar-fallback avatar-fallback-lg"></i>
-              )}
+              <UserAvatar src={profile.avatar} alt="用户头像" imgId="user-profile-avatar-img" fallbackClassName="avatar-fallback avatar-fallback-lg" />
             </div>
             <ProfilePrefixBadge prefix={profile.prefix} />
           </div>

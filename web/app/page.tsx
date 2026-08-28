@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import Header from "@/components/Header";
 import PostCard from "@/components/PostCard";
+import { ListLoading, ListEmpty } from "@/components/ui/ListState";
 import { postApi, userApi, Post } from "@/lib/api";
 import { useStore } from "@/lib/store";
 
@@ -97,9 +98,9 @@ export default function HomePage() {
 
           <div className="home-post-list" id="home-post-list">
             {loading ? (
-              <div className="forum-loading">加载中...</div>
+              <ListLoading />
             ) : posts.length === 0 ? (
-              <div className="forum-empty">暂无帖子</div>
+              <ListEmpty />
             ) : (
               posts.map((p) => <PostCard key={p.id} post={p} />)
             )}

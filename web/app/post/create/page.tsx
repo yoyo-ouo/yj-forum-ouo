@@ -4,15 +4,9 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Markdown from "@/components/Markdown";
+import BackButton from "@/components/ui/BackButton";
 import { postApi, ApiException } from "@/lib/api";
-
-const CATEGORIES = [
-  { key: "general", label: "综合" },
-  { key: "talk", label: "闲聊" },
-  { key: "question", label: "求助" },
-  { key: "share", label: "分享" },
-  { key: "creative", label: "创作" },
-];
+import { POST_CATEGORIES } from "@/lib/constants";
 
 const COMPLIANCE = [
   "遵守中华人民共和国相关法律法规，不得发布违法违规内容",
@@ -54,9 +48,7 @@ export default function PostCreatePage() {
       <Header />
       <div className="post-create-container">
         <div className="post-create-header">
-          <a href="/forum" className="post-create-back" onClick={(e) => { e.preventDefault(); router.back(); }}>
-            <i className="fa fa-arrow-left"></i> 返回
-          </a>
+          <BackButton className="post-create-back" />
           <h1 className="post-create-title">发布新帖子</h1>
           <div style={{ width: 60 }}></div>
         </div>
@@ -75,7 +67,7 @@ export default function PostCreatePage() {
           <div className="form-group">
             <label className="form-label">帖子分类</label>
             <div className="form-category-select" id="form-category-select">
-              {CATEGORIES.map((c) => (
+              {POST_CATEGORIES.map((c) => (
                 <button
                   key={c.key}
                   className={`category-chip ${category === c.key ? "active" : ""}`}

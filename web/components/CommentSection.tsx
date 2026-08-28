@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { Comment } from "@/lib/api";
 import { timeAgo } from "@/lib/constants";
-import { InlinePrefixBadge } from "./PrefixBadge";
+import { UserAvatar, UserName } from "./ui/UserAvatar";
 import Markdown from "./Markdown";
 
 /** 单条评论（与 legacy renderComment 结构 1:1，支持回复标识/删除/回复按钮） */
@@ -28,17 +28,12 @@ function CommentItem({
   return (
     <div className={`comment-item ${isReply ? "comment-item-reply" : ""}`} data-comment-id={c.id}>
       <Link href={`/users/${c.user_id}`} className="comment-avatar">
-        {c.user_avatar ? (
-          <img src={c.user_avatar} alt="" loading="lazy" />
-        ) : (
-          <i className="fa fa-user avatar-fallback"></i>
-        )}
+        <UserAvatar src={c.user_avatar} />
       </Link>
       <div className="comment-body">
         <div className="comment-header">
           <Link href={`/users/${c.user_id}`} className="comment-author Username">
-            {c.user_name || "匿名"}
-            <InlinePrefixBadge userId={c.user_id} />
+            <UserName name={c.user_name} userId={c.user_id} />
           </Link>
           <span className="comment-time">{timeAgo(c.created_at)}</span>
         </div>
@@ -46,8 +41,7 @@ function CommentItem({
           <div className="comment-reply-to">
             回复{" "}
             <Link href={`/users/${parent.user_id}`} className="Username">
-              {parent.user_name || "匿名"}
-              <InlinePrefixBadge userId={parent.user_id} />
+              <UserName name={parent.user_name} userId={parent.user_id} />
             </Link>
           </div>
         )}

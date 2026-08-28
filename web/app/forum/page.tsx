@@ -3,17 +3,12 @@
 import { useEffect, useState, useRef } from "react";
 import Header from "@/components/Header";
 import PostCard from "@/components/PostCard";
+import { ListLoading, ListEmpty, LoadMoreButton } from "@/components/ui/ListState";
 import Link from "next/link";
 import { postApi, Post } from "@/lib/api";
+import { POST_CATEGORIES } from "@/lib/constants";
 
-const TABS = [
-  { key: "all", label: "全部" },
-  { key: "general", label: "综合" },
-  { key: "talk", label: "闲聊" },
-  { key: "question", label: "求助" },
-  { key: "share", label: "分享" },
-  { key: "creative", label: "创作" },
-];
+const TABS = [{ key: "all", label: "全部" }, ...POST_CATEGORIES];
 
 export default function ForumPage() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -68,19 +63,15 @@ export default function ForumPage() {
 
         <div className="forum-post-list" id="forum-post-list">
           {loading && pageRef.current === 1 ? (
-            <div className="forum-loading">加载中...</div>
+            <ListLoading />
           ) : posts.length === 0 ? (
-            <div className="forum-empty">暂无帖子</div>
+            <ListEmpty />
           ) : (
             posts.map((p) => <PostCard key={p.id} post={p} />)
           )}
         </div>
 
-        {hasMore && (
-          <div className="forum-load-more" id="forum-load-more">
-            <button onClick={loadMore} disabled={loading}>{loading ? "加载中..." : "加载更多"}</button>
-          </div>
-        )}
+        {hasMore && <LoadMoreButton loading={loading} onClick={loadMore} id="forum-load-more" />}
       </div>
     </>
   );

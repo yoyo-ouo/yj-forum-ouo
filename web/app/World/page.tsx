@@ -4,8 +4,8 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
-import { useCenterCard } from "@/components/CenterCard";
-import { InlinePrefixBadge } from "@/components/PrefixBadge";
+import { useToast } from "@/components/Toast";
+import { UserName } from "@/components/ui/UserAvatar";
 import { worldApi, WorldMessage, ApiException } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import { formatTime } from "@/lib/constants";
@@ -13,7 +13,7 @@ import { formatTime } from "@/lib/constants";
 export default function WorldPage() {
   const router = useRouter();
   const { userId, user } = useStore();
-  const { show } = useCenterCard();
+  const { toast } = useToast();
   const [messages, setMessages] = useState<WorldMessage[]>([]);
   const [content, setContent] = useState("");
   const [connected, setConnected] = useState(false);
@@ -43,7 +43,7 @@ export default function WorldPage() {
   }, [messages]);
 
   const send = async () => {
-    if (!userId) return router.push("/login");
+    if (!userId) return router.push("/auth");
     if (!content.trim()) return;
     try {
       await worldApi.send(content.trim(), replyTo?.id);
@@ -51,7 +51,7 @@ export default function WorldPage() {
       setReplyTo(null);
       await load();
     } catch (e) {
-      show(<p>{e instanceof ApiException ? e.message : "发送失败"}</p>);
+      toast(e instanceof ApiException ? e.message : "发送失败", "error");
     }
   };
 
@@ -97,8 +97,7 @@ export default function WorldPage() {
                     <div className="world-msg-body">
                       <div className="world-msg-header">
                         <div className="world-msg-name Username">
-                          {m.sender_name}
-                          <InlinePrefixBadge userId={m.sender_id} />
+                          <UserName name={m.sender_name} userId={m.sender_id} />
                         </div>
                         <button className="world-msg-reply-btn" data-msg-id={m.id} title="引用回复" onClick={() => setReplyTo({ id: m.id, name: m.sender_name })}>
                           <i className="fa fa-reply"></i>
@@ -107,8 +106,7 @@ export default function WorldPage() {
                       {parent && (
                         <div className="world-msg-reply">
                           <div className="world-reply-name Username">
-                            {parent.sender_name}
-                            <InlinePrefixBadge userId={parent.sender_id} />
+                            <UserName name={parent.sender_name} userId={parent.sender_id} />
                           </div>
                           <div className="world-msg-bubble">{parent.content}</div>
                         </div>

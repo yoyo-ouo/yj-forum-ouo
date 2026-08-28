@@ -6,10 +6,13 @@ import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { miscApi } from "@/lib/api";
 import { useCenterCard } from "./CenterCard";
+import { useToast } from "./Toast";
+import Modal from "./ui/Modal";
 
 export default function Header() {
   const { theme, setTheme, user, userId, logout } = useStore();
   const { show } = useCenterCard();
+  const { toast } = useToast();
   const router = useRouter();
   const pathname = usePathname();
   const [search, setSearch] = useState("");
@@ -47,18 +50,6 @@ export default function Header() {
     return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
   }, []);
 
-  // 首页点击 Escape 关闭
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setShowDonate(false);
-        setShowVote(false);
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
-
   // 投票统计加载
   useEffect(() => {
     if (showVote) {
@@ -75,28 +66,18 @@ export default function Header() {
     try {
       const r = await miscApi.vote(choice);
       setVoteStats(r.stats);
-      show(
-        <div style={{ textAlign: "center", padding: 12 }}>
-          <p>投票成功！</p>
-          <p>V1: {r.stats.v1} | V2: {r.stats.v2}</p>
-        </div>
-      );
+      toast(`投票成功！V1: ${r.stats.v1} | V2: ${r.stats.v2}`, "success");
     } catch (e: any) {
-      show(<p style={{ textAlign: "center" }}>{e.message}</p>);
+      toast(e.message, "error");
     }
   };
 
   const showEasterEgg = async () => {
     try {
       const egg = await miscApi.easterEgg();
-      show(
-        <>
-          <h3 style={{ margin: "0 0 12px" }}>{egg.Name}</h3>
-          <div>{egg.Text}</div>
-        </>
-      );
+      toast(`${egg.Name}：${egg.Text}`, "info");
     } catch {
-      show(<p>彩蛋获取失败</p>);
+      toast("彩蛋获取失败", "error");
     }
   };
 
@@ -114,7 +95,7 @@ export default function Header() {
           deferredPromptRef.current = null;
         })
         .catch(() => {
-          show(<p style={{ textAlign: "center" }}>当前浏览器不支持安装</p>);
+          toast("当前浏览器不支持安装", "warning");
         });
     } else {
       show(
@@ -241,7 +222,7 @@ export default function Header() {
               )}
             </li>
             <li>
-              <Link id="UserInfo" href={userId ? `/users/${userId}` : "/login"}>
+              <Link id="UserInfo" href={userId ? `/users/${userId}` : "/auth"}>
                 <div className="user-avatar" id="user-avatar">
                   {user?.avatar ? (
                     <img src={user.avatar} alt="" width={32} height={32} style={{ borderRadius: "50%" }} />
@@ -276,47 +257,35 @@ export default function Header() {
       </header>
 
       {/* 赞赏弹窗 */}
-      {showDonate && (
-        <div id="donate-modal" className="donate-modal" style={{ display: "flex" }}>
-          <div className="donate-overlay" onClick={() => setShowDonate(false)}></div>
-          <div className="donate-card">
-            <button className="donate-close" onClick={() => setShowDonate(false)}>&times;</button>
-            <h3 className="donate-title"><i className="fa fa-heart"></i> 赞赏支持</h3>
-            <p className="donate-subtitle">个人自发投喂，不为项目收益</p>
-            <div className="donate-qr-wrap">
-              <img src="/assets/img/help.png" alt="赞赏码" />
-            </div>
-            <p className="donate-tip">你的支持是我持续创作的动力 ❤️</p>
-          </div>
+      <Modal open={showDonate} onClose={() => setShowDonate(false)}>
+        <h3 className="donate-title"><i className="fa fa-heart"></i> 赞赏支持</h3>
+        <p className="donate-subtitle">个人自发投喂，不为项目收益</p>
+        <div className="donate-qr-wrap">
+          <img src="/assets/img/help.png" alt="赞赏码" />
         </div>
-      )}
+        <p className="donate-tip">你的支持是我持续创作的动力 ❤️</p>
+      </Modal>
 
       {/* 版本投票弹窗 */}
-      {showVote && (
-        <div id="version-vote-modal" className="donate-modal" style={{ display: "flex" }}>
-          <div className="donate-overlay" onClick={() => setShowVote(false)}></div>
-          <div className="donate-card">
-            <button className="donate-close" onClick={() => setShowVote(false)}>&times;</button>
-            <h3 className="donate-title"><i className="fa fa-random"></i> 版本选择</h3>
-            <p className="donate-subtitle">V2 新版本已上线，欢迎体验并投出你的一票</p>
-            <a className="version-vote-link" href="https://v2.yjlt.top" target="_blank" rel="noopener noreferrer">
-              <i className="fa fa-external-link"></i> 前往 V2 新版本 (v2.yjlt.top)
-            </a>
-            <div className="version-vote-options">
-              <button className="version-vote-btn v1" onClick={() => submitVote("v1")}>
-                <i className="fa fa-check-square-o"></i> V1 旧版
-              </button>
-              <button className="version-vote-btn v2" onClick={() => submitVote("v2")}>
-                <i className="fa fa-star"></i> V2 新版
-              </button>
-            </div>
-            <p className="version-vote-stats" id="version-vote-stats">
-              {voteStats ? `V1: ${voteStats.v1} 票 | V2: ${voteStats.v2} 票` : "加载中..."}
-            </p>
-            <p className="version-vote-tip">已登录按账号记录，游客按 IP 记录，可随时改投</p>
-          </div>
+      <Modal open={showVote} onClose={() => setShowVote(false)}>
+        <h3 className="donate-title"><i className="fa fa-random"></i> 版本选择</h3>
+        <p className="donate-subtitle">V2 新版本已上线，欢迎体验并投出你的一票</p>
+        <a className="version-vote-link" href="https://v2.yjlt.top" target="_blank" rel="noopener noreferrer">
+          <i className="fa fa-external-link"></i> 前往 V2 新版本 (v2.yjlt.top)
+        </a>
+        <div className="version-vote-options">
+          <button className="version-vote-btn v1" onClick={() => submitVote("v1")}>
+            <i className="fa fa-check-square-o"></i> V1 旧版
+          </button>
+          <button className="version-vote-btn v2" onClick={() => submitVote("v2")}>
+            <i className="fa fa-star"></i> V2 新版
+          </button>
         </div>
-      )}
+        <p className="version-vote-stats" id="version-vote-stats">
+          {voteStats ? `V1: ${voteStats.v1} 票 | V2: ${voteStats.v2} 票` : "加载中..."}
+        </p>
+        <p className="version-vote-tip">已登录按账号记录，游客按 IP 记录，可随时改投</p>
+      </Modal>
 
       {/* Bug 举报弹窗 */}
       {showBug && <BugReportDialog onClose={() => setShowBug(false)} />}
@@ -325,7 +294,7 @@ export default function Header() {
 }
 
 function BugReportDialog({ onClose }: { onClose: () => void }) {
-  const { show } = useCenterCard();
+  const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
   const [steps, setSteps] = useState("");
@@ -337,31 +306,27 @@ function BugReportDialog({ onClose }: { onClose: () => void }) {
     setSubmitting(true);
     try {
       await miscApi.reportBug({ title, detail, steps, contact, page_url: window.location.href });
-      show(<p style={{ textAlign: "center" }}>Bug 提交成功，感谢反馈！</p>);
+      toast("Bug 提交成功，感谢反馈！", "success");
       onClose();
     } catch (e: any) {
-      show(<p style={{ textAlign: "center" }}>{e.message}</p>);
+      toast(e.message, "error");
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div id="bug-modal" className="donate-modal" style={{ display: "flex" }}>
-      <div className="donate-overlay" onClick={onClose}></div>
-      <div className="donate-card" style={{ maxWidth: 520 }}>
-        <button className="donate-close" onClick={onClose}>&times;</button>
-        <h3 className="donate-title"><i className="fa fa-bug"></i> Bug 报告</h3>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-          <input className="report-detail-input" placeholder="标题（必填）" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
-          <textarea className="report-detail-input textarea" placeholder="问题详情（必填）" rows={4} maxLength={5000} value={detail} onChange={(e) => setDetail(e.target.value)} />
-          <textarea className="report-detail-input textarea" placeholder="复现步骤（可选）" rows={3} maxLength={3000} value={steps} onChange={(e) => setSteps(e.target.value)} />
-          <input className="report-detail-input" placeholder="联系方式（可选）" maxLength={200} value={contact} onChange={(e) => setContact(e.target.value)} />
-          <button className="report-submit" disabled={submitting} onClick={submit}>
-            {submitting ? "提交中..." : "提交"}
-          </button>
-        </div>
+    <Modal open onClose={onClose} cardStyle={{ maxWidth: 520 }}>
+      <h3 className="donate-title"><i className="fa fa-bug"></i> Bug 报告</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+        <input className="report-detail-input" placeholder="标题（必填）" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
+        <textarea className="report-detail-input textarea" placeholder="问题详情（必填）" rows={4} maxLength={5000} value={detail} onChange={(e) => setDetail(e.target.value)} />
+        <textarea className="report-detail-input textarea" placeholder="复现步骤（可选）" rows={3} maxLength={3000} value={steps} onChange={(e) => setSteps(e.target.value)} />
+        <input className="report-detail-input" placeholder="联系方式（可选）" maxLength={200} value={contact} onChange={(e) => setContact(e.target.value)} />
+        <button className="report-submit" disabled={submitting} onClick={submit}>
+          {submitting ? "提交中..." : "提交"}
+        </button>
       </div>
-    </div>
+    </Modal>
   );
 }

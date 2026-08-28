@@ -1,33 +1,25 @@
 import Link from "next/link";
 import type { Post } from "@/lib/api";
-import { categoryColor, categoryLabel, timeAgo } from "@/lib/constants";
-import { InlinePrefixBadge } from "./PrefixBadge";
+import { timeAgo } from "@/lib/constants";
+import CategoryBadge from "./ui/CategoryBadge";
+import { UserAvatar, UserName } from "./ui/UserAvatar";
 
 /** 帖子卡片（与 legacy renderPostCard 结构 1:1） */
 export default function PostCard({ post, showTime = true }: { post: Post; showTime?: boolean }) {
-  const catColor = categoryColor(post.category);
-  const catLabel = categoryLabel(post.category);
   const summary = (post.summary || "").replace(/<[^>]+>/g, "").substring(0, 100);
 
   return (
     <Link className="post-card" href={`/post/${post.id}`}>
       <div className="post-card-left">
         <div className="post-card-avatar">
-          {post.user_avatar ? (
-            <img src={post.user_avatar} alt="" loading="lazy" />
-          ) : (
-            <i className="fa fa-user avatar-fallback"></i>
-          )}
+          <UserAvatar src={post.user_avatar} />
         </div>
       </div>
       <div className="post-card-body">
         <div className="post-card-header">
-          <span className="post-card-category" style={{ background: `${catColor}22`, color: catColor }}>
-            {catLabel}
-          </span>
+          <CategoryBadge category={post.category} />
           <span className="post-card-author Username">
-            {post.user_name || "匿名"}
-            <InlinePrefixBadge userId={post.user_id} />
+            <UserName name={post.user_name} userId={post.user_id} />
           </span>
           {showTime && <span className="post-card-time">{timeAgo(post.created_at)}</span>}
         </div>

@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import PostCard from "@/components/PostCard";
 import { ProfilePrefixBadge } from "@/components/PrefixBadge";
+import { UserAvatar } from "@/components/ui/UserAvatar";
+import { ListLoading, ListEmpty, LoadMoreButton } from "@/components/ui/ListState";
 import { miscApi, Post, UserBrief } from "@/lib/api";
 
 function SearchInner() {
@@ -98,9 +100,9 @@ function SearchInner() {
 
           <div className="forum-post-list" id="search-post-list" style={{ display: tab === "posts" ? "block" : "none" }}>
             {searching && posts.length === 0 ? (
-              <div className="forum-loading">加载中...</div>
+              <ListLoading />
             ) : posts.length === 0 ? (
-              <div className="forum-empty">未找到相关帖子</div>
+              <ListEmpty text="未找到相关帖子" />
             ) : (
               posts.map((p) => <PostCard key={p.id} post={p} />)
             )}
@@ -108,9 +110,9 @@ function SearchInner() {
 
           <div className="forum-user-list" id="search-user-list">
             {searching && users.length === 0 ? (
-              <div className="forum-loading">加载中...</div>
+              <ListLoading />
             ) : users.length === 0 ? (
-              <div className="forum-empty">未找到相关用户</div>
+              <ListEmpty text="未找到相关用户" />
             ) : (
               <div style={{ display: tab === "users" ? "block" : "none" }}>
                 {users.map((u) => {
@@ -125,11 +127,12 @@ function SearchInner() {
                   return (
                     <Link className="search-user-item" href={`/users/${u.id}`} key={u.id} style={{ display: "flex" }}>
                       <div className="search-user-avatar-wrapper">
-                        {u.avatar ? (
-                          <img src={u.avatar} className="search-user-avatar" loading="lazy" alt={u.name} />
-                        ) : (
-                          <i className="fa fa-user avatar-fallback search-user-avatar-fallback"></i>
-                        )}
+                        <UserAvatar
+                          src={u.avatar}
+                          alt={u.name}
+                          imgClassName="search-user-avatar"
+                          fallbackClassName="avatar-fallback search-user-avatar-fallback"
+                        />
                         {vipIcon}
                         <ProfilePrefixBadge prefix={u.prefix} />
                       </div>
@@ -145,9 +148,7 @@ function SearchInner() {
           </div>
 
           {(tab === "posts" ? postsMore : usersMore) && (
-            <div className="forum-load-more" id="search-load-more">
-              <button onClick={loadMore} disabled={searching}>{searching ? "加载中..." : "加载更多"}</button>
-            </div>
+            <LoadMoreButton loading={searching} onClick={loadMore} id="search-load-more" />
           )}
         </div>
       )}
