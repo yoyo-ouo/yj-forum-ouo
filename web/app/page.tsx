@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
-import Header from "@/components/Header";
 import PostCard from "@/components/PostCard";
 import { ListLoading, ListEmpty } from "@/components/ui/ListState";
 import { postApi, userApi, Post } from "@/lib/api";
@@ -45,7 +44,6 @@ export default function HomePage() {
 
   return (
     <>
-      <Header />
       <div className="home-container">
         <section className="home-quick-top">
           <Link className="quick-top-entry" href="/World">

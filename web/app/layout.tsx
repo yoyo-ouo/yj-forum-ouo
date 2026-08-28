@@ -6,6 +6,7 @@ import { StoreProvider } from "@/lib/store";
 import { CenterCardProvider } from "@/components/CenterCard";
 import { ToastProvider } from "@/components/Toast";
 import Footer from "@/components/Footer";
+import Header from "@/components/Header";
 
 export const metadata: Metadata = {
   title: "妖精论坛",
@@ -48,6 +49,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <StoreProvider>
           <ToastProvider>
             <CenterCardProvider>
+              {/* 全局导航栏：跨页面保持挂载，避免导航时品牌图等重载 */}
+              <Header />
               {children}
               {/* 页脚占位 + 页脚：放在页面内容之后，防止被 absolute 定位的 #footer 遮挡 */}
               <div id="footer-spacer"></div>

@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Header from "@/components/Header";
 import { useToast } from "@/components/Toast";
 import { UserName } from "@/components/ui/UserAvatar";
 import { worldApi, WorldMessage, ApiException } from "@/lib/api";
@@ -65,7 +64,6 @@ export default function WorldPage() {
 
   return (
     <>
-      <Header />
       <div className="world-chat-container">
         <div className="world-chat-header">
           <h3><i className="fa fa-globe"></i> 世界频道</h3>

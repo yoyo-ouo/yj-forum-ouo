@@ -1,8 +1,6 @@
-import Header from "@/components/Header";
 export default function LiunxPage() {
   return (
     <>
-      <Header />
       <div className="wiki-page mouse-linux-page">
         <div className="wiki-header">
           <h2>罗小黑战记鼠标 - Linux版</h2>

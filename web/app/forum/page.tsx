@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import Header from "@/components/Header";
 import PostCard from "@/components/PostCard";
 import { ListLoading, ListEmpty, LoadMoreButton } from "@/components/ui/ListState";
 import Link from "next/link";
@@ -43,7 +42,6 @@ export default function ForumPage() {
 
   return (
     <>
-      <Header />
       <div className="forum-container">
         <div className="forum-header">
           <h1 className="forum-title">妖精论坛</h1>

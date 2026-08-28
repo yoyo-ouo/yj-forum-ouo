@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
-import Header from "@/components/Header";
 import PostCard from "@/components/PostCard";
 import FollowListModal from "@/components/FollowListModal";
 import { ProfilePrefixBadge } from "@/components/PrefixBadge";
@@ -93,8 +92,8 @@ export default function UserPage() {
     } catch { /* 忽略 */ }
   };
 
-  if (loading) return <><Header /><div className="loading-text" style={{ padding: 40 }}>加载中...</div></>;
-  if (!profile) return <><Header /><div className="loading-text" style={{ padding: 40 }}>用户不存在</div></>;
+  if (loading) return <div className="loading-text" style={{ padding: 40 }}>加载中...</div>;
+  if (!profile) return <div className="loading-text" style={{ padding: 40 }}>用户不存在</div>;
 
   const vipIcon = profile.vip && profile.vip !== "0" ? (
     <span className="user-vip-icon" style={{ display: "inline-flex" }}>
@@ -104,7 +103,6 @@ export default function UserPage() {
 
   return (
     <>
-      <Header />
       <div className="user-profile-page">
         <div className="user-profile-card">
           <div className="user-profile-avatar-wrapper">

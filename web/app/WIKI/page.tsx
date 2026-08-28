@@ -1,10 +1,8 @@
-import Header from "@/components/Header";
 import WikiCard from "@/components/ui/WikiCard";
 
 export default function WikiIndexPage() {
   return (
     <>
-      <Header />
       <div className="wiki-page">
         <div className="wiki-header"><h2>罗小黑战记 Wiki</h2></div>
         <div className="wiki-container">

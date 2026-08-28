@@ -57,6 +57,9 @@ export default function Header() {
     }
   }, [showVote]);
 
+  // OAuth 授权等页不显示全局导航栏（Header 保持挂载，仅不渲染内容，避免导航时品牌图重载）
+  if (pathname.startsWith("/oauth")) return null;
+
   const doSearch = () => {
     const k = search.trim();
     if (k) router.push(`/search?k=${encodeURIComponent(k)}`);

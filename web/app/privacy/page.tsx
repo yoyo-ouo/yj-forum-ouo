@@ -1,9 +1,7 @@
-import Header from "@/components/Header";
 
 export default function PrivacyPage() {
   return (
     <>
-      <Header />
       <div className="privacy-page">
         <div className="privacy-header">
           <h2>隐私政策</h2>

@@ -2,7 +2,6 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Header from "@/components/Header";
 import Markdown from "@/components/Markdown";
 import BackButton from "@/components/ui/BackButton";
 import { postApi, ApiException } from "@/lib/api";
@@ -45,7 +44,6 @@ export default function PostCreatePage() {
 
   return (
     <>
-      <Header />
       <div className="post-create-container">
         <div className="post-create-header">
           <BackButton className="post-create-back" />

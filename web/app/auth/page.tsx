@@ -3,7 +3,6 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Header from "@/components/Header";
 import { AuthInput } from "@/components/ui/AuthInput";
 import { useToast, ToastType } from "@/components/Toast";
 import { authApi, ApiException } from "@/lib/api";
@@ -215,7 +214,6 @@ function LoginInner() {
 export default function LoginPage() {
   return (
     <>
-      <Header />
       <Suspense fallback={<div style={{ textAlign: "center", padding: 40 }}>加载中...</div>}>
         <LoginInner />
       </Suspense>

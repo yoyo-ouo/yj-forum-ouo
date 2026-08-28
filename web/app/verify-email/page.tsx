@@ -3,7 +3,6 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Header from "@/components/Header";
 import { useStore } from "@/lib/store";
 
 function VerifyInner() {
@@ -26,7 +25,6 @@ function VerifyInner() {
 
   return (
     <>
-      <Header />
       <div className="verify-container">
         {status === "loading" && <div className="post-loading">验证中...</div>}
         {status === "ok" && (

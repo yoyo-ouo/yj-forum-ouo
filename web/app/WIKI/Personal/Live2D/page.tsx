@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import Header from "@/components/Header";
 
 const GIFS = [
   { src: "/assets/live2d/standby.gif", name: "待机" },
@@ -14,7 +13,6 @@ export default function Live2DPage() {
   const [idx, setIdx] = useState(0);
   return (
     <>
-      <Header />
       <div className="wiki-page">
         <div className="wiki-header">
           <h2>罗小黑Live2D模型</h2>

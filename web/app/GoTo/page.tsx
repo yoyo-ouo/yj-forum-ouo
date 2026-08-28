@@ -1,7 +1,6 @@
 "use client";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import Header from "@/components/Header";
 
 function GoToInner() {
   const params = useSearchParams();
@@ -9,7 +8,6 @@ function GoToInner() {
   const safe = /^https?:\/\//i.test(target);
   return (
     <>
-      <Header />
       <div className="goto-container">
         <div className="goto-card">
           <div className="goto-icon">

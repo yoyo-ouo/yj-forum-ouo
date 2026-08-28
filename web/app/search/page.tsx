@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense } from "react";
 import { useEffect, useState } from "react";
-import Header from "@/components/Header";
 import PostCard from "@/components/PostCard";
 import { ProfilePrefixBadge } from "@/components/PrefixBadge";
 import { UserAvatar } from "@/components/ui/UserAvatar";
@@ -159,7 +158,6 @@ function SearchInner() {
 export default function SearchPage() {
   return (
     <>
-      <Header />
       <Suspense fallback={<div style={{ textAlign: "center", padding: 40 }}>加载中...</div>}>
         <SearchInner />
       </Suspense>

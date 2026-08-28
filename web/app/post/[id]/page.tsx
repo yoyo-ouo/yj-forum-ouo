@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
-import Header from "@/components/Header";
 import { useToast } from "@/components/Toast";
 import Markdown from "@/components/Markdown";
 import CommentSection from "@/components/CommentSection";
@@ -114,8 +113,8 @@ export default function PostDetailPage() {
     }
   };
 
-  if (loading) return <><Header /><div className="post-loading" style={{ padding: 40 }}>加载中...</div></>;
-  if (!post) return <><Header /><div className="post-error" style={{ padding: 40 }}>{err || "帖子不存在"}</div></>;
+  if (loading) return <div className="post-loading" style={{ padding: 40 }}>加载中...</div>;
+  if (!post) return <div className="post-error" style={{ padding: 40 }}>{err || "帖子不存在"}</div>;
 
   const mainCount = comments.filter((c) => !c.parent_id).length;
 
@@ -135,7 +134,6 @@ export default function PostDetailPage() {
 
   return (
     <>
-      <Header />
       <div className="post-detail-container">
         <div className="post-detail-header">
           <BackButton />
