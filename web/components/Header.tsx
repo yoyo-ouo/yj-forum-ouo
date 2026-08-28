@@ -6,7 +6,6 @@ import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { miscApi } from "@/lib/api";
 import { useCenterCard } from "./CenterCard";
-import Footer from "./Footer";
 
 export default function Header() {
   const { theme, setTheme, user, userId, logout } = useStore();
@@ -275,12 +274,6 @@ export default function Header() {
           </div>
         </div>
       </header>
-
-      <div id="ui">{/* 页面内容渲染 */}</div>
-
-      <div id="footer-spacer"></div>
-
-      <Footer />
 
       {/* 赞赏弹窗 */}
       {showDonate && (
