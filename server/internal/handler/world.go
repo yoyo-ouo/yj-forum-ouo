@@ -30,8 +30,8 @@ func (h *PostsHandler) WorldMessages(c *gin.Context) {
 // ---- POST /api/v1/world/messages ----
 
 type worldSendReq struct {
-	Content  string  `json:"content" binding:"required"`
-	ParentID *int64  `json:"parent_id"`
+	Content  string `json:"content" binding:"required"`
+	ParentID *int64 `json:"parent_id"`
 }
 
 // WorldSend 发送世界消息。

@@ -8,14 +8,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 
 	"yj-forum/server/internal/auth"
 	"yj-forum/server/internal/config"
@@ -40,8 +36,8 @@ func main() {
 	}
 	defer db.Close()
 
-	// 2. 迁移（golang-migrate，本地迁移文件嵌入）
-	if err := runMigrations(cfg.DatabaseURL); err != nil {
+	// 2. 迁移（golang-migrate，嵌入二进制，无工作目录依赖）
+	if err := database.Migrate(cfg.DatabaseURL); err != nil {
 		log.Printf("[WARN] 迁移执行失败（表可能已存在）: %v", err)
 	} else {
 		log.Println("[DB] 迁移完成")
@@ -87,22 +83,4 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
-}
-
-// runMigrations 执行数据库迁移。
-func runMigrations(dsn string) error {
-	// golang-migrate pgx v5 driver 注册名为 pgx5，将 postgresql:// 改写为 pgx5://
-	pgDSN := dsn
-	if i := strings.Index(pgDSN, "://"); i > 0 {
-		pgDSN = "pgx5" + pgDSN[i:]
-	}
-	m, err := migrate.New("file://migrations", pgDSN)
-	if err != nil {
-		return err
-	}
-	defer m.Close()
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return err
-	}
-	return nil
 }

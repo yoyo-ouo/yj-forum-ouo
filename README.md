@@ -41,6 +41,19 @@
 
 ---
 
+## 快速开始（开发环境）
+
+```bash
+make setup        # 生成 server/.env（首次）
+make dev          # 一键启动：Docker PGSQL + Go 后端(:8080) + Next.js(:3200)
+```
+
+常用命令：`make server` / `make server-run`（后端：go run / 一键编译运行）· `make web-dev` / `make web-build` / `make web-start`（前端：dev / build / start，:3200）· `make db-up` / `make db-down`（数据库容器）· `make server-build`（编译二进制）· `make vet`（静态检查）。
+
+> 后端启动时会自动执行数据库迁移（SQL 已嵌入二进制，任意目录运行 `make server` 均可，无工作目录依赖）。
+
+---
+
 ### 问题反馈与联系
 如果发现仓库内容有误或有其他问题，请通过以下方式联系:  
 [联系方式](https://www.crazying-dev.top/CommentMe)  

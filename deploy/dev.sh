@@ -5,7 +5,12 @@ set -e
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORT_GO="${PORT_GO:-8080}"
-PORT_WEB="${PORT_WEB:-3001}"
+PORT_WEB="${PORT_WEB:-3200}"
+
+if [ ! -f "$ROOT/server/.env" ]; then
+  echo "[!] 未找到 server/.env，请先执行: make setup"
+  exit 1
+fi
 
 echo "==> [1/3] 检查 Docker PGSQL 容器..."
 if ! docker ps --format '{{.Names}}' | grep -q ouo-postgres; then
@@ -24,7 +29,7 @@ echo "==> [2/3] 启动 Go 后端 (:${PORT_GO})..."
 cd "$ROOT/server"
 if [ "$APP_ENV" = "prod" ]; then
   go build -o bin/yj-forum ./cmd/yj-forum
-  (PORT=$PORT_GO ./bin/yj-forum &) 
+  (PORT=$PORT_GO ./bin/yj-forum &)
 else
   (PORT=$PORT_GO go run ./cmd/yj-forum &)
 fi

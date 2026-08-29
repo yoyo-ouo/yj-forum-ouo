@@ -32,14 +32,16 @@ docker exec ouo-postgres psql -U postgres -c "CREATE DATABASE yj_forum;"  # 若�
 ## 二、后端部署（Go）
 
 ```bash
-cd /opt/yj-forum/server
-cp .env.example .env        # 编辑：DATABASE_URL / SECRET_KEY / SMTP_*
-go build -o bin/yj-forum ./cmd/yj-forum
-cp /opt/yj-forum/deploy/yj-forum.service /etc/systemd/system/
+cd /opt/yj-forum
+make setup                # 生成 server/.env（编辑：DATABASE_URL / SECRET_KEY / SMTP_*）
+make server-build         # 编译 server/bin/yj-forum
+cp deploy/yj-forum.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now yj-forum
 systemctl status yj-forum
 ```
+
+> 迁移 SQL 已嵌入二进制：起动时自动执行，不依赖工作目录/迁移文件；首次可使用 `make db-up` 拉起开发数据库。
 
 ## 三、前端部署（Next.js）
 

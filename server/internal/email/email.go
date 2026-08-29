@@ -14,13 +14,13 @@ import (
 
 // Sender SMTP 发件器。
 type Sender struct {
-	Enabled      bool
-	Host         string
-	Port         int
-	User         string
-	Password     string
-	FromName     string
-	ReceiverAll  string
+	Enabled     bool
+	Host        string
+	Port        int
+	User        string
+	Password    string
+	FromName    string
+	ReceiverAll string
 
 	mu         sync.Mutex
 	lastSentAt map[string]time.Time // 同一收件人 1 秒去重

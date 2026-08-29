@@ -20,13 +20,13 @@ type Config struct {
 	DatabaseURL string
 
 	// 邮件 SMTP
-	SMTPEnabled   bool
-	SMTPHost      string
-	SMTPPort      int
-	SMTPUser      string
-	SMTPPassword  string
-	SMTPFromName  string
-	ReceiverAll   string
+	SMTPEnabled  bool
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUser     string
+	SMTPPassword string
+	SMTPFromName string
+	ReceiverAll  string
 
 	// CORS
 	CORSOrigins []string
@@ -43,8 +43,9 @@ type Config struct {
 }
 
 // Load 从 .env + 环境变量读取配置，缺省值对齐 legacy api/config.py。
+// 同时尝试 server/.env（从仓库根目录运行时也能加载）。
 func Load() *Config {
-	_ = godotenv.Load() // .env 不存在时静默跳过
+	_ = godotenv.Load(".env", "server/.env") // 不存在的文件与已导出的环境变量均被跳过
 
 	cfg := &Config{
 		AppEnv:    getEnv("APP_ENV", "dev"),
@@ -54,19 +55,19 @@ func Load() *Config {
 
 		DatabaseURL: getEnv("DATABASE_URL", ""),
 
-		SMTPEnabled:  getEnvBool("SMTP_ENABLED", true),
-		SMTPHost:     getEnv("SMTP_HOST", "smtpdm.aliyun.com"),
-		SMTPPort:     getEnvInt("SMTP_PORT", 465),
-		SMTPUser:     getEnv("SMTP_USER", "maomi@email.yjlt.top"),
-		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
-		SMTPFromName: getEnv("SMTP_FROM_NAME", "妖精论坛(二创)"),
-		ReceiverAll:  getEnv("RECEIVERALL", ""),
-		AvatarDir:    getEnv("AVATAR_DIR", "/var/yj-forum/avatar"),
-		DataDir:      getEnv("DATA_DIR", "/var/yj-forum/data"),
-		ImageFatherURL:  getEnv("IMAGE_FATHER_URL", "https://img.crazying-dev.top/text/one"),
-		PublicBaseURL:   getEnv("PUBLIC_BASE_URL", "localhost:3000"),
-		EasterEggPath:   getEnv("EASTER_EGG_PATH", "main/EasterEgg/1.json"),
-		HuiGuanPath:     getEnv("HUI_GUAN_PATH", "main/huiguan.json"),
+		SMTPEnabled:    getEnvBool("SMTP_ENABLED", true),
+		SMTPHost:       getEnv("SMTP_HOST", "smtpdm.aliyun.com"),
+		SMTPPort:       getEnvInt("SMTP_PORT", 465),
+		SMTPUser:       getEnv("SMTP_USER", "maomi@email.yjlt.top"),
+		SMTPPassword:   getEnv("SMTP_PASSWORD", ""),
+		SMTPFromName:   getEnv("SMTP_FROM_NAME", "妖精论坛(二创)"),
+		ReceiverAll:    getEnv("RECEIVERALL", ""),
+		AvatarDir:      getEnv("AVATAR_DIR", "/var/yj-forum/avatar"),
+		DataDir:        getEnv("DATA_DIR", "/var/yj-forum/data"),
+		ImageFatherURL: getEnv("IMAGE_FATHER_URL", "https://img.crazying-dev.top/text/one"),
+		PublicBaseURL:  getEnv("PUBLIC_BASE_URL", "localhost:3000"),
+		EasterEggPath:  getEnv("EASTER_EGG_PATH", "main/EasterEgg/1.json"),
+		HuiGuanPath:    getEnv("HUI_GUAN_PATH", "main/huiguan.json"),
 	}
 
 	if cfg.ReceiverAll == "" {
