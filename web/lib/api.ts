@@ -54,6 +54,7 @@ export interface Comment {
   content: string;
   parent_id?: string | null;
   likes: number;
+  liked_by_me?: boolean;
   created_at?: string;
   user_name: string;
   user_avatar: string;
@@ -181,6 +182,7 @@ export const postApi = {
   createComment: (id: string, content: string, parentId?: string) =>
     request<{ comment: Comment }>(`/posts/${id}/comments`, { method: "POST", body: JSON.stringify({ content, parent_id: parentId || null }) }),
   deleteComment: (id: string) => request<{ success: boolean }>(`/comments/${id}`, { method: "DELETE" }),
+  likeComment: (id: string) => request<{ liked: boolean; likes: number }>(`/comments/${id}/like`, { method: "POST" }),
 };
 
 // ---- 世界频道 ----

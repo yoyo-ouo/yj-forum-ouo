@@ -41,7 +41,7 @@ const EMOJI_CATEGORIES: { name: string; icon: string; emojis: string[] }[] = [
   },
 ];
 
-/** 单条评论（与 legacy renderComment 结构 1:1，支持回复标识/删除/回复按钮） */
+/** 单条评论（与 legacy renderComment 结构 1:1，支持点赞/回复标识/删除/回复按钮） */
 function CommentItem({
   c,
   parent,
@@ -50,6 +50,7 @@ function CommentItem({
   userId,
   onReply,
   onDelete,
+  onLike,
 }: {
   c: Comment;
   parent?: Comment | null;
@@ -58,6 +59,7 @@ function CommentItem({
   userId: string | null;
   onReply: (c: Comment) => void;
   onDelete: (id: string) => void;
+  onLike: (c: Comment) => void;
 }) {
   return (
     <div className={`comment-item ${isReply ? "comment-item-reply" : ""}`} data-comment-id={c.id}>
@@ -83,9 +85,13 @@ function CommentItem({
           <Markdown content={c.content} />
         </div>
         <div className="comment-footer">
-          <span className="comment-like">
-            <i className="fa fa-thumbs-o-up"></i> {c.likes || 0}
-          </span>
+          <button
+            className={`comment-like comment-like-btn ${c.liked_by_me ? "liked" : ""}`}
+            title="点赞"
+            onClick={() => onLike(c)}
+          >
+            <i className={`fa ${c.liked_by_me ? "fa-thumbs-up" : "fa-thumbs-o-up"}`}></i> {c.likes || 0}
+          </button>
           <button className="comment-reply-btn" data-comment-id={c.id} data-user-name={c.user_name} onClick={() => onReply(c)}>
             <i className="fa fa-reply"></i> 回复
           </button>
@@ -113,6 +119,7 @@ export default function CommentSection({
   onChangeReplyText,
   onSubmit,
   onDelete,
+  onLike,
 }: {
   comments: Comment[];
   userId: string | null;
@@ -122,6 +129,7 @@ export default function CommentSection({
   onChangeReplyText: (text: string) => void;
   onSubmit: () => void;
   onDelete: (id: string) => void;
+  onLike: (c: Comment) => void;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [showEmoji, setShowEmoji] = useState(false);
@@ -268,6 +276,7 @@ export default function CommentSection({
                 userId={userId}
                 onReply={startingReply}
                 onDelete={onDelete}
+                onLike={onLike}
               />
               {replies.length > 0 && (
                 <div className="comment-replies">
@@ -281,6 +290,7 @@ export default function CommentSection({
                       userId={userId}
                       onReply={startingReply}
                       onDelete={onDelete}
+                      onLike={onLike}
                     />
                   ))}
                   {hiddenReplies.length > 0 && (
@@ -299,6 +309,7 @@ export default function CommentSection({
                             userId={userId}
                             onReply={startingReply}
                             onDelete={onDelete}
+                            onLike={onLike}
                           />
                         ))}
                       </div>

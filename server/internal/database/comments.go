@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"yj-forum/server/internal/models"
 )
 
@@ -60,6 +62,85 @@ func (d *DB) GetPostComments(ctx context.Context, postID string, page, pageSize 
 		comments = append(comments, c)
 	}
 	return comments, rows.Err()
+}
+
+// ChangeCommentLikes 评论点赞计数增减（delta 为 +1/-1），返回最新点赞数。
+// 评论不存在或已删除（status=0）时返回 error。
+func (d *DB) ChangeCommentLikes(ctx context.Context, commentID string, delta int) (int, error) {
+	var likes int
+	err := d.QueryRow(ctx,
+		`UPDATE comments SET likes = GREATEST(likes + $2, 0) WHERE id = $1 AND status = 1 RETURNING likes`,
+		commentID, delta).Scan(&likes)
+	if err != nil {
+		return 0, err
+	}
+	return likes, nil
+}
+
+// LikeComment 切换评论点赞（去重），返回 (是否点赞, 最新点赞数)。
+func (d *DB) LikeComment(ctx context.Context, commentID, userID string) (bool, int, error) {
+	var liked bool
+	var likes int
+	err := d.Tx(ctx, func(tx pgx.Tx) error {
+		var count int
+		if err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM comment_likes WHERE comment_id=$1 AND user_id=$2", commentID, userID).Scan(&count); err != nil {
+			return err
+		}
+		if count > 0 {
+			if _, err := tx.Exec(ctx, "DELETE FROM comment_likes WHERE comment_id=$1 AND user_id=$2", commentID, userID); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, "UPDATE comments SET likes = GREATEST(likes - 1, 0) WHERE id=$1", commentID); err != nil {
+				return err
+			}
+			liked = false
+		} else {
+			var status int
+			if err := tx.QueryRow(ctx, "SELECT status FROM comments WHERE id=$1", commentID).Scan(&status); err != nil {
+				return err
+			}
+			if status != 1 {
+				return errCommentUnavailable
+			}
+			if _, err := tx.Exec(ctx, "INSERT INTO comment_likes (comment_id, user_id) VALUES ($1,$2)", commentID, userID); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, "UPDATE comments SET likes = likes + 1 WHERE id=$1", commentID); err != nil {
+				return err
+			}
+			liked = true
+		}
+		return tx.QueryRow(ctx, "SELECT COALESCE(likes,0) FROM comments WHERE id=$1", commentID).Scan(&likes)
+	})
+	return liked, likes, err
+}
+
+// HasLikedComment 是否已点赞评论。
+func (d *DB) HasLikedComment(ctx context.Context, commentID, userID string) bool {
+	var n int
+	_ = d.QueryRow(ctx, "SELECT COUNT(*) FROM comment_likes WHERE comment_id=$1 AND user_id=$2", commentID, userID).Scan(&n)
+	return n > 0
+}
+
+// GetLikedCommentIDs 返回用户已点赞的评论 ID 集合（用于批量填充 liked_by_me）。
+func (d *DB) GetLikedCommentIDs(ctx context.Context, userID string, commentIDs []string) (map[string]bool, error) {
+	liked := make(map[string]bool, len(commentIDs))
+	if len(commentIDs) == 0 {
+		return liked, nil
+	}
+	rows, err := d.Query(ctx, `SELECT comment_id FROM comment_likes WHERE user_id = $1 AND comment_id = ANY($2)`, userID, commentIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		liked[id] = true
+	}
+	return liked, rows.Err()
 }
 
 // DeleteComment 软删（仅作者）。

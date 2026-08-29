@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"yj-forum/server/internal/auth"
 )
 
 // AuthRequired 会话校验中间件，成功后在 context 写入 userID。
@@ -33,11 +35,16 @@ func CurrentUser(c *gin.Context) string {
 
 // CurrentUserFromCookie 从 cookie 解析登录用户（未登录返回空）。
 func (h *AuthHandler) CurrentUserFromCookie(c *gin.Context) string {
+	return currentUserFromCookie(c, h.Sessions)
+}
+
+// currentUserFromCookie 从 cookie 解析登录用户（未登录返回空）。
+func currentUserFromCookie(c *gin.Context, sessions *auth.SessionManager) string {
 	if uid := CurrentUser(c); uid != "" {
 		return uid
 	}
 	if token, err := c.Cookie(cookieName); err == nil && token != "" {
-		if id, verr := h.Sessions.Validate(c.Request.Context(), token); verr == nil && id != "" {
+		if id, verr := sessions.Validate(c.Request.Context(), token); verr == nil && id != "" {
 			return id
 		}
 	}

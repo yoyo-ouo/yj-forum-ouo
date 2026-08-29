@@ -64,6 +64,7 @@ func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth
 	api.GET("/posts/:id/comments", postsH.Comments)
 	api.POST("/posts/:id/comments", postsH.AuthRequired(), postsH.CreateComment)
 	api.DELETE("/comments/:id", postsH.AuthRequired(), postsH.DeleteComment)
+	api.POST("/comments/:id/like", postsH.AuthRequired(), postsH.LikeComment)
 
 	// ---- 世界频道 ----
 	api.GET("/world/messages", postsH.WorldMessages)

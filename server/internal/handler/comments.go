@@ -8,22 +8,26 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"yj-forum/server/internal/database"
 	"yj-forum/server/internal/email"
 	"yj-forum/server/internal/models"
 )
 
 // ---- GET /api/v1/posts/:id/comments ----
 
-// Comments 评论列表（缓存 comments:post:ID）。
+// Comments 评论列表（匿名缓存 comments:post:ID；登录用户实时返回含 liked_by_me）。
 func (h *PostsHandler) Comments(c *gin.Context) {
 	id := c.Param("id")
 	page, _ := parsePage(c)
 	pageSize := 50
+	me := currentUserFromCookie(c, h.Sessions)
 	key := "comments:post:" + id + ":" + itoa(page)
-	if v, ok := h.Cache.Comments.Get(key); ok {
-		c.Header("X-Cache", "HIT")
-		c.JSON(http.StatusOK, v)
-		return
+	if me == "" {
+		if v, ok := h.Cache.Comments.Get(key); ok {
+			c.Header("X-Cache", "HIT")
+			c.JSON(http.StatusOK, v)
+			return
+		}
 	}
 	comments, err := h.DB.GetPostComments(c.Request.Context(), id, page, pageSize)
 	if err != nil {
@@ -31,8 +35,14 @@ func (h *PostsHandler) Comments(c *gin.Context) {
 		return
 	}
 	resp := gin.H{"success": true, "comments": comments, "page": page, "page_size": pageSize}
-	h.Cache.Comments.Set(key, resp, 60*time.Second)
-	c.Header("X-Cache", "MISS")
+	if me != "" {
+		// 含个人点赞状态，不走共享缓存
+		markCommentLikedByMe(h.DB, c.Request.Context(), me, comments)
+		c.Header("X-Cache", "BYPASS")
+	} else {
+		h.Cache.Comments.Set(key, resp, 60*time.Second)
+		c.Header("X-Cache", "MISS")
+	}
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -119,4 +129,48 @@ func (h *PostsHandler) DeleteComment(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// ---- POST /api/v1/comments/:id/like ----
+
+// LikeComment 评论点赞切换。
+func (h *PostsHandler) LikeComment(c *gin.Context) {
+	uid := CurrentUser(c)
+	if uid == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": "请先登录"})
+		return
+	}
+	id := c.Param("id")
+	comment, err := h.DB.GetComment(c.Request.Context(), id)
+	if err != nil || comment == nil || comment.Status != 1 {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "评论不存在"})
+		return
+	}
+	liked, likes, err := h.DB.LikeComment(c.Request.Context(), id, uid)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "操作失败"})
+		return
+	}
+	// 使评论列表与帖子详情缓存失效
+	h.Cache.Comments.DeletePrefix("comments:post:" + comment.PostID)
+	h.Cache.PostDetail.Delete("post:detail:" + comment.PostID)
+	c.JSON(http.StatusOK, gin.H{"success": true, "liked": liked, "likes": likes})
+}
+
+// markCommentLikedByMe 批量填充评论的 liked_by_me。
+func markCommentLikedByMe(db *database.DB, ctx context.Context, me string, comments []models.Comment) {
+	if len(comments) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(comments))
+	for i := range comments {
+		ids = append(ids, comments[i].ID)
+	}
+	liked, err := db.GetLikedCommentIDs(ctx, me, ids)
+	if err != nil {
+		return
+	}
+	for i := range comments {
+		comments[i].LikedByMe = liked[comments[i].ID]
+	}
 }

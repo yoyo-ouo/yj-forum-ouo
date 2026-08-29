@@ -75,6 +75,16 @@ export default function PostDetailPage() {
     }
   };
 
+  const doLikeComment = async (c: Comment) => {
+    if (!userId) return router.push("/auth");
+    try {
+      const r = await postApi.likeComment(c.id);
+      setComments((prev) => prev.map((x) => (x.id === c.id ? { ...x, likes: r.likes, liked_by_me: r.liked } : x)));
+    } catch (e: any) {
+      toast(e instanceof ApiException ? e.message : "操作失败，请稍后再试", "error");
+    }
+  };
+
   const doFavorite = async () => {
     if (!userId) return router.push("/auth");
     try {
@@ -217,6 +227,7 @@ export default function PostDetailPage() {
             onChangeReplyText={setCommentText}
             onSubmit={submitComment}
             onDelete={deleteComment}
+            onLike={doLikeComment}
           />
         </div>
       </div>

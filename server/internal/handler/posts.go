@@ -123,14 +123,17 @@ func (h *PostsHandler) notifyFollowers(userID, postID, title string) {
 
 // ---- GET /api/v1/posts/:id ----
 
-// Detail 帖子详情（缓存 post:detail:ID）。
+// Detail 帖子详情（匿名缓存 post:detail:ID；登录用户实时返回含个人状态）。
 func (h *PostsHandler) Detail(c *gin.Context) {
 	id := c.Param("id")
+	me := currentUserFromCookie(c, h.Sessions)
 	key := "post:detail:" + id
-	if v, ok := h.Cache.PostDetail.Get(key); ok {
-		c.Header("X-Cache", "HIT")
-		c.JSON(http.StatusOK, v)
-		return
+	if me == "" {
+		if v, ok := h.Cache.PostDetail.Get(key); ok {
+			c.Header("X-Cache", "HIT")
+			c.JSON(http.StatusOK, v)
+			return
+		}
 	}
 	post, err := h.DB.GetPost(c.Request.Context(), id)
 	if err != nil || post == nil || post.Status != 1 {
@@ -140,7 +143,6 @@ func (h *PostsHandler) Detail(c *gin.Context) {
 	_ = h.DB.IncrementPostViews(c.Request.Context(), id)
 	post.Views++
 
-	me := CurrentUser(c)
 	liked, favorited := false, false
 	if me != "" {
 		liked = h.DB.HasLikedPost(c.Request.Context(), id, me)
@@ -148,9 +150,17 @@ func (h *PostsHandler) Detail(c *gin.Context) {
 	}
 	// 评论（附带，取前 50）
 	comments, _ := h.DB.GetPostComments(c.Request.Context(), id, 1, 50)
+	if me != "" {
+		markCommentLikedByMe(h.DB, c.Request.Context(), me, comments)
+	}
 	resp := gin.H{"success": true, "post": post, "comments": comments, "liked": liked, "favorited": favorited}
-	h.Cache.PostDetail.Set(key, resp, 60*time.Second)
-	c.Header("X-Cache", "MISS")
+	if me == "" {
+		h.Cache.PostDetail.Set(key, resp, 60*time.Second)
+		c.Header("X-Cache", "MISS")
+	} else {
+		// 含个人点赞/收藏状态，不走共享缓存
+		c.Header("X-Cache", "BYPASS")
+	}
 	c.JSON(http.StatusOK, resp)
 }
 

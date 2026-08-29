@@ -4424,6 +4424,24 @@ input {
     color: var(--color-text-accent);
 }
 
+.comment-like-btn {
+    background: transparent;
+    border: none;
+    padding: 2px 8px;
+    margin-left: -8px;
+    font-size: 11px;
+    color: var(--color-text-tertiary);
+    font-family: inherit;
+}
+
+.comment-like-btn.liked {
+    color: var(--color-primary);
+}
+
+.comment-like-btn.liked:hover {
+    color: var(--color-primary);
+}
+
 .comment-reply-btn {
     background: transparent;
     border: none;

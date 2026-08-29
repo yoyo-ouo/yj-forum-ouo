@@ -58,6 +58,7 @@ type Comment struct {
 	ParentID   *string    `json:"parent_id"`
 	Likes      int        `json:"likes"`
 	Status     int        `json:"status"`
+	LikedByMe  bool       `json:"liked_by_me"`
 	CreatedAt  *time.Time `json:"created_at"`
 	UserName   string     `json:"user_name"`
 	UserAvatar string     `json:"user_avatar"`
