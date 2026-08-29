@@ -1,7 +1,7 @@
-# 妖精论坛 v2 前端服务（Next.js standalone）
+# 妖精论坛 ov2 前端服务（Next.js standalone）
 # 安装: cp deploy/yj-web.service /etc/systemd/system/ && systemctl enable --now yj-web
 [Unit]
-Description=YJ Forum v2 Web (Next.js)
+Description=YJ Forum ov2 Web (Next.js)
 After=network.target yj-forum.service
 
 [Service]

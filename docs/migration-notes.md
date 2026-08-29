@@ -1,8 +1,8 @@
-# 迁移对照笔记（legacy Flask → v2 Next.js + Go）
+# 迁移对照笔记（legacy Flask → ov2 Next.js + Go）
 
 ## 端点对照表
 
-| legacy (Flask) | v2 (Go RESTful) | 说明 |
+| legacy (Flask) | ov2 (Go RESTful) | 说明 |
 |---|---|---|
 | `POST /api/register` | `POST /api/v1/auth/register` | 注册 |
 | `POST /api/login` | `POST /api/v1/auth/login` | 登录 |
@@ -62,28 +62,28 @@
 
 ## 环境变量对照
 
-| legacy | v2 | 变化 |
+| legacy | ov2 | 变化 |
 |---|---|---|
 | `DATABASE_URL` | `DATABASE_URL` | 同（生产用外部 PGSQL） |
 | `SECRET_KEY` | `SECRET_KEY` | 同 |
 | `SMTP_*` | `SMTP_*` | 同 |
 | `CORS_ORIGINS` | `CORS_ORIGINS` | 同 |
-| `BLOB_READ_WRITE_TOKEN` | _删除_ | v2 无 Vercel Blob，改用进程内缓存 |
+| `BLOB_READ_WRITE_TOKEN` | _删除_ | ov2 无 Vercel Blob，改用进程内缓存 |
 | `FLASK_ENV` | `APP_ENV` | 改名（dev/prod 控制 Secure cookie） |
-| `POOL_ENABLED` | _删除_ | v2 恒用 pgxpool |
-| —— | `AVATAR_DIR` | v2 新增（头像目录） |
-| —— | `DATA_DIR` | v2 新增（数据目录） |
-| —— | `PUBLIC_BASE_URL` | v2 新增（邮件链接域名） |
+| `POOL_ENABLED` | _删除_ | ov2 恒用 pgxpool |
+| —— | `AVATAR_DIR` | ov2 新增（头像目录） |
+| —— | `DATA_DIR` | ov2 新增（数据目录） |
+| —— | `PUBLIC_BASE_URL` | ov2 新增（邮件链接域名） |
 
 ## 已知行为差异（有意保留/修复）
 
-1. **修复**：legacy `Email.send_email` 返回值判断恒真（邮件失败误报成功）→ v2 显式 `(success, err)`。
-2. **修复**：legacy 缓存失效 key 硬编码与运行时不一致 → v2 统一按实际参数前缀失效。
-3. **修复**：legacy `SECRET_KEY` 读取 chr 混淆 bug（永远取不到环境变量）→ v2 直接读取。
-4. **修复**：legacy `main.css` 多余花括号导致 CSS 解析问题 → v2 已修正。
-5. **World 表名**：legacy PG 中未加引号实际小写 `world` → v2 迁移文件统一小写 `world`。
-6. **分类**：legacy seed 用中文分类（求助/创意）与前端 tab（question/creative）不一致 → v2 前端显示映射表兜底，新增发帖统一英文 key。
-7. 头像存储：legacy `/root/db/avatar/`（Vercel 上不可持久）→ v2 `AVATAR_DIR` 本地磁盘。
+1. **修复**：legacy `Email.send_email` 返回值判断恒真（邮件失败误报成功）→ ov2 显式 `(success, err)`。
+2. **修复**：legacy 缓存失效 key 硬编码与运行时不一致 → ov2 统一按实际参数前缀失效。
+3. **修复**：legacy `SECRET_KEY` 读取 chr 混淆 bug（永远取不到环境变量）→ ov2 直接读取。
+4. **修复**：legacy `main.css` 多余花括号导致 CSS 解析问题 → ov2 已修正。
+5. **World 表名**：legacy PG 中未加引号实际小写 `world` → ov2 迁移文件统一小写 `world`。
+6. **分类**：legacy seed 用中文分类（求助/创意）与前端 tab（question/creative）不一致 → ov2 前端显示映射表兜底，新增发帖统一英文 key。
+7. 头像存储：legacy `/root/db/avatar/`（Vercel 上不可持久）→ ov2 `AVATAR_DIR` 本地磁盘。
 
 ## 部署要点
 

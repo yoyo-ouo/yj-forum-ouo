@@ -1,4 +1,4 @@
-# 妖精论坛 v2 API 文档（RESTful）
+# 妖精论坛 ov2 API 文档（RESTful）
 
 - **Base URL**: `https://<domain>/api/v1`
 - **认证**: Session Cookie（`forum_session`，HttpOnly）或 `Authorization: Bearer`（预留）
@@ -68,7 +68,7 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/search?k=&type=posts\|users\|both&page=` | 全文搜索（缓存 120s） |
-| POST | `/votes/version` | 版本投票（choice=v1\|v2，登录按账号/游客按 IP） |
+| POST | `/votes/version` | 版本投票（choice=v1\|ov2，登录按账号/游客按 IP） |
 | GET | `/votes/version/stats` | 投票统计 |
 | POST | `/reports/bug` | Bug 举报（title/detail/steps/contact/page_url） |
 | GET | `/easter-egg` | 随机彩蛋 |
@@ -92,5 +92,5 @@
 - `posts`：id(PS+时间戳)/user_id/title/content/category/likes/views/status
 - `comments`：id(CM+时间戳)/post_id/user_id/content/parent_id/likes/status
 - `world`：id/sender_id/sender_name/content/parent_id/created_at（5 分钟过期）
-- `sessions`（v2 新增）：token/user_id/expires_at
+- `sessions`（ov2 新增）：token/user_id/expires_at
 - 其余：post_likes、post_favorites、user_follows、verify_tokens、post_reports、bug_reports、verify_codes、version_votes

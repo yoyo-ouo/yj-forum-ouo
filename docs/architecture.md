@@ -1,7 +1,7 @@
-# 妖精论坛 v2 技术架构
+# 妖精论坛 oov2 技术架构
 
 - **Date**: 2026-08-29
-- **Status**: v2.0
+- **Status**: ov2.0
 
 ## 总览
 
@@ -83,7 +83,7 @@ GET /world/messages（缓存2s）→ 前端 3s 轮询 → POST /world/messages�
 - **头像**：仅 JPG/PNG/WebP；路径穿越防护；UUID 文件名。
 
 ## 与 legacy 的差异
-| 项 | legacy (Flask) | v2 (Next.js + Go) |
+| 项 | legacy (Flask) | ov2 (Next.js + Go) |
 |---|---|---|
 | 前端交互 | 外部 CDN AfterBody.js | React 组件化重写 |
 | 样式 | CDN main.css | 本地 main.css + Tailwind 基础设施 |

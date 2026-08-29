@@ -1,5 +1,5 @@
 # ============================================================
-# 妖精论坛 v2 — 统一构建/开发入口
+# 妖精论坛 ov2 — 统一构建/开发入口
 # 用法：make help 查看全部命令；make dev 一键起开发环境
 # ============================================================
 
@@ -14,7 +14,7 @@ BIN    := $(SERVER)/bin/yj-forum
 .PHONY: help dev setup db-up db-down db-logs server server-run server-build web web-dev web-build web-start vet clean
 
 help: ## 显示本帮助
-	@echo "妖精论坛 v2 开发命令："
+	@echo "妖精论坛 ov2 开发命令："
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 # ---- 一键 ----------------

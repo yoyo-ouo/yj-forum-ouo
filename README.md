@@ -1,7 +1,7 @@
 # 妖精论坛 (Fairy Forum)
 
 > 《罗小黑战记》同人创作 · 仿官方妖精论坛系统
-> 当前版本：**v2**（Next.js + Go 重构版）｜旧版 Flask（1.0.24）已归档至 `legacy/`
+> 当前版本：**ov2**（Next.js + Go 重构版）｜旧版 Flask（1.0.24）已归档至 `legacy/`
 
 ---
 
@@ -25,7 +25,7 @@
 
 ## 项目介绍
 
-仿《罗小黑战记》官方妖精论坛的同人社区系统，旨在还原动画中妖精与人类共存的网络社区生态。**v2 版本**已完成从 Flask 单体到「Next.js 渲染层 + Go 服务层」的全量重构（对照验收见 `docs/验收报告.md`）。
+仿《罗小黑战记》官方妖精论坛的同人社区系统，旨在还原动画中妖精与人类共存的网络社区生态。**ov2 版本**已完成从 Flask 单体到「Next.js 渲染层 + Go 服务层」的全量重构（对照验收见 `docs/验收报告.md`）。
 
 ## 功能概览
 
@@ -39,7 +39,7 @@
 | 其他 | 版本投票、Bug 举报、彩蛋、会馆、WIKI 全套（官方/个人/鼠标/Live2D）、隐私政策、PWA、主题切换（亮/暗 + 时段自动）、RSS/robots |
 | 通知 | SMTP 邮件：注册验证码、密码重置、登录提醒、粉丝/评论通知、Bug 通知（异步 goroutine） |
 
-## 技术栈（v2）
+## 技术栈（ov2）
 
 - **后端**：Go 1.25 / Gin / pgx / golang-migrate / bcrypt（兼容旧 werkzeug 哈希）
 - **前端**：Next.js 16 (App Router) / React 19 / TypeScript / Tailwind CSS 4 / pnpm
@@ -111,9 +111,9 @@ make dev          # 一键启动：Docker PGSQL + Go 后端(:8080) + Next.js(:32
 
 ## 文档
 
-- [技术架构](docs/architecture.md) — v2 架构总览、数据流、安全设计
+- [技术架构](docs/architecture.md) — ov2 架构总览、数据流、安全设计
 - [API 文档](docs/api.md) — `/api/v1` 全端点说明
-- [迁移对照笔记](docs/migration-notes.md) — legacy Flask ↔ v2 端点映射
+- [迁移对照笔记](docs/migration-notes.md) — legacy Flask ↔ ov2 端点映射
 - [资产清单](docs/资产清单.md) — 外部 CDN 资源本地化映射表
 - [验收报告](docs/验收报告.md) — 新旧功能对照验收（含界面截图对比）
 

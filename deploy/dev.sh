@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 妖精论坛 v2 开发环境一键起服脚本
+# 妖精论坛 ov2 开发环境一键起服脚本
 # 用途：启动 Go 后端(:8080) + Next.js(:3001)，开发数据库为本机 Docker PGSQL
 set -e
 
