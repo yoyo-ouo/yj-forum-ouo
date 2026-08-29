@@ -86,13 +86,14 @@ func (h *PostsHandler) CreateComment(c *gin.Context) {
 func (h *PostsHandler) notifyComment(comment *models.Comment) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	// 回复则通知父评论作者，否则通知帖子作者
-	var targetEmail string
+	// 回复则通知父评论作者，否则通知帖子作者；跳过自己给自己评论/回复自己的情况
+	var targetUserID, targetEmail string
 	if comment.ParentID != nil && *comment.ParentID != "" {
 		pc, err := h.DB.GetComment(ctx, *comment.ParentID)
 		if err == nil && pc != nil {
 			u, err2 := h.DB.GetUserByID(ctx, pc.UserID)
 			if err2 == nil {
+				targetUserID = u.ID
 				targetEmail = u.Email
 			}
 		}
@@ -101,11 +102,12 @@ func (h *PostsHandler) notifyComment(comment *models.Comment) {
 		if err == nil && post != nil {
 			u, err2 := h.DB.GetUserByID(ctx, post.UserID)
 			if err2 == nil {
+				targetUserID = u.ID
 				targetEmail = u.Email
 			}
 		}
 	}
-	if targetEmail == "" {
+	if targetEmail == "" || targetUserID == comment.UserID {
 		return
 	}
 	plain := "你收到一条新回复：\n" + comment.Content
