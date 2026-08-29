@@ -1,1 +1,0 @@
-legacy/doc/Email.py
