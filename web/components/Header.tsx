@@ -19,9 +19,11 @@ export default function Header() {
   // 顶部栏下拉菜单："" = 收起，"more"/"theme"/"user" 对应 更多 / 主题 / 用户
   const [openMenu, setOpenMenu] = useState<"" | "more" | "theme" | "user">("");
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showSearchLayer, setShowSearchLayer] = useState(false);
   const [showDonate, setShowDonate] = useState(false);
   const [showBug, setShowBug] = useState(false);
   const menuRef = useRef<HTMLUListElement>(null);
+  const searchLayerInputRef = useRef<HTMLInputElement>(null);
   const deferredPromptRef = useRef<Event | null>(null);
 
   useEffect(() => {
@@ -34,10 +36,34 @@ export default function Header() {
     return () => document.removeEventListener("click", onClick);
   }, []);
 
-  // 关闭移动端菜单（路由切换后）
+  // 关闭移动端菜单 / 搜索弹层（路由切换后）
   useEffect(() => {
     setShowMobileMenu(false);
+    setShowSearchLayer(false);
   }, [pathname]);
+
+  // 抽屉 / 搜索弹层打开时锁定背景滚动，ESC 关闭
+  useEffect(() => {
+    if (!showMobileMenu && !showSearchLayer) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowMobileMenu(false);
+        setShowSearchLayer(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [showMobileMenu, showSearchLayer]);
+
+  // 搜索弹层打开时自动聚焦输入框
+  useEffect(() => {
+    if (showSearchLayer) searchLayerInputRef.current?.focus();
+  }, [showSearchLayer]);
 
   // PWA 安装：捕获 beforeinstallprompt（与 legacy base.html 一致）
   useEffect(() => {
@@ -54,7 +80,10 @@ export default function Header() {
 
   const doSearch = () => {
     const k = search.trim();
-    if (k) router.push(`/search?k=${encodeURIComponent(k)}`);
+    if (k) {
+      router.push(`/search?k=${encodeURIComponent(k)}`);
+      setShowSearchLayer(false);
+    }
   };
 
   const showEasterEgg = async () => {
@@ -99,10 +128,21 @@ export default function Header() {
   return (
     <>
       <header id="header">
-        <Link className="header-left" href="/">
-          <img src="/assets/img/favicon.png" alt="logo" id="logo" style={{ borderRadius: "50%" }} />
-          <h1>妖精论坛重构预览版ov2</h1>
-        </Link>
+        <div className="header-left">
+          {/* 移动端侧边栏展开按钮（仅 ≤700px 显示） */}
+          <button
+            className="header-btn header-menu-toggle"
+            type="button"
+            aria-label="打开导航菜单"
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+          >
+            <i className="fa fa-bars"></i>
+          </button>
+          <Link className="header-left-link" href="/">
+            <img src="/assets/img/favicon.png" alt="logo" id="logo" style={{ borderRadius: "50%" }} />
+            <h1>妖精论坛重构预览版ov2</h1>
+          </Link>
+        </div>
         <div className="header-center">
           <div id="search">
             <label htmlFor="search_input">
@@ -120,6 +160,15 @@ export default function Header() {
           </div>
         </div>
         <div className="header-right">
+          {/* 移动端搜索按钮（仅 ≤700px 显示），点击打开全屏搜索弹层 */}
+          <button
+            className="header-btn header-search-toggle"
+            type="button"
+            aria-label="搜索"
+            onClick={() => setShowSearchLayer(true)}
+          >
+            <i className="fa fa-search"></i>
+          </button>
           <ul ref={menuRef}>
             <li className="header-collapsible">
               <a className="header-btn" href="//hei.navifox.net">
@@ -162,11 +211,6 @@ export default function Header() {
                   </ul>
                 </div>
               )}
-            </li>
-            <li className="header-menu-toggle">
-              <button className="header-btn" type="button" onClick={() => setShowMobileMenu(!showMobileMenu)}>
-                <i className="fa fa-bars"></i>
-              </button>
             </li>
             <li className={`header-collapsible header-setting ${openMenu === "theme" ? "active" : ""}`}>
               <button className="header-btn" onClick={() => setOpenMenu(openMenu === "theme" ? "" : "theme")}>
@@ -232,11 +276,40 @@ export default function Header() {
               )}
             </li>
           </ul>
-          <div className={`header-mobile-menu ${showMobileMenu ? "open" : ""}`} id="headerMobileMenu">
-            <Link className="mobile-menu-item" href="/WIKI"><i className="fa fa-book"></i> WIKI</Link>
-            <a className="mobile-menu-item" href="//hei.navifox.net"><i className="fa fa-home"></i> 会馆</a>
-            <button className="mobile-menu-item" onClick={() => setShowDonate(true)}><i className="fa fa-heart"></i> 赞赏</button>
-            <button className="mobile-menu-item" onClick={() => setShowBug(true)}><i className="fa fa-bug"></i> Bug举报</button>
+          {/* 侧边栏遮罩（点击关闭；仅抽屉打开时可见） */}
+          <div
+            className={`header-mobile-overlay ${showMobileMenu ? "open" : ""}`}
+            onClick={() => setShowMobileMenu(false)}
+          ></div>
+          {/* 移动端侧边栏：左侧滑出抽屉 */}
+          <nav className={`header-mobile-menu ${showMobileMenu ? "open" : ""}`} id="headerMobileMenu">
+            <button
+              className="mobile-menu-close"
+              type="button"
+              aria-label="关闭菜单"
+              onClick={() => setShowMobileMenu(false)}
+            >
+              &times;
+            </button>
+            <div className="mobile-menu-user">
+              {user ? (
+                <Link className="mobile-menu-user-link" href={`/users/${userId}`} onClick={() => setShowMobileMenu(false)}>
+                  <div className="mobile-menu-user-avatar">
+                    {user.avatar ? <img src={user.avatar} alt="" /> : <i className="fa fa-user"></i>}
+                  </div>
+                  <span className="mobile-menu-user-name">{user.name}</span>
+                </Link>
+              ) : (
+                <Link className="mobile-menu-user-link" href="/auth" onClick={() => setShowMobileMenu(false)}>
+                  <div className="mobile-menu-user-avatar"><i className="fa fa-user"></i></div>
+                  <span className="mobile-menu-user-name">登录</span>
+                </Link>
+              )}
+            </div>
+            <Link className="mobile-menu-item" href="/WIKI" onClick={() => setShowMobileMenu(false)}><i className="fa fa-book"></i> WIKI</Link>
+            <a className="mobile-menu-item" href="//hei.navifox.net" onClick={() => setShowMobileMenu(false)}><i className="fa fa-home"></i> 会馆</a>
+            <button className="mobile-menu-item" onClick={() => { setShowDonate(true); setShowMobileMenu(false); }}><i className="fa fa-heart"></i> 赞赏</button>
+            <button className="mobile-menu-item" onClick={() => { setShowBug(true); setShowMobileMenu(false); }}><i className="fa fa-bug"></i> Bug举报</button>
             <button className="mobile-menu-item" id="pwa-install-mobile" onClick={installPWA}><i className="fa fa-download"></i> 安装论坛客户端</button>
             <button className="mobile-menu-item" onClick={showEasterEgg}><i className="fa fa-gift"></i> 彩蛋</button>
             <div className="mobile-menu-divider"></div>
@@ -248,9 +321,39 @@ export default function Header() {
             {user && (
               <button className="mobile-menu-item" onClick={logout}><i className="fa fa-sign-out"></i> 退出登录</button>
             )}
-          </div>
+          </nav>
         </div>
       </header>
+
+      {/* 移动端全屏搜索弹层 */}
+      {showSearchLayer && (
+        <div className="search-layer" onClick={() => setShowSearchLayer(false)}>
+          <div className="search-layer-bar-wrap" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="search-layer-close"
+              type="button"
+              aria-label="关闭搜索"
+              onClick={() => setShowSearchLayer(false)}
+            >
+              &times;
+            </button>
+            <div className="search-layer-bar">
+              <i className="fa fa-search search-layer-icon"></i>
+              <input
+                ref={searchLayerInputRef}
+                className="search-layer-input"
+                placeholder="搜索帖子、用户..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && doSearch()}
+              />
+              <button className="search-layer-submit" type="button" onClick={doSearch}>
+                搜索
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 赞赏弹窗 */}
       <Modal open={showDonate} onClose={() => setShowDonate(false)}>
