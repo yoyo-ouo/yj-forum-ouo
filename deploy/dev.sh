@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 妖精论坛 ov2 开发环境一键起服脚本
-# 用途：启动 Go 后端(:8080) + Next.js(:3001)，开发数据库为本机 Docker PGSQL
+# 用途：启动 Go 后端(:8080) + Next.js(:3200)，开发数据库为本机 Docker PGSQL
+# 说明：Docker Desktop 未运行时自动拉起（deploy/docker-ensure.sh），数据库容器自动创建/启动（deploy/db-up.sh）
 set -e
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -12,18 +13,8 @@ if [ ! -f "$ROOT/server/.env" ]; then
   exit 1
 fi
 
-echo "==> [1/3] 检查 Docker PGSQL 容器..."
-if ! docker ps --format '{{.Names}}' | grep -q ouo-postgres; then
-  echo "启动本机 PGSQL 容器 (ouo-postgres)..."
-  docker run -d --name ouo-postgres \
-    -e POSTGRES_PASSWORD=localdev123 -e POSTGRES_DB=yj_forum \
-    -p 5432:5432 postgres:18
-else
-  echo "    ouo-postgres 已在运行"
-fi
-# 确保数据库存在
-docker exec ouo-postgres psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='yj_forum'" | grep -q 1 || \
-  docker exec ouo-postgres psql -U postgres -c "CREATE DATABASE yj_forum;"
+echo "==> [1/3] 准备 Docker 数据库（未启动时自动拉起 Docker Desktop）..."
+bash "$ROOT/deploy/db-up.sh"
 
 echo "==> [2/3] 启动 Go 后端 (:${PORT_GO})..."
 cd "$ROOT/server"

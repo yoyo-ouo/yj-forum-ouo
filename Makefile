@@ -11,7 +11,7 @@ BIN    := $(SERVER)/bin/yj-forum
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev setup db-up db-down db-logs server server-run server-build web web-dev web-build web-start vet clean
+.PHONY: help dev setup docker-up db-up db-down db-logs server server-run server-build web web-dev web-build web-start vet clean
 
 help: ## 显示本帮助
 	@echo "妖精论坛 ov2 开发命令："
@@ -26,17 +26,27 @@ setup: ## 初始化配置（生成 server/.env）
 	@test -f $(SERVER)/.env || cp $(SERVER)/.env.example $(SERVER)/.env
 	@echo "已生成 $(SERVER)/.env，请按需修改 SECRET_KEY / SMTP / 存储路径等"
 
-# ---- 数据库 ----------------
+# ---- Docker / 数据库 ----------------
 
-db-up: ## 启动本机开发数据库容器（ouo-postgres :5432）
-	@docker run -d --name ouo-postgres -e POSTGRES_PASSWORD=localdev123 -e POSTGRES_DB=yj_forum -p 5432:5432 postgres:18 >/dev/null 2>&1 || docker start ouo-postgres >/dev/null
-	@until docker exec ouo-postgres pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
-	@echo "数据库就绪: postgresql://postgres:localdev123@127.0.0.1:5432/yj_forum"
+docker-up: ## 确保本机 Docker 可用（未运行时自动启动 Docker Desktop）
+	@bash $(ROOT)/deploy/docker-ensure.sh
+
+db-up: ## 启动本机开发数据库容器（ouo-postgres :5432，自动拉起本机 Docker）
+	@bash $(ROOT)/deploy/db-up.sh
 
 db-down: ## 停止开发数据库容器
-	@docker stop ouo-postgres >/dev/null 2>&1 && echo "ouo-postgres 已停止" || echo "ouo-postgres 未运行"
+	@if docker stop ouo-postgres >/dev/null 2>&1; then \
+		echo "ouo-postgres 已停止"; \
+	elif ! docker info >/dev/null 2>&1; then \
+		echo "Docker 未运行，ouo-postgres 已随之停止"; \
+	else \
+		echo "ouo-postgres 未运行"; \
+	fi
 
-db-logs: ## 查看数据库容器日志
+db-logs: ## 查看数据库容器日志（需 Docker 在运行）
+	@if ! docker info >/dev/null 2>&1; then \
+		echo "[!] Docker 未运行，请先执行: make docker-up"; exit 1; \
+	fi
 	@docker logs -f ouo-postgres
 
 # ---- 后端 ----------------
