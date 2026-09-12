@@ -20,11 +20,17 @@ Nginx (宝塔管理 80/443)
 
 **开发（本机 Docker）**：
 ```bash
+make db-up    # 一键：Docker 未运行时自动拉起 Docker Desktop，容器幂等创建/启动
+```
+手动等价操作：
+```bash
 docker run -d --name ouo-postgres \
   -e POSTGRES_PASSWORD=localdev123 -e POSTGRES_DB=yj_forum \
   -p 5432:5432 postgres:18
 docker exec ouo-postgres psql -U postgres -c "CREATE DATABASE yj_forum;"  # 若不存在
 ```
+> 本机 Docker 为 Docker Desktop：`make db-up` / `make dev` 会自动确保其运行
+> （优先 `systemctl --user start docker-desktop`，回退 `docker desktop start`）。
 
 **生产（外部 PGSQL）**：无需容器，将连接串写入 `server/.env` 的 `DATABASE_URL`。
 首次启动时 Go 自动执行 golang-migrate 创建全部表（12 张业务表 + sessions + 索引）。

@@ -72,7 +72,7 @@
 
 ### 环境要求
 
-Docker（本地 PostgreSQL）、Go ≥ 1.25、Node.js + pnpm。
+Docker Desktop（本地 PostgreSQL，脚本自动拉起）、Go ≥ 1.25、Node.js + pnpm。
 
 ### 一键启动
 
@@ -83,13 +83,16 @@ make dev          # 一键启动：Docker PGSQL + Go 后端(:8080) + Next.js(:32
 
 启动后访问：前端 http://localhost:3200 ，API http://localhost:8080/api/v1 。
 
+> 无需手动启动 Docker：`make dev` / `make db-up` 会自动检测并拉起本机 Docker Desktop（优先 `systemctl --user start docker-desktop`，回退 `docker desktop start`；引擎由 systemd 托管，界面异常不影响守护进程）。
+
 ### 常用命令
 
 | 命令 | 说明 |
 |---|---|
 | `make setup` | 生成 `server/.env` |
 | `make dev` | 一键起开发环境（数据库 + 后端 + 前端） |
-| `make db-up` / `db-down` / `db-logs` | 管理本机 PGSQL 容器（ouo-postgres :5432） |
+| `make docker-up` | 确保本机 Docker 可用（未运行时自动启动 Docker Desktop） |
+| `make db-up` / `db-down` / `db-logs` | 管理本机 PGSQL 容器（ouo-postgres :5432，自动拉起 Docker） |
 | `make server` / `server-run` / `server-build` | 后端：`go run` / 编译+运行 / 仅编译 |
 | `make web-dev` / `web-build` / `web-start` | 前端：dev / 生产构建 / 生产运行（:3200） |
 | `make vet` | go vet + gofmt 检查 |
