@@ -19,7 +19,7 @@ help: ## 显示本帮助
 
 # ---- 一键 ----------------
 
-dev: ## 一键起开发环境（Docker PGSQL + Go 后端 :8080 + Next.js 前端 :3200）
+dev: ## 一键起开发环境（Docker PGSQL + Go 后端 :8090 + Next.js 前端 :3200）
 	@bash $(ROOT)/deploy/dev.sh
 
 setup: ## 初始化配置（生成 server/.env）

@@ -7,8 +7,8 @@ Browser
   │ HTTPS
   ▼
 Nginx (宝塔管理 80/443)
-  ├── /api/*      → Go 后端  127.0.0.1:8080
-  ├── /avatar/*   → Go 后端  127.0.0.1:8080
+  ├── /api/*      → Go 后端  127.0.0.1:8090
+  ├── /avatar/*   → Go 后端  127.0.0.1:8090
   └── 其余        → Next.js  127.0.0.1:3000
 ```
 
@@ -77,7 +77,7 @@ systemctl enable --now yj-web
 
 ```bash
 # 健康检查
-curl http://127.0.0.1:8080/api/v1/votes/version/stats
+curl http://127.0.0.1:8090/api/v1/votes/version/stats
 curl -I http://127.0.0.1:3000/
 # 浏览器访问域名，完成注册 → 登录 → 发帖全流程
 ```

@@ -12,7 +12,7 @@ import (
 type Config struct {
 	// 服务
 	AppEnv    string // dev | prod
-	Port      string // 监听端口（默认 8080）
+	Port      string // 监听端口（默认 8090）
 	Host      string // 监听地址（默认 127.0.0.1）
 	SecretKey string // Session 签名密钥
 
@@ -49,7 +49,7 @@ func Load() *Config {
 
 	cfg := &Config{
 		AppEnv:    getEnv("APP_ENV", "dev"),
-		Port:      getEnv("PORT", "8080"),
+		Port:      getEnv("PORT", "8090"),
 		Host:      getEnv("HOST", "127.0.0.1"),
 		SecretKey: getEnv("SECRET_KEY", ""),
 

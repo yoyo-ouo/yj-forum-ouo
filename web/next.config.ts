@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const API_TARGET = process.env.API_TARGET || "http://127.0.0.1:8080";
+const API_TARGET = process.env.API_TARGET || "http://127.0.0.1:8090";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1", "localhost", "192.168.1.19"],

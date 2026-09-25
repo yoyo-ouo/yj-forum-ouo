@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # 妖精论坛 ov2 开发环境一键起服脚本
-# 用途：启动 Go 后端(:8080) + Next.js(:3200)，开发数据库为本机 Docker PGSQL
+# 用途：启动 Go 后端(:8090) + Next.js(:3200)，开发数据库为本机 Docker PGSQL
 # 说明：Docker Desktop 未运行时自动拉起（deploy/docker-ensure.sh），数据库容器自动创建/启动（deploy/db-up.sh）
 set -e
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PORT_GO="${PORT_GO:-8080}"
+PORT_GO="${PORT_GO:-8090}"
 PORT_WEB="${PORT_WEB:-3200}"
 
 if [ ! -f "$ROOT/server/.env" ]; then

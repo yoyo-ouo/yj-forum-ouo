@@ -78,10 +78,10 @@ Docker Desktop（本地 PostgreSQL，脚本自动拉起）、Go ≥ 1.25、Node.
 
 ```bash
 make setup        # 生成 server/.env（首次运行，按需修改）
-make dev          # 一键启动：Docker PGSQL + Go 后端(:8080) + Next.js(:3200)
+make dev          # 一键启动：Docker PGSQL + Go 后端(:8090) + Next.js(:3200)
 ```
 
-启动后访问：前端 http://localhost:3200 ，API http://localhost:8080/api/v1 。
+启动后访问：前端 http://localhost:3200 ，API http://localhost:8090/api/v1 。
 
 > 无需手动启动 Docker：`make dev` / `make db-up` 会自动检测并拉起本机 Docker Desktop（优先 `systemctl --user start docker-desktop`，回退 `docker desktop start`；引擎由 systemd 托管，界面异常不影响守护进程）。
 
@@ -109,7 +109,7 @@ make dev          # 一键启动：Docker PGSQL + Go 后端(:8080) + Next.js(:32
 1. **数据库**：外部 PGSQL，连接串写入 `server/.env` 的 `DATABASE_URL`；
 2. **后端**：`make server-build` 编译二进制 → `deploy/yj-forum.service` 交给 systemd；
 3. **前端**：`pnpm build` 产出 `.next/standalone`，`node server.js` 运行（`yj-web.service`）；
-4. **Nginx**：`/api/*`、`/avatar/*` 反代 Go(:8080)，其余反代 Next.js(:3000)；
+4. **Nginx**：`/api/*`、`/avatar/*` 反代 Go(:8090)，其余反代 Next.js(:3000)；
 5. **HTTPS**：`deploy/nginx/yj-forum.conf` 内含 443 配置模板。
 
 ## 文档
