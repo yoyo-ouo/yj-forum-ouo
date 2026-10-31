@@ -10,6 +10,7 @@ package altcha
 import (
 	"context"
 	"crypto/hmac"
+	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -38,6 +39,15 @@ const (
 
 	maxPayloadLength = 64 << 10 // base64 载荷上限，防大 payload DoS
 	grantVersion     = "v1"
+
+	// AppChallengeTTL APP 专用挑战（nonce）有效期。
+	AppChallengeTTL = 2 * time.Minute
+	// appChallengeSkew 允许的客户端时钟偏差（手机时钟可能不准，非一次性凭证的有效期）。
+	appChallengeSkew = 5 * time.Minute
+	// appSignatureDomain 签名域，避免同一密钥在其它用途上被复用。
+	appSignatureDomain = "app-captcha:v1"
+	// appStorePrefix 复用 altcha_used 表记录已消费 nonce 时的 key 前缀。
+	appStorePrefix = "app:"
 )
 
 var (
@@ -58,6 +68,8 @@ type Config struct {
 	Algorithm string
 	Cost      int
 	Expires   time.Duration
+	// AppSecret APP 专用验证通道密钥（与 HMACKey 隔离，留空即关闭通道）。
+	AppSecret string
 }
 
 // challengeStore 记录已消费的挑战 id；生产实现写 altcha_used 表。
@@ -89,6 +101,7 @@ type Service struct {
 	store     challengeStore
 	enabled   bool
 	hmacKey   string
+	appSecret string
 	algorithm string
 	cost      int
 	expires   time.Duration
@@ -115,6 +128,7 @@ func New(db *database.DB, cfg Config) *Service {
 	s := &Service{
 		enabled:   cfg.Enabled,
 		hmacKey:   cfg.HMACKey,
+		appSecret: strings.TrimSpace(cfg.AppSecret),
 		algorithm: algorithm,
 		cost:      cost,
 		expires:   expires,
@@ -295,6 +309,63 @@ func (s *Service) VerifyGrant(token string, ip ...string) bool {
 		return false
 	}
 	return s.now().Before(time.Unix(expiresAt, 0))
+}
+
+// AppEnabled APP 专用验证通道是否可用：ALTCHA 已启用、HMAC 密钥已配置且配置了独立的 APP 密钥。
+// 通道关闭时两个端点统一返回 404 CAPTCHA_DISABLED，客户端据此回退 ALTCHA 求解。
+func (s *Service) AppEnabled() bool {
+	return s != nil && s.enabled && s.configured() && s.appSecret != ""
+}
+
+// AppChallenge 签发 APP 专用挑战：随机 nonce + 服务端时间戳（零 PoW）。
+// 客户端只需对 "app-captcha:v1:<challenge>:<timestamp>" 做一次 HMAC-SHA256 即可。
+func (s *Service) AppChallenge() (challenge string, timestamp int64, err error) {
+	if !s.AppEnabled() {
+		return "", 0, ErrDisabled
+	}
+	buf := make([]byte, 16)
+	if _, err := crand.Read(buf); err != nil {
+		return "", 0, fmt.Errorf("altcha: 生成 APP 挑战失败: %w", err)
+	}
+	return hex.EncodeToString(buf), s.now().Unix(), nil
+}
+
+// VerifyAppProof 校验 APP 专用证明；成功即一次性消费 nonce（复用 altcha_used 防重放）。
+// 返回 (false, nil) 表示签名/时间戳不合法或已重放；返回 error 表示配置或存储异常（调用方必须拒绝）。
+func (s *Service) VerifyAppProof(ctx context.Context, challenge string, timestamp int64, signature string) (bool, error) {
+	if !s.AppEnabled() {
+		return false, ErrDisabled
+	}
+	nonce := strings.TrimSpace(challenge)
+	if len(nonce) != 32 {
+		return false, nil
+	}
+	if _, err := hex.DecodeString(nonce); err != nil {
+		return false, nil
+	}
+	if timestamp <= 0 {
+		return false, nil
+	}
+	now := s.now()
+	ts := time.Unix(timestamp, 0)
+	if now.Sub(ts) > appChallengeSkew || ts.Sub(now) > appChallengeSkew {
+		return false, nil
+	}
+	expected := appProofSignature(s.appSecret, nonce, timestamp)
+	if !hmac.Equal([]byte(strings.ToLower(strings.TrimSpace(signature))), []byte(expected)) {
+		return false, nil
+	}
+	if s.store == nil {
+		return false, ErrNotConfigured
+	}
+	return s.store.Consume(ctx, appStorePrefix+nonce, now.Add(AppChallengeTTL))
+}
+
+// appProofSignature 计算 APP 证明签名：hex(HMAC-SHA256(secret, "app-captcha:v1:<challenge>:<timestamp>"))。
+func appProofSignature(secret, challenge string, timestamp int64) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(appSignatureDomain + ":" + challenge + ":" + strconv.FormatInt(timestamp, 10)))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func signToken(payload, key string) string {

@@ -61,6 +61,8 @@ type Config struct {
 	AltchaAlgorithm string
 	AltchaCost      int
 	AltchaExpires   time.Duration
+	// ALTCHA_APP_SECRET：APP 专用验证通道密钥（留空即关闭该通道）
+	AltchaAppSecret string
 
 	// 旧 APP 兼容层
 	LegacyTokenTTL       time.Duration
@@ -113,6 +115,7 @@ func Load() *Config {
 		AltchaAlgorithm: getEnv("ALTCHA_ALGORITHM", "PBKDF2/SHA-256"),
 		AltchaCost:      getEnvInt("ALTCHA_COST", 5000),
 		AltchaExpires:   time.Duration(getEnvInt("ALTCHA_EXPIRES_SECONDS", 600)) * time.Second,
+		AltchaAppSecret: getEnv("ALTCHA_APP_SECRET", ""),
 
 		LegacyTokenTTL:       time.Duration(getEnvInt("LEGACY_TOKEN_TTL_HOURS", 168)) * time.Hour,
 		LegacyAppSunset:      getEnv("LEGACY_APP_SUNSET", ""),

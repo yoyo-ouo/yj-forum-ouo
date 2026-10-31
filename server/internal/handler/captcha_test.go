@@ -72,11 +72,68 @@ func TestCaptchaRoutesDisabled(t *testing.T) {
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"enabled":false`) {
 		t.Fatalf("disabled config = %d %s", w.Code, w.Body.String())
 	}
+	if !strings.Contains(w.Body.String(), `"app_enabled":false`) {
+		t.Fatalf("disabled config must report app_enabled=false: %s", w.Body.String())
+	}
 	if w := doCaptchaJSON(r, http.MethodGet, "/ov2/api/captcha/challenge", ""); w.Code != http.StatusNotFound {
 		t.Fatalf("disabled challenge status = %d, want 404", w.Code)
 	}
 	if w := doCaptchaJSON(r, http.MethodPost, "/ov2/api/captcha/verify", `{"altcha":"x"}`); w.Code != http.StatusNotFound {
 		t.Fatalf("disabled verify status = %d, want 404", w.Code)
+	}
+}
+
+func TestCaptchaAppRoutesDisabledWithoutSecret(t *testing.T) {
+	r := newCaptchaTestRouter(altcha.New(nil, altcha.Config{Enabled: true, HMACKey: "test-key", AppSecret: ""}))
+
+	if w := doCaptchaJSON(r, http.MethodGet, "/ov2/api/captcha/app/challenge", ""); w.Code != http.StatusNotFound {
+		t.Fatalf("app challenge without secret = %d, want 404", w.Code)
+	}
+	if w := doCaptchaJSON(r, http.MethodPost, "/ov2/api/captcha/app/verify",
+		`{"challenge":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","timestamp":1700000000,"signature":"x"}`); w.Code != http.StatusNotFound {
+		t.Fatalf("app verify without secret = %d, want 404", w.Code)
+	}
+	w := doCaptchaJSON(r, http.MethodGet, "/ov2/api/captcha/config", "")
+	if !strings.Contains(w.Body.String(), `"app_enabled":false`) {
+		t.Fatalf("config must report app_enabled=false: %s", w.Body.String())
+	}
+}
+
+func TestCaptchaAppChallengeRoute(t *testing.T) {
+	r := newCaptchaTestRouter(altcha.New(nil, altcha.Config{Enabled: true, HMACKey: "test-key", AppSecret: "app-secret"}))
+
+	w := doCaptchaJSON(r, http.MethodGet, "/ov2/api/captcha/app/challenge", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("app challenge status = %d, want 200 (%s)", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Success   bool   `json:"success"`
+		Challenge string `json:"challenge"`
+		Timestamp int64  `json:"timestamp"`
+		ExpiresIn int    `json:"expires_in"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode app challenge: %v", err)
+	}
+	if !resp.Success || len(resp.Challenge) != 32 || resp.Timestamp <= 0 || resp.ExpiresIn != int(altcha.AppChallengeTTL.Seconds()) {
+		t.Fatalf("unexpected app challenge: %+v", resp)
+	}
+	cfg := doCaptchaJSON(r, http.MethodGet, "/ov2/api/captcha/config", "")
+	if !strings.Contains(cfg.Body.String(), `"app_enabled":true`) {
+		t.Fatalf("config must report app_enabled=true: %s", cfg.Body.String())
+	}
+}
+
+func TestCaptchaAppVerifyRejectsBadSignature(t *testing.T) {
+	r := newCaptchaTestRouter(altcha.New(nil, altcha.Config{Enabled: true, HMACKey: "test-key", AppSecret: "app-secret"}))
+
+	body := `{"challenge":"` + strings.Repeat("a", 32) + `","timestamp":1700000000,"signature":"deadbeef"}`
+	w := doCaptchaJSON(r, http.MethodPost, "/ov2/api/captcha/app/verify", body)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("app verify status = %d, want 400 (%s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "CAPTCHA_REQUIRED") {
+		t.Fatalf("app verify body = %s, want CAPTCHA_REQUIRED", w.Body.String())
 	}
 }
 

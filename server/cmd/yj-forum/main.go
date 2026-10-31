@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -44,6 +45,9 @@ func main() {
 	if cfg.AppEnv == "prod" && (cfg.SecretKey == "dev-secret-key" || cfg.SecretKey == "TestKeyFor1" || len(cfg.SecretKey) < 32) {
 		log.Fatalf("[FATAL] 生产环境 SECRET_KEY 过弱（需 32+ 字节且不能使用默认值）")
 	}
+
+	// ALTCHA APP 专用通道：配置了就 fail-fast 校验，避免「app_enabled=true 但签名永远失败」的静默失效。
+	checkAltchaAppSecret(cfg)
 
 	// 旧头像目录检查：仅告警，不阻塞启动；新头像走媒体服务，旧头像依赖该目录。
 	checkAvatarDir(cfg.AvatarDir)
@@ -191,6 +195,27 @@ func pingS3WithRetry(ctx context.Context, p *storage.S3Provider) error {
 		}
 	}
 	return err
+}
+
+// checkAltchaAppSecret 校验 APP 专用验证通道配置：留空 = 关闭通道；配了就必须是强密钥且与 ALTCHA_HMAC_KEY 隔离。
+// 直接把非法配置当启动失败，避免「app_enabled=true 但签名永远不匹配」的静默失效。
+func checkAltchaAppSecret(cfg *config.Config) {
+	secret := strings.TrimSpace(cfg.AltchaAppSecret)
+	if secret == "" {
+		log.Println("[ALTCHA] APP 专用通道未配置（ALTCHA_APP_SECRET 为空），客户端将回退本地求解")
+		return
+	}
+	if !cfg.AltchaEnabled {
+		log.Println("[WARN] ALTCHA_APP_SECRET 已配置但 ALTCHA_ENABLED=false，通道不会生效")
+		return
+	}
+	if len(secret) < 32 {
+		log.Fatalf("[FATAL] ALTCHA_APP_SECRET 过短（需 32+ 字符，建议 openssl rand -hex 32）")
+	}
+	if secret == strings.TrimSpace(cfg.AltchaHMACKey) {
+		log.Fatalf("[FATAL] ALTCHA_APP_SECRET 不能与 ALTCHA_HMAC_KEY 相同（轮换会互相影响）")
+	}
+	log.Println("[ALTCHA] APP 专用零 PoW 通道已开启（/captcha/app/*）")
 }
 
 // checkAvatarDir 检查旧头像目录是否可读；缺失只告警，不影响新头像（媒体服务）启动。

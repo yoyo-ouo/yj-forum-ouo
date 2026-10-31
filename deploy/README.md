@@ -159,6 +159,7 @@ curl -I http://127.0.0.1:3000/
 | `MEDIA_DIR` | server/.env | 旧用户媒体存储目录（S3 未启用时新上传也落此）；默认 `/var/yj-forum/media`；需可写 |
 | `S3_ENABLED` / `S3_ENDPOINT` / `S3_BUCKET` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` | server/.env（ouo + admin） | SeaweedFS S3；新上传写 S3；未启用回退本地/GridFS |
 | `ALTCHA_ENABLED` / `ALTCHA_HMAC_KEY` | server/.env | ALTCHA v2；启用时登录/注册/发码/重置/Bug 提交需要 challenge/grant |
+| `ALTCHA_APP_SECRET` | server/.env | APP 专用零 PoW 通道密钥（与 `ALTCHA_HMAC_KEY` 隔离）；留空则 `/captcha/app/*` 返回 404，客户端回退 ALTCHA 求解 |
 | `LEGACY_TOKEN_TTL_HOURS` / `LEGACY_APP_SUNSET` | server/.env | 旧 APP 兼容层的 token 窗口与下线日期 |
 | `GITHUB_TOKEN` | server/.env | 下载页 GitHub Releases 可选 token（提高限额） |
 | `PUBLIC_BASE_URL` | server/.env | 邮件中链接的站点地址 |

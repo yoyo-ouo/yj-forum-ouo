@@ -3,6 +3,7 @@ package altcha
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -275,5 +276,149 @@ func TestVerifyRejectsMalformedPayload(t *testing.T) {
 		if err == nil {
 			t.Errorf("Verify(%q) error = nil, want error", bad)
 		}
+	}
+}
+
+// ---- APP 专用零 PoW 通道 ----
+
+func newAppTestService(secret string) *Service {
+	svc := New(nil, Config{
+		Enabled:   true,
+		HMACKey:   "test-hmac-key",
+		Algorithm: DefaultAlgorithm,
+		Cost:      10,
+		Expires:   time.Minute,
+		AppSecret: secret,
+	})
+	svc.store = newMemStore()
+	svc.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
+	return svc
+}
+
+func TestAppChannelDisabledWithoutSecret(t *testing.T) {
+	svc := newAppTestService("")
+	if svc.AppEnabled() {
+		t.Fatal("AppEnabled() must be false without app secret")
+	}
+	if _, _, err := svc.AppChallenge(); !errors.Is(err, ErrDisabled) {
+		t.Fatalf("AppChallenge() error = %v, want ErrDisabled", err)
+	}
+	ok, err := svc.VerifyAppProof(context.Background(), strings.Repeat("a", 32), svc.now().Unix(), "x")
+	if ok || !errors.Is(err, ErrDisabled) {
+		t.Fatalf("VerifyAppProof() = %v, %v, want false/ErrDisabled", ok, err)
+	}
+}
+
+func TestAppProofSignatureVector(t *testing.T) {
+	// 向量与 Android `AltchaTest.appProof_matchesServerVector` 完全一致，保证两端字节一致。
+	if got := appProofSignature("test-app-secret", "0123456789abcdef0123456789abcdef", 1_700_000_000); got != "360663eaffba0e3d783d0c63473a9d682ac959605c4d8ea64955870aff9b21eb" {
+		t.Fatalf("appProofSignature() = %s", got)
+	}
+	if got := appProofSignature("another-secret", "ffffffffffffffffffffffffffffffff", 1_700_000_123); got != "06fea3e8189db2186318e1b390029a0eebd7d3ee8fac7c7509a36a726903b539" {
+		t.Fatalf("appProofSignature() = %s", got)
+	}
+}
+
+func TestAppChallengeShape(t *testing.T) {
+	svc := newAppTestService("app-secret")
+	if !svc.AppEnabled() {
+		t.Fatal("AppEnabled() must be true with app secret")
+	}
+	challenge, timestamp, err := svc.AppChallenge()
+	if err != nil {
+		t.Fatalf("AppChallenge() error = %v", err)
+	}
+	if len(challenge) != 32 {
+		t.Fatalf("challenge length = %d, want 32 hex chars (%q)", len(challenge), challenge)
+	}
+	if _, err := hex.DecodeString(challenge); err != nil {
+		t.Fatalf("challenge is not hex: %v", err)
+	}
+	if timestamp != svc.now().Unix() {
+		t.Fatalf("timestamp = %d, want %d", timestamp, svc.now().Unix())
+	}
+	other, _, err := svc.AppChallenge()
+	if err != nil || other == challenge {
+		t.Fatalf("challenge must be random: %q vs %q (err=%v)", challenge, other, err)
+	}
+}
+
+func TestAppVerifyThenReplay(t *testing.T) {
+	svc := newAppTestService("app-secret")
+	challenge, timestamp, err := svc.AppChallenge()
+	if err != nil {
+		t.Fatalf("AppChallenge() error = %v", err)
+	}
+	sig := appProofSignature("app-secret", challenge, timestamp)
+
+	// 签名大小写不敏感。
+	ok, err := svc.VerifyAppProof(context.Background(), challenge, timestamp, strings.ToUpper(sig))
+	if err != nil || !ok {
+		t.Fatalf("VerifyAppProof() = %v, %v, want true/nil", ok, err)
+	}
+	// 同一 nonce 重放必须失败。
+	ok, err = svc.VerifyAppProof(context.Background(), challenge, timestamp, sig)
+	if err != nil || ok {
+		t.Fatalf("replay VerifyAppProof() = %v, %v, want false/nil", ok, err)
+	}
+}
+
+func TestAppVerifyRejectsBadInput(t *testing.T) {
+	svc := newAppTestService("app-secret")
+	challenge, timestamp, err := svc.AppChallenge()
+	if err != nil {
+		t.Fatalf("AppChallenge() error = %v", err)
+	}
+	skew := int64((appChallengeSkew + time.Minute).Seconds())
+
+	cases := []struct {
+		name      string
+		challenge string
+		timestamp int64
+		signature string
+	}{
+		{"bad-signature", challenge, timestamp, strings.Repeat("0", 64)},
+		{"empty-signature", challenge, timestamp, ""},
+		{"short-challenge", "abcd", timestamp, appProofSignature("app-secret", "abcd", timestamp)},
+		{"non-hex-challenge", strings.Repeat("z", 32), timestamp, appProofSignature("app-secret", strings.Repeat("z", 32), timestamp)},
+		{"stale-timestamp", challenge, timestamp - skew, appProofSignature("app-secret", challenge, timestamp-skew)},
+		{"future-timestamp", challenge, timestamp + skew, appProofSignature("app-secret", challenge, timestamp+skew)},
+		{"zero-timestamp", challenge, 0, appProofSignature("app-secret", challenge, 0)},
+		{"other-secret", challenge, timestamp, appProofSignature("other-secret", challenge, timestamp)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ok, err := svc.VerifyAppProof(context.Background(), tc.challenge, tc.timestamp, tc.signature)
+			if ok || err != nil {
+				t.Fatalf("VerifyAppProof() = %v, %v, want false/nil", ok, err)
+			}
+		})
+	}
+}
+
+func TestAppVerifyWithoutStoreFailsClosed(t *testing.T) {
+	svc := newAppTestService("app-secret")
+	svc.store = nil
+	challenge, timestamp, err := svc.AppChallenge()
+	if err != nil {
+		t.Fatalf("AppChallenge() error = %v", err)
+	}
+	sig := appProofSignature("app-secret", challenge, timestamp)
+	ok, err := svc.VerifyAppProof(context.Background(), challenge, timestamp, sig)
+	if ok || !errors.Is(err, ErrNotConfigured) {
+		t.Fatalf("VerifyAppProof() = %v, %v, want false/ErrNotConfigured", ok, err)
+	}
+}
+
+func TestNilServiceAppChannel(t *testing.T) {
+	var svc *Service
+	if svc.AppEnabled() {
+		t.Fatal("nil service AppEnabled() must be false")
+	}
+	if _, _, err := svc.AppChallenge(); !errors.Is(err, ErrDisabled) {
+		t.Fatalf("nil AppChallenge() error = %v, want ErrDisabled", err)
+	}
+	if ok, err := svc.VerifyAppProof(context.Background(), strings.Repeat("a", 32), time.Now().Unix(), "x"); ok || !errors.Is(err, ErrDisabled) {
+		t.Fatalf("nil VerifyAppProof() = %v, %v, want false/ErrDisabled", ok, err)
 	}
 }
