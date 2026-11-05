@@ -640,6 +640,7 @@ func (h *legacyHandler) ResetPasswordByCode(c *gin.Context) {
 		return
 	}
 	_ = h.sessions.DeleteByUserID(c.Request.Context(), u.ID)
+	sendPasswordChangedNotice(h.mailer, u.Name, u.Email)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "密码已重置"})
 }
 
@@ -696,6 +697,7 @@ func (h *legacyHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 	_ = h.sessions.DeleteByUserID(c.Request.Context(), u.ID)
+	sendPasswordChangedNotice(h.mailer, u.Name, u.Email)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "密码已修改，请重新登录"})
 }
 

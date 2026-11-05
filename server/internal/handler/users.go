@@ -45,7 +45,10 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		return
 	}
 	guild, isLeader := h.guildProfile(c.Request.Context(), uid)
-	c.JSON(http.StatusOK, gin.H{"success": true, "user": u, "guild": guild, "is_leader": isLeader})
+	stats, _ := h.DB.GetUserStats(c.Request.Context(), uid)
+	followStats, _ := h.DB.GetFollowStats(c.Request.Context(), uid)
+	c.JSON(http.StatusOK, gin.H{"success": true, "user": u, "stats": stats, "follow_stats": followStats,
+		"guild": guild, "is_leader": isLeader})
 }
 
 // ---- GET /api/v1/users/:id ----

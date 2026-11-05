@@ -86,7 +86,7 @@ func (d *DB) CreateNotification(ctx context.Context, in NotificationInput) (int6
 	return id, created, err
 }
 
-// UnreadCounts 消息中心四类未读数。只统计各类 last_read_at 之后产生的消息。
+// UnreadCounts 消息中心四类未读数。
 type UnreadCounts struct {
 	Likes    int `json:"likes"`
 	Comments int `json:"comments"`
@@ -94,23 +94,20 @@ type UnreadCounts struct {
 	Chat     int `json:"chat"`
 }
 
-// UnreadCounts 统计 likes/comments/system（message_read_state）与 chat（chat_members）未读。
+// UnreadCounts 统计 likes/comments/system（per-notification is_read，广播按 read_state）与 chat 未读。
 func (d *DB) UnreadCounts(ctx context.Context, userID string) (UnreadCounts, error) {
 	var counts UnreadCounts
 	const epoch = "'epoch'::timestamptz"
 	err := d.QueryRow(ctx, `SELECT
 		(SELECT COUNT(*) FROM notifications n
-			WHERE n.user_id = $1 AND n.type IN ('post_like', 'comment_like')
-			AND n.created_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'likes'), `+epoch+`)),
+			WHERE n.user_id = $1 AND n.type IN ('post_like', 'comment_like') AND NOT n.is_read),
 		(SELECT COUNT(*) FROM notifications n
-			WHERE n.user_id = $1 AND n.type IN ('post_comment', 'comment_reply')
-			AND n.created_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'comments'), `+epoch+`)),
+			WHERE n.user_id = $1 AND n.type IN ('post_comment', 'comment_reply') AND NOT n.is_read),
 		(SELECT COUNT(*) FROM broadcast_notices b
 			WHERE b.published_at <= NOW() AND b.published_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'system'), `+epoch+`))
 		+
 		(SELECT COUNT(*) FROM notifications n
-			WHERE n.user_id = $1 AND n.type = 'system'
-			AND n.created_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'system'), `+epoch+`))`,
+			WHERE n.user_id = $1 AND n.type = 'system' AND NOT n.is_read)`,
 		userID).Scan(&counts.Likes, &counts.Comments, &counts.System)
 	if err != nil {
 		return counts, err
@@ -132,7 +129,8 @@ func validMessageCategory(category string) bool {
 	return false
 }
 
-// MarkRead 更新某类消息的已读时间（只前进不后退）。
+// MarkRead 更新某类消息的已读时间（只前进不后退），并同步标记对应通知为已读。
+// 这样未读数与列表状态共用同一份 per-notification 已读数据，避免仅靠时间戳导致的反复计数或漏计。
 func (d *DB) MarkRead(ctx context.Context, userID, category string, lastReadAt time.Time) error {
 	if !validMessageCategory(category) {
 		return fmt.Errorf("message: 非法分类 %q", category)
@@ -140,12 +138,35 @@ func (d *DB) MarkRead(ctx context.Context, userID, category string, lastReadAt t
 	if lastReadAt.IsZero() {
 		lastReadAt = time.Now().UTC()
 	}
-	_, err := d.Exec(ctx, `INSERT INTO message_read_state (user_id, category, last_read_at)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (user_id, category) DO UPDATE
-		SET last_read_at = GREATEST(message_read_state.last_read_at, EXCLUDED.last_read_at)`,
-		userID, category, lastReadAt)
-	return err
+	return d.Tx(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO message_read_state (user_id, category, last_read_at)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (user_id, category) DO UPDATE
+			SET last_read_at = GREATEST(message_read_state.last_read_at, EXCLUDED.last_read_at)`,
+			userID, category, lastReadAt); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE notifications
+			SET is_read = TRUE, read_at = COALESCE(read_at, $3)
+			WHERE user_id = $1 AND NOT is_read AND created_at <= $3
+			AND type = ANY($2::text[])`,
+			userID, notificationTypesForCategory(category), lastReadAt)
+		return err
+	})
+}
+
+// notificationTypesForCategory 分类对应的通知类型（system 分类只覆盖 per-user 系统通知，广播由 read_state 计时）。
+func notificationTypesForCategory(category string) []string {
+	switch category {
+	case "likes":
+		return []string{NotificationPostLike, NotificationCommentLike}
+	case "comments":
+		return []string{NotificationPostComment, NotificationCommentReply}
+	case "system":
+		return []string{NotificationSystem}
+	default:
+		return nil
+	}
 }
 
 // SystemMessage 消息中心「系统」条目（广播通知或 per-user system 通知）。

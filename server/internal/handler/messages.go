@@ -191,7 +191,8 @@ func (h *MessageHandler) Read(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "category 需为 likes/comments/system"})
 		return
 	}
-	lastRead := time.Now().UTC()
+	now := time.Now().UTC()
+	lastRead := now
 	if raw := strings.TrimSpace(req.LastReadAt); raw != "" {
 		t, err := time.Parse(time.RFC3339Nano, raw)
 		if err != nil {
@@ -201,12 +202,18 @@ func (h *MessageHandler) Read(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "last_read_at 需为 RFC3339"})
 			return
 		}
+		// 客户端时钟可能超前：以服务端时间为上限，避免把未来消息提前标为已读。
 		lastRead = t.UTC()
+		if lastRead.After(now) {
+			lastRead = now
+		}
 	}
 	if err := h.DB.MarkCategoryRead(c.Request.Context(), uid, req.Category, lastRead); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存失败"})
 		return
 	}
+	// 已读状态变化实时同步到该用户的多端连接（Web / Android / Windows）。
+	PushUnreadEvent(c.Request.Context(), h.DB, uid)
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 

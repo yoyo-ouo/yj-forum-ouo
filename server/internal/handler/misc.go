@@ -216,6 +216,10 @@ func (h *MiscHandler) ResetPasswordByToken(c *gin.Context) {
 	if err := h.Sessions.DeleteByUserID(c.Request.Context(), userID); err != nil {
 		log.Printf("[RESET] 重置后会话清理失败 (uid=%s): %v", userID, err)
 	}
+	// 账号安全提醒：密码修改后通知本人（属必须发送的安全邮件）
+	if u, uerr := h.DB.GetUserByID(c.Request.Context(), userID); uerr == nil && u != nil {
+		sendPasswordChangedNotice(h.Mailer, u.Name, u.Email)
+	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "密码重置成功，请使用新密码登录"})
 }
 
@@ -230,6 +234,26 @@ func sendCodeMail(mailer *email.Sender, label, to, code string) {
 
 func (h *MiscHandler) sendCode(c *gin.Context, label, to, code string) {
 	sendCodeMail(h.Mailer, label, to, code)
+}
+
+// sendPasswordChangedNotice 密码修改成功后的安全提醒（异步，失败只记录日志）。
+// 属于「必须发送」的账号安全邮件，与登录提醒、验证码、邮箱换绑通知同一级别。
+func sendPasswordChangedNotice(mailer *email.Sender, name, to string) {
+	to = strings.TrimSpace(to)
+	if mailer == nil || to == "" {
+		return
+	}
+	if strings.TrimSpace(name) == "" {
+		name = "用户"
+	}
+	nowStr := time.Now().Format("2006-01-02 15:04:05")
+	plain := "尊敬的 " + name + "，您好！\n\n您的账号密码已于 " + nowStr + " 修改。\n如非本人操作，请立即联系管理员。\n\n© 2026 妖精论坛 - 粉丝公益创作"
+	htmlBody := email.BuildHTML("密码修改提醒", "你的密码已被修改",
+		[]string{"尊敬的 " + name + "，您好！", "你的账号密码已于 " + nowStr + " 修改。", "如非本人操作，请立即联系管理员。"},
+		"", "", "")
+	go func() {
+		_, _ = mailer.Send("【妖精论坛】密码修改提醒", plain, []string{to}, htmlBody)
+	}()
 }
 
 // ---- 验证码校验（注册/邮箱/重置）----
