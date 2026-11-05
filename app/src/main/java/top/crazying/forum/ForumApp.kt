@@ -8,8 +8,10 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
 import top.crazying.forum.core.App
+import top.crazying.forum.core.AppContextHolder
 import top.crazying.forum.core.CachePolicy
 import top.crazying.forum.core.Constants
+import top.crazying.forum.core.MessageNotifications
 import java.io.File
 
 /**
@@ -23,6 +25,8 @@ class ForumApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         App.init(this)
+        AppContextHolder.context = applicationContext
+        MessageNotifications.start(this)
         sweepLocalCaches()
     }
 

@@ -17,6 +17,9 @@ sealed interface Screen {
     data object EasterEgg : Screen
     data object Me : Screen
 
+    /** 消息中心（点赞 / 评论 / 系统 / 管理团队聊天）。 */
+    data object Messages : Screen
+
     // 从「我的」页二级进入的普通页面（不占底部标签栏）。
     data object Privacy : Screen
     data object DeleteAccount : Screen

@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">妖精论坛</string>
+    <string name="notification_channel_messages">消息通知</string>
+    <string name="notification_channel_messages_desc">点赞、评论、系统通知与管理团队消息</string>
+    <string name="notification_new_messages">你有 %1$d 条新消息，点击查看</string>
 </resources>

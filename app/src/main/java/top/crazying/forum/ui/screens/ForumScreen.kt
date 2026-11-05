@@ -4,9 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -23,6 +20,8 @@ import top.crazying.forum.data.Post
 import top.crazying.forum.theme.ForumTheme
 import top.crazying.forum.ui.Navigator
 import top.crazying.forum.ui.Screen
+import top.crazying.forum.ui.DrawerMenuButton
+import top.crazying.forum.ui.components.LineIcons
 import top.crazying.forum.ui.components.Pill
 
 /** 论坛页：按分类（综合/闲聊/求助/分享/创作）浏览帖子，支持分页。 */
@@ -77,6 +76,7 @@ fun ForumScreen(nav: Navigator, store: FeedStateStore) {
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            DrawerMenuButton(tint = colors.textPrimary)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "论坛",
@@ -91,10 +91,10 @@ fun ForumScreen(nav: Navigator, store: FeedStateStore) {
                 )
             }
             IconButton(onClick = { nav.push(Screen.Search()) }) {
-                Icon(Icons.Default.Search, contentDescription = "搜索", tint = colors.textPrimary)
+                Icon(LineIcons.Search, contentDescription = "搜索", tint = colors.textPrimary)
             }
             IconButton(onClick = { nav.push(Screen.PostCreate(st.filter.ifBlank { "general" })) }) {
-                Icon(Icons.Default.Add, contentDescription = "发帖", tint = colors.textPrimary)
+                Icon(LineIcons.Plus, contentDescription = "发帖", tint = colors.textPrimary)
             }
         }
 

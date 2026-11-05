@@ -43,6 +43,12 @@ object App {
      */
     val versionGate: MutableState<VersionGate?> = mutableStateOf(null)
 
+    /** 消息中心未读数（likes/comments/system/chat 之和），由消息中心与轮询同步维护。 */
+    val messageUnread: MutableState<Int> = mutableStateOf(0)
+
+    /** 点击通知后待跳转的「消息中心」请求；ForumRoot 消费后置回 false。 */
+    val openMessages: MutableState<Boolean> = mutableStateOf(false)
+
     fun init(context: Context) {
         prefs = Prefs(context.applicationContext)
         api = Api(prefs)
@@ -104,6 +110,9 @@ object App {
 
     fun logoutLocal() {
         user.value = null
+        messageUnread.value = 0
+        // 清空未读基线：换账号登录时不会沿用上一个账号的计数，避免误报/漏报通知
+        prefs.lastMessageTotal = 0
         prefs.clearSession()
         runCatching { api.clearCookies() }
     }

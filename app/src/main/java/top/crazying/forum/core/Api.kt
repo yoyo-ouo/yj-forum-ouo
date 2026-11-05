@@ -781,6 +781,44 @@ class Api(private val prefs: Prefs) {
     suspend fun confirmChangeEmail(code: String): ApiResult =
         post(api("users/me/email-change/confirm"), JSONObject().put("code", code.trim()))
 
+    // ────────────────── 消息中心 ──────────────────
+
+    /** 各类消息未读数 + 管理团队聊天未读。 */
+    suspend fun messageSummary(): ApiResult = get(api("messages/summary"))
+
+    /** 点赞消息（游标分页；cursor 为空表示第一页）。 */
+    suspend fun messageLikes(cursor: String? = null): ApiResult =
+        get(api("messages/likes"), mapOf("cursor" to cursor, "limit" to 30))
+
+    /** 收到的评论 / 回复。 */
+    suspend fun messageComments(cursor: String? = null): ApiResult =
+        get(api("messages/comments"), mapOf("cursor" to cursor, "limit" to 30))
+
+    /** 系统通知 + 广播公告。 */
+    suspend fun messageSystem(cursor: String? = null): ApiResult =
+        get(api("messages/system"), mapOf("cursor" to cursor, "limit" to 30))
+
+    /**
+     * 标记分类已读。
+     *
+     * [lastReadAt] 可选：不传时由服务端以当前时间为界（首屏拉到最新一页即可用）；
+     * 传入时会按服务端时间上限裁剪，避免客户端时钟超前把未来消息标成已读。
+     */
+    suspend fun markMessagesRead(category: String, lastReadAt: String? = null): ApiResult {
+        val body = JSONObject().put("category", category)
+        if (!lastReadAt.isNullOrBlank()) body.put("last_read_at", lastReadAt)
+        return post(api("messages/read"), body)
+    }
+
+    suspend fun chatMessages(cursor: String? = null): ApiResult =
+        get(api("messages/chat"), mapOf("cursor" to cursor, "limit" to 30))
+
+    suspend fun sendChat(contentHtml: String): ApiResult =
+        post(api("messages/chat"), JSONObject().put("content_html", contentHtml))
+
+    suspend fun markChatRead(lastMessageId: Long): ApiResult =
+        post(api("messages/chat/read"), JSONObject().put("last_message_id", lastMessageId))
+
     // ────────────────── 帖子 ──────────────────
 
     suspend fun posts(

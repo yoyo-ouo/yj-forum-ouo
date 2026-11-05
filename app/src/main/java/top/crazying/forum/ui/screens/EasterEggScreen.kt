@@ -31,6 +31,7 @@ import top.crazying.forum.core.Api
 import top.crazying.forum.core.App
 import top.crazying.forum.core.Constants
 import top.crazying.forum.theme.ForumTheme
+import top.crazying.forum.ui.DrawerMenuButton
 import top.crazying.forum.ui.Navigator
 import top.crazying.forum.ui.Screen
 import top.crazying.forum.ui.components.EmptyBox
@@ -95,7 +96,10 @@ fun EasterEggScreen(nav: Navigator) {
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("彩蛋", color = colors.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            DrawerMenuButton(tint = colors.textPrimary)
+            Text("彩蛋", color = colors.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        }
 
         Column(
             modifier = Modifier

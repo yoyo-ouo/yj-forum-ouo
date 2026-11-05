@@ -77,6 +77,11 @@ class Prefs(context: Context) {
         get() = sp.getString(KEY_PRIVACY_AGREED, "") ?: ""
         set(value) = sp.edit().putString(KEY_PRIVACY_AGREED, value).apply()
 
+    /** 上次轮询到的消息总数（用于判断是否有新消息需要发系统通知）。 */
+    var lastMessageTotal: Int
+        get() = sp.getInt(KEY_MESSAGE_TOTAL, 0)
+        set(value) = sp.edit().putInt(KEY_MESSAGE_TOTAL, value).apply()
+
     /** 退出登录 / 掉线时清理会话（保留主题、年制与隐私政策同意标记）。 */
     fun clearSession() {
         sp.edit().remove(KEY_USER).remove(KEY_USER_SAVED_AT).remove(KEY_COOKIES).apply()
@@ -93,5 +98,6 @@ class Prefs(context: Context) {
         const val KEY_UPDATE_CHECK_AT = "update_check_at"
         const val KEY_UPDATE_SKIP = "update_skip_version"
         const val KEY_PRIVACY_AGREED = "privacy_agreed_version"
+        const val KEY_MESSAGE_TOTAL = "message_total"
     }
 }
