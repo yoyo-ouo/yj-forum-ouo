@@ -204,6 +204,10 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		// 改密后吊销全部旧会话，并为当前浏览器签发新会话（阻止其他设备继续使用旧会话）
 		_ = h.Sessions.DeleteByUserID(c.Request.Context(), uid)
 		h.issueSession(c, uid)
+		// 账号安全提醒：密码修改后通知本人（属必须发送的安全邮件）
+		if u, uerr := h.DB.GetUserByID(c.Request.Context(), uid); uerr == nil && u != nil {
+			sendPasswordChangedNotice(h.Mailer, u.Name, u.Email)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
