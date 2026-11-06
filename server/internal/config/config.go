@@ -92,7 +92,7 @@ func Load() *Config {
 		SMTPPort:       getEnvInt("SMTP_PORT", 465),
 		SMTPUser:       getEnv("SMTP_USER", "maomi@email.yjlt.top"),
 		SMTPPassword:   getEnv("SMTP_PASSWORD", ""),
-		SMTPFromName:   getEnv("SMTP_FROM_NAME", "妖精论坛(二创)"),
+		SMTPFromName:   getEnv("SMTP_FROM_NAME", "妖精论坛"),
 		ReceiverAll:    getEnv("RECEIVERALL", ""),
 		AvatarDir:      getEnv("AVATAR_DIR", "/var/yj-forum/avatar"),
 		DataDir:        getEnv("DATA_DIR", "/var/yj-forum/data"),

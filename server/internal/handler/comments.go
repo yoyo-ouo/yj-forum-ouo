@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"html"
 	"log"
 	"net/http"
 	"strings"
@@ -12,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"yj-forum/server/internal/database"
-	"yj-forum/server/internal/email"
 	"yj-forum/server/internal/models"
 	"yj-forum/server/internal/sanitize"
 )
@@ -126,7 +124,7 @@ func (h *PostsHandler) CreateComment(c *gin.Context) {
 	}
 	// 评论/回复灵力 +3（source=commentID 幂等）
 	h.awardCommentSpirit(c.Request.Context(), uid, comment.ID)
-	// 异步通知（站内通知 + 邮件 outbox）
+	// 异步写站内通知（评论行为不再发送邮件）
 	go h.notifyComment(comment)
 	h.Cache.Comments.DeletePrefix("comments:post:" + postID)
 	h.Cache.PostDetail.Delete("post:detail:" + postID)
@@ -145,13 +143,12 @@ func (h *PostsHandler) awardCommentSpirit(ctx context.Context, userID, commentID
 	}
 }
 
-// notifyComment 评论通知：给帖子作者/父评论作者写站内通知，并在同一事务内入队邮件 outbox。
-// 邮件 outbox 入队失败时回退到旧的直发逻辑（保证通知不丢）。
+// notifyComment 评论通知：只写站内通知（评论行为不再发送邮件）。
 func (h *PostsHandler) notifyComment(comment *models.Comment) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// 回复则通知父评论作者，否则通知帖子作者；跳过自己给自己评论/回复自己的情况
-	var targetUserID, targetEmail string
+	var targetUserID string
 	notifType := database.NotificationPostComment
 	if comment.ParentID != nil && *comment.ParentID != "" {
 		notifType = database.NotificationCommentReply
@@ -160,7 +157,6 @@ func (h *PostsHandler) notifyComment(comment *models.Comment) {
 			u, err2 := h.DB.GetUserByID(ctx, pc.UserID)
 			if err2 == nil {
 				targetUserID = u.ID
-				targetEmail = u.Email
 			}
 		}
 	} else {
@@ -169,7 +165,6 @@ func (h *PostsHandler) notifyComment(comment *models.Comment) {
 			u, err2 := h.DB.GetUserByID(ctx, post.UserID)
 			if err2 == nil {
 				targetUserID = u.ID
-				targetEmail = u.Email
 			}
 		}
 	}
@@ -188,17 +183,6 @@ func (h *PostsHandler) notifyComment(comment *models.Comment) {
 			authorName = u.Name
 		}
 	}
-	link := "https://" + h.Cfg.PublicBaseURL + "/post/" + comment.PostID
-	verb := "评论了你的帖子"
-	subject := "【妖精论坛】你的帖子收到新评论"
-	if notifType == database.NotificationCommentReply {
-		verb = "回复了你的评论"
-		subject = "【妖精论坛】收到新回复"
-	}
-	plain := authorName + " " + verb + "：\n" + excerpt + "\n" + link
-	htmlBody := email.BuildHTML("评论通知", authorName+" "+verb,
-		[]string{"<strong>" + html.EscapeString(authorName) + "</strong> " + verb + "：", html.EscapeString(excerpt), "点击查看详情"},
-		"查看帖子", link, "")
 
 	var notifID int64
 	created := false
@@ -217,26 +201,10 @@ func (h *PostsHandler) notifyComment(comment *models.Comment) {
 			return e
 		}
 		notifID, created = id, ok
-		if !ok || targetEmail == "" {
-			return nil
-		}
-		if _, e = h.DB.EnqueueEmailTx(ctx, tx, database.EmailOutboxInput{
-			To:        []string{targetEmail},
-			Subject:   subject,
-			PlainBody: plain,
-			HTMLBody:  htmlBody,
-			DedupeKey: "comment_notify_mail:" + comment.ID,
-		}); e != nil {
-			return e
-		}
 		return nil
 	})
 	if err != nil {
-		log.Printf("[COMMENT] 通知/outbox 写入失败 comment=%s: %v", comment.ID, err)
-		// 回退：直接发信（旧逻辑），避免邮件通知完全丢失
-		if targetEmail != "" {
-			_, _ = h.Mailer.Send(subject, plain, []string{targetEmail}, htmlBody)
-		}
+		log.Printf("[COMMENT] 站内通知写入失败 comment=%s: %v", comment.ID, err)
 		return
 	}
 	if created {
