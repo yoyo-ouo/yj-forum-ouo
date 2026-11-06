@@ -7,8 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -35,6 +33,7 @@ import top.crazying.forum.data.WorldMessage
 import top.crazying.forum.theme.ForumTheme
 import top.crazying.forum.ui.Navigator
 import top.crazying.forum.ui.Screen
+import top.crazying.forum.ui.DrawerMenuButton
 import top.crazying.forum.ui.components.*
 import top.crazying.forum.ui.richtext.RichTextView
 import java.util.concurrent.atomic.AtomicInteger
@@ -159,6 +158,7 @@ fun WorldScreen(nav: Navigator, store: FeedStateStore, scope: CoroutineScope) {
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            DrawerMenuButton(tint = colors.textPrimary)
             Column(modifier = Modifier.weight(1f)) {
                 Text("世界频道", color = colors.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                 Text(
@@ -168,7 +168,7 @@ fun WorldScreen(nav: Navigator, store: FeedStateStore, scope: CoroutineScope) {
                 )
             }
             IconButton(onClick = { scope.launch { load() } }) {
-                Icon(Icons.Default.Refresh, contentDescription = "刷新", tint = colors.textPrimary)
+                Icon(LineIcons.Refresh, contentDescription = "刷新", tint = colors.textPrimary)
             }
         }
 

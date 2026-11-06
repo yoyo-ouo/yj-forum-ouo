@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -231,7 +229,7 @@ fun PostDetailScreen(nav: Navigator, postId: String) {
             onBack = { nav.pop() },
             actions = {
                 IconButton(onClick = { scope.launch { load() } }) {
-                    Icon(Icons.Default.Refresh, contentDescription = "刷新", tint = colors.textPrimary)
+                    Icon(LineIcons.Refresh, contentDescription = "刷新", tint = colors.textPrimary)
                 }
             },
             bottomBar = {

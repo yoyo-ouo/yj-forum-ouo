@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 线性铃铛（通知栏小图标要求纯白剪影） -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2.5c-3.3,0 -6,2.7 -6,6v5l-2,2.5v1h16v-1l-2,-2.5v-5c0,-3.3 -2.7,-6 -6,-6zM10.5,19h3c0,1 -0.7,1.8 -1.5,1.8s-1.5,-0.8 -1.5,-1.8z" />
+</vector>

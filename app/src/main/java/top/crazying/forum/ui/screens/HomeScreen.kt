@@ -4,9 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -21,10 +18,13 @@ import top.crazying.forum.core.App
 import top.crazying.forum.core.Constants
 import top.crazying.forum.data.Post
 import top.crazying.forum.theme.ForumTheme
+import top.crazying.forum.ui.DrawerMenuButton
+import top.crazying.forum.ui.MessageEntry
 import top.crazying.forum.ui.Navigator
 import top.crazying.forum.ui.Screen
 import top.crazying.forum.ui.components.Avatar
 import top.crazying.forum.ui.components.GhostButton
+import top.crazying.forum.ui.components.LineIcons
 import top.crazying.forum.ui.components.Pill
 
 /** 首页：欢迎语 + 信息流（最新发布 / 随机推荐）。 */
@@ -86,6 +86,7 @@ fun HomeScreen(nav: Navigator, store: FeedStateStore) {
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            DrawerMenuButton(tint = colors.textPrimary)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = if (name.isNotBlank()) "欢迎回来，$name" else "妖精论坛",
@@ -101,11 +102,12 @@ fun HomeScreen(nav: Navigator, store: FeedStateStore) {
                     maxLines = 1,
                 )
             }
+            MessageEntry(nav)
             IconButton(onClick = { nav.push(Screen.Search()) }) {
-                Icon(Icons.Default.Search, contentDescription = "搜索", tint = colors.textPrimary)
+                Icon(LineIcons.Search, contentDescription = "搜索", tint = colors.textPrimary)
             }
             IconButton(onClick = { nav.push(Screen.PostCreate()) }) {
-                Icon(Icons.Default.Add, contentDescription = "发帖", tint = colors.textPrimary)
+                Icon(LineIcons.Plus, contentDescription = "发帖", tint = colors.textPrimary)
             }
             if (name.isBlank()) {
                 GhostButton(text = "登录", onClick = { nav.push(Screen.Auth()) })

@@ -6,20 +6,17 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,10 +26,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.launch
 import top.crazying.forum.core.App
 import top.crazying.forum.core.Constants
 import top.crazying.forum.core.Updater
 import top.crazying.forum.theme.ForumTheme
+import top.crazying.forum.ui.components.LineIcons
 import top.crazying.forum.ui.screens.AuthScreen
 import top.crazying.forum.ui.screens.DeleteAccountScreen
 import top.crazying.forum.ui.screens.EasterEggScreen
@@ -40,6 +39,7 @@ import top.crazying.forum.ui.screens.FeedStateStore
 import top.crazying.forum.ui.screens.ForumScreen
 import top.crazying.forum.ui.screens.HomeScreen
 import top.crazying.forum.ui.screens.MeScreen
+import top.crazying.forum.ui.screens.MessagesScreen
 import top.crazying.forum.ui.screens.PostCreateScreen
 import top.crazying.forum.ui.screens.PostDetailScreen
 import top.crazying.forum.ui.screens.PrivacyScreen
@@ -112,62 +112,87 @@ fun ForumRoot() {
 
         BackHandler(enabled = nav.canGoBack) { nav.pop() }
 
-        Scaffold(
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            containerColor = colors.bgBody,
-            bottomBar = {
-                if (nav.isTabRoot && !keyboardVisible) {
-                    NavigationBar(containerColor = colors.bgHeader) {
-                        BOTTOM_TABS.forEach { tab ->
-                            val selected = nav.current == tab.screen
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { nav.switchTab(tab.screen) },
-                                icon = {
-                                    Icon(
-                                        imageVector = tabIcon(tab.screen),
-                                        contentDescription = tab.label,
+        // 全局左侧栏：入口在各 tab 根页左上角（DrawerMenuButton），也支持从屏幕左缘滑动打开。
+        val drawerState = rememberDrawerState(DrawerValue.Closed)
+        val drawerScope = rememberCoroutineScope()
+
+        // 点击系统通知进入消息中心：消费一次性标记，避免重复 push。
+        LaunchedEffect(App.openMessages.value) {
+            if (App.openMessages.value) {
+                App.openMessages.value = false
+                if (nav.current !is Screen.Messages) nav.push(Screen.Messages)
+            }
+        }
+
+        CompositionLocalProvider(
+            LocalOpenDrawer provides {
+                drawerScope.launch { drawerState.open() }
+            },
+        ) {
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                gesturesEnabled = nav.isTabRoot,
+                drawerContent = { ForumDrawer(nav, drawerState, drawerScope) },
+            ) {
+                Scaffold(
+                    contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                    containerColor = colors.bgBody,
+                    bottomBar = {
+                        if (nav.isTabRoot && !keyboardVisible) {
+                            NavigationBar(containerColor = colors.bgHeader) {
+                                BOTTOM_TABS.forEach { tab ->
+                                    val selected = nav.current == tab.screen
+                                    NavigationBarItem(
+                                        selected = selected,
+                                        onClick = { nav.switchTab(tab.screen) },
+                                        icon = {
+                                            Icon(
+                                                imageVector = tabIcon(tab.screen),
+                                                contentDescription = tab.label,
+                                            )
+                                        },
+                                        label = { Text(tab.label) },
+                                        colors = NavigationBarItemDefaults.colors(
+                                            selectedIconColor = colors.primary,
+                                            selectedTextColor = colors.primary,
+                                            indicatorColor = colors.bgInput,
+                                            unselectedIconColor = colors.textMuted,
+                                            unselectedTextColor = colors.textMuted,
+                                        ),
                                     )
-                                },
-                                label = { Text(tab.label) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = colors.primary,
-                                    selectedTextColor = colors.primary,
-                                    indicatorColor = colors.bgInput,
-                                    unselectedIconColor = colors.textMuted,
-                                    unselectedTextColor = colors.textMuted,
-                                ),
-                            )
+                                }
+                            }
                         }
+                    },
+                ) { padding ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding),
+                    ) {
+                        when (val s = nav.current) {
+                            Screen.Home -> HomeScreen(nav, feedStore)
+                            Screen.Forum -> ForumScreen(nav, feedStore)
+                            Screen.World -> WorldScreen(nav, feedStore, rootScope)
+                            Screen.Wiki -> WikiScreen()
+                            Screen.EasterEgg -> EasterEggScreen(nav)
+                            Screen.Me -> MeScreen(nav)
+                            Screen.Messages -> MessagesScreen(nav)
+                            Screen.Privacy -> PrivacyScreen(nav)
+                            Screen.DeleteAccount -> DeleteAccountScreen(nav)
+                            Screen.ProfileEdit -> ProfileEditScreen(nav)
+                            Screen.YearConvert -> YearConvertScreen(nav)
+                            is Screen.PostDetail -> PostDetailScreen(nav, s.postId)
+                            is Screen.PostCreate -> PostCreateScreen(nav, s.category)
+                            is Screen.Search -> SearchScreen(nav, feedStore, s.keyword)
+                            is Screen.UserProfile -> UserScreen(nav, feedStore, s.userId)
+                            is Screen.Auth -> AuthScreen(nav, s.register)
+                        }
+
+                        // 发现新版本时由 App.updateInfo 驱动弹出（冷启动自动检查 / 设置页手动检查）
+                        UpdateDialogHost()
                     }
                 }
-            },
-        ) { padding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-            ) {
-                when (val s = nav.current) {
-                    Screen.Home -> HomeScreen(nav, feedStore)
-                    Screen.Forum -> ForumScreen(nav, feedStore)
-                    Screen.World -> WorldScreen(nav, feedStore, rootScope)
-                    Screen.Wiki -> WikiScreen()
-                    Screen.EasterEgg -> EasterEggScreen(nav)
-                    Screen.Me -> MeScreen(nav)
-                    Screen.Privacy -> PrivacyScreen(nav)
-                    Screen.DeleteAccount -> DeleteAccountScreen(nav)
-                    Screen.ProfileEdit -> ProfileEditScreen(nav)
-                    Screen.YearConvert -> YearConvertScreen(nav)
-                    is Screen.PostDetail -> PostDetailScreen(nav, s.postId)
-                    is Screen.PostCreate -> PostCreateScreen(nav, s.category)
-                    is Screen.Search -> SearchScreen(nav, feedStore, s.keyword)
-                    is Screen.UserProfile -> UserScreen(nav, feedStore, s.userId)
-                    is Screen.Auth -> AuthScreen(nav, s.register)
-                }
-
-                // 发现新版本时由 App.updateInfo 驱动弹出（冷启动自动检查 / 设置页手动检查）
-                UpdateDialogHost()
             }
         }
 
@@ -181,12 +206,12 @@ fun ForumRoot() {
     }
 }
 
-/** 底部 tab 图标（仅使用 Material 核心图标库，避免额外依赖）。 */
+/** 底部 tab 图标：统一使用线性 SVG 风格图标（LineIcons），与侧栏保持一致。 */
 private fun tabIcon(screen: Screen): ImageVector = when (screen) {
-    Screen.Home -> Icons.Default.Home
-    Screen.Forum -> Icons.AutoMirrored.Filled.List
-    Screen.World -> Icons.Default.Send
-    Screen.Wiki -> Icons.Default.Info
-    Screen.EasterEgg -> Icons.Default.Star
-    else -> Icons.Default.Person
+    Screen.Home -> LineIcons.Home
+    Screen.Forum -> LineIcons.Forum
+    Screen.World -> LineIcons.World
+    Screen.Wiki -> LineIcons.Book
+    Screen.EasterEgg -> LineIcons.Sparkle
+    else -> LineIcons.User
 }

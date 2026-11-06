@@ -15,8 +15,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -37,8 +35,10 @@ import org.json.JSONObject
 import top.crazying.forum.core.App
 import top.crazying.forum.core.Constants
 import top.crazying.forum.theme.ForumTheme
+import top.crazying.forum.ui.DrawerMenuButton
 import top.crazying.forum.ui.components.HDivider
 import top.crazying.forum.ui.components.HtmlBody
+import top.crazying.forum.ui.components.LineIcons
 import top.crazying.forum.ui.components.LoadingBox
 
 /** WIKI 内部页面（WIKI 是底部 tab 根页，子页在本组件内自建回退栈）。 */
@@ -90,7 +90,7 @@ fun WikiScreen() {
                 onBack = back,
                 actions = {
                     IconButton(onClick = { live2dReload++ }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "刷新", tint = colors.textPrimary)
+                        Icon(LineIcons.Refresh, contentDescription = "刷新", tint = colors.textPrimary)
                     }
                 },
             ) {
@@ -106,9 +106,15 @@ fun WikiScreen() {
 private fun WikiHome(onOpen: (WikiPage) -> Unit) {
     val colors = ForumTheme.colors
     Column(modifier = Modifier.fillMaxSize().background(colors.bgBody).statusBarsPadding()) {
-        Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)) {
-            Text("WIKI", color = colors.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-            Text("罗小黑战记 · 资料与个人作品", color = colors.textMuted, fontSize = 12.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 16.dp, top = 6.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            DrawerMenuButton(tint = colors.textPrimary)
+            Column {
+                Text("WIKI", color = colors.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                Text("罗小黑战记 · 资料与个人作品", color = colors.textMuted, fontSize = 12.sp)
+            }
         }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -247,7 +253,7 @@ private fun WikiDownloadCard(title: String, desc: String, onClick: () -> Unit) {
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = colors.primary)
+        Icon(LineIcons.ChevronDown, contentDescription = null, tint = colors.primary)
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(title, color = colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)

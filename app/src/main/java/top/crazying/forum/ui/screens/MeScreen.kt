@@ -26,6 +26,8 @@ import top.crazying.forum.core.TimeFmt
 import top.crazying.forum.core.Updater
 import top.crazying.forum.theme.ForumTheme
 import top.crazying.forum.theme.ThemeResolver
+import top.crazying.forum.ui.DrawerMenuButton
+import top.crazying.forum.ui.MessageEntry
 import top.crazying.forum.ui.Navigator
 import top.crazying.forum.ui.Screen
 import top.crazying.forum.ui.components.*
@@ -59,7 +61,12 @@ fun MeScreen(nav: Navigator) {
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("我的", color = colors.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            DrawerMenuButton(tint = colors.textPrimary)
+            Text("我的", color = colors.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            MessageEntry(nav)
+        }
 
         // ── 资料卡 ──
         Column(
