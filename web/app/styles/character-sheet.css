@@ -167,59 +167,98 @@
     font-size: 15px;
 }
 
-/* ---------- 立绘卡 ---------- */
+/* ---------- 分区档案卡 ---------- */
 .cs-card {
     position: relative;
     background: var(--color-bg-card);
     border: 1px solid var(--color-border-card);
-    border-radius: 24px;
-    box-shadow: 0 6px 22px var(--color-shadow-card);
+    border-radius: 16px;
+    box-shadow: 0 4px 16px var(--color-shadow-card);
     overflow: hidden;
+    padding: 18px 18px 14px;
+    /* 作为容器查询根：浮窗被拖窄时属性自动改两列，不依赖视口宽度 */
+    container-type: inline-size;
 }
 
 .cs-card.is-draft {
     border-style: dashed;
 }
 
-.cs-hero {
+.cs-head {
     display: flex;
-    align-items: stretch;
-    position: relative;
-    background: linear-gradient(
-        135deg,
-        rgba(63, 140, 134, 0.13) 0%,
-        rgba(46, 70, 89, 0.07) 62%,
-        transparent 100%
-    );
+    align-items: flex-start;
+    gap: 14px;
 }
 
-.cs-portrait {
-    width: 144px;
-    height: 176px;
+.cs-id {
+    flex: 1;
+    min-width: 0;
+}
+
+.cs-avatar {
+    width: 72px;
+    height: 72px;
     flex-shrink: 0;
-    border-radius: 0 0 14px 0;
+    border-radius: 16px;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(160deg, #8fb4cb 0%, #3f8c86 66%, #2e4659 100%);
+    background: linear-gradient(150deg, #8fb4cb 0%, #6a8c89 58%, #2e4659 100%);
     color: #fff;
-    font-size: 50px;
+    font-size: 26px;
     font-weight: 600;
-    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 6px 16px rgba(46, 70, 89, 0.18);
 }
 
-.cs-portrait img {
+.cs-avatar img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
 }
 
-.cs-info {
-    flex: 1;
-    min-width: 0;
-    padding: 16px 16px 14px 15px;
+/* 右上角操作区：编辑 + 显示更多 */
+.cs-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.cs-edit-btn {
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 8px;
+    font-size: 11.5px;
+}
+
+.cs-more-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 2px;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-accent);
+    font-family: inherit;
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.cs-more-btn:hover {
+    color: var(--color-primary);
+}
+
+.cs-more-btn i {
+    font-size: 13px;
+    transition: transform 0.2s ease;
+}
+
+.cs-more-btn.open i {
+    transform: rotate(180deg);
 }
 
 .cs-name-row {
@@ -227,25 +266,37 @@
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    min-width: 0;
 }
 
 .cs-name {
     margin: 0;
-    font-size: 22px;
-    line-height: 1.2;
+    max-width: 100%;
+    font-size: 18px;
+    line-height: 1.35;
     font-weight: 600;
     color: var(--color-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .cs-title {
+    max-width: 100%;
     font-size: 11px;
     line-height: 1.7;
-    padding: 1px 10px;
+    padding: 1px 9px;
     border-radius: 999px;
-    background: linear-gradient(135deg, var(--color-primary) 0%, #2e4659 100%);
-    color: #fff;
+    background: rgba(87, 148, 145, 0.12);
+    color: var(--color-text-accent);
     letter-spacing: 0.04em;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.night-mode .cs-title {
+    background: rgba(132, 168, 185, 0.16);
 }
 
 .cs-badge-draft {
@@ -273,9 +324,17 @@
     color: #c0443c;
 }
 
-.cs-alias {
+.cs-sub {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
     margin-top: 5px;
-    font-size: 11.5px;
+    min-height: 18px;
+}
+
+.cs-alias {
+    font-size: 12px;
     color: var(--color-text-tertiary);
 }
 
@@ -283,7 +342,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 5px;
-    margin-top: 10px;
+    margin-top: 0;
 }
 
 .cs-ab {
@@ -303,38 +362,119 @@
 .cs-ab-5 { background: var(--cs-ab-5); }
 .cs-ab-6 { background: var(--cs-ab-6); }
 
-.cs-meta {
-    margin-top: 8px;
-    font-size: 12px;
-    line-height: 1.8;
-    color: var(--color-text-secondary);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 14px;
+/* 四格属性：label 在上、value 在下，竖线分隔 */
+.cs-attrs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    margin: 14px 0 0;
+    padding: 12px 0;
+    border-top: 1px solid var(--color-border-divider);
+    border-bottom: 1px solid var(--color-border-divider);
 }
 
-.cs-meta em {
+.cs-attr {
+    padding: 0 14px;
+    border-left: 1px solid var(--color-border-divider);
+    min-width: 0;
+}
+
+.cs-attr:first-child {
+    border-left: 0;
+    padding-left: 0;
+}
+
+.cs-attr dt {
+    margin-bottom: 3px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--color-text-tertiary);
+}
+
+.cs-attr dd {
+    margin: 0;
+    min-width: 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 身份单独一行 */
+.cs-idline {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-top: 10px;
+    min-width: 0;
+    font-size: 12.5px;
+    color: var(--color-text-secondary);
+}
+
+.cs-idline em {
+    flex-shrink: 0;
     font-style: normal;
     font-size: 11px;
+    letter-spacing: 0.06em;
     color: var(--color-text-tertiary);
-    margin-right: 5px;
 }
 
-.cs-meta-block {
-    margin-top: 2px;
+.cs-idline span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 底部一行：能力在左，会馆与点赞在右 */
+.cs-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.cs-bottom-spacer {
+    flex: 1;
+}
+
+/* 卡片自身被拖窄（如浮窗缩到 380px）时，四格属性降为两列 */
+@container (max-width: 520px) {
+    .cs-attrs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px 0;
+    }
+
+    .cs-attr:nth-child(odd) {
+        border-left: 0;
+        padding-left: 0;
+    }
+}
+
+.cs-end {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
 }
 
 .cs-guild {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    margin-top: 8px;
+    max-width: 100%;
     font-size: 11.5px;
     line-height: 1.8;
     padding: 2px 10px;
     border-radius: 999px;
     color: var(--color-text-accent);
     background: rgba(63, 140, 134, 0.12);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .night-mode .cs-guild {
@@ -343,26 +483,25 @@
 }
 
 .cs-owner {
-    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 11.5px;
     color: var(--color-text-tertiary);
 }
 
 .cs-like {
-    position: absolute;
-    right: 12px;
-    top: 12px;
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 4px 11px;
+    padding: 3px 10px;
     border: 1px solid var(--color-border-card);
-    border-radius: 16px;
-    background: var(--color-bg-card);
+    border-radius: 999px;
+    background: transparent;
     color: var(--color-text-secondary);
     font-family: inherit;
-    font-size: 12px;
-    line-height: 1.5;
+    font-size: 11.5px;
+    line-height: 1.6;
     cursor: pointer;
     transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
 }
@@ -385,100 +524,215 @@
     cursor: default;
 }
 
-.cs-body {
-    padding: 0 16px 14px;
-}
-
 .cs-strip {
     display: grid;
     gap: 6px;
-    margin-top: 11px;
+    margin-top: 10px;
+    /* 安全网：图片只能在自己格子里画，防止任何浏览器绘制偏移压到上方正文 */
+    overflow: clip;
+    border-radius: 10px;
 }
 
-.cs-strip-1 { grid-template-columns: 1fr; }
+.cs-strip-1 {
+    grid-template-columns: 1fr;
+    justify-items: start;
+}
+
 .cs-strip-2 { grid-template-columns: repeat(2, 1fr); }
 .cs-strip-3 { grid-template-columns: repeat(3, 1fr); }
 
 .cs-strip img {
     width: 100%;
+    height: auto;
+    min-height: 0;
     aspect-ratio: 1 / 1;
     object-fit: cover;
     border-radius: 9px;
     display: block;
 }
 
+/* 单图：按原图比例展示（不强制 4:3 裁剪），只限制最大宽/高 */
 .cs-strip-1 img {
-    aspect-ratio: 4 / 3;
+    width: auto;
+    max-width: 100%;
+    max-height: 420px;
+    aspect-ratio: auto;
+    object-fit: contain;
+    border-radius: 10px;
 }
 
+/* ---------- 展开态详情：卷首引言 / 角色描述 / 图集 ---------- */
 .cs-more {
-    margin-top: 12px;
-    padding-top: 11px;
+    margin-top: 14px;
+    padding-top: 14px;
     border-top: 1px solid var(--color-border-divider);
 }
 
-.cs-desc {
-    margin-top: 6px;
-    font-size: 13px;
-    line-height: 1.9;
-    color: var(--color-text-secondary);
+/* 卷首引言：角色台词置顶，无框大引号 */
+.cs-lead-quote {
+    position: relative;
+    margin: 0 0 18px;
+    padding: 2px 4px 2px 26px;
 }
 
-.cs-quotes {
-    margin-top: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
+.cs-lead-qm {
+    position: absolute;
+    left: 0;
+    top: -7px;
+    font-family: Georgia, "Songti SC", serif;
+    font-size: 34px;
+    line-height: 1;
+    color: rgba(87, 148, 145, 0.35);
+    pointer-events: none;
 }
 
-.cs-quote {
+.night-mode .cs-lead-qm {
+    color: rgba(132, 168, 185, 0.4);
+}
+
+.cs-lead-line {
     margin: 0;
-    padding-left: 10px;
-    border-left: 2px solid var(--color-border-card);
-    font-size: 12.5px;
-    line-height: 1.75;
+    font-size: 14px;
+    line-height: 1.85;
     font-style: italic;
     color: var(--color-text-secondary);
 }
 
-.cs-expand {
-    width: 100%;
-    margin-top: 12px;
-    padding: 10px 0 2px;
-    border: 0;
-    border-top: 1px solid var(--color-border-divider);
-    background: transparent;
-    color: var(--color-text-accent);
-    font-family: inherit;
-    font-size: 12px;
-    cursor: pointer;
+.cs-lead-line + .cs-lead-line {
+    margin-top: 8px;
+}
+
+/* 分区：小标题 + 内容 */
+.cs-block {
+    margin-top: 16px;
+}
+
+/* 图集与上方正文之间拉开明确间距，避免贴边 */
+.cs-block + .cs-block {
+    margin-top: 20px;
+}
+
+.cs-block:first-child {
+    margin-top: 0;
+}
+
+.cs-block-title {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 5px;
-}
-
-.cs-expand:hover {
-    color: var(--color-primary);
-}
-
-.cs-expand i {
-    font-size: 13px;
-    transition: transform 0.2s ease;
-}
-
-.cs-expand.open i {
-    transform: rotate(180deg);
-}
-
-.cs-card-actions {
-    display: flex;
     gap: 8px;
-    flex-wrap: wrap;
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px dashed var(--color-border-divider);
+    margin: 0 0 9px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: var(--color-text-tertiary);
 }
+
+.cs-block-title::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--color-border-divider);
+}
+
+.cs-block-count {
+    font-size: 10px;
+    letter-spacing: 0;
+}
+
+.cs-block .cs-strip {
+    margin-top: 0;
+}
+
+/* 正文：窄窗口的字号/行高与块级排版（.rich-content.cs-desc 提高优先级，不依赖导入顺序） */
+.rich-content.cs-desc {
+    font-size: 13.5px;
+    line-height: 1.95;
+    color: var(--color-text-secondary);
+}
+
+.rich-content.cs-desc p {
+    margin: 0 0 0.7em;
+}
+
+.rich-content.cs-desc > :last-child {
+    margin-bottom: 0;
+}
+
+.rich-content.cs-desc strong {
+    color: var(--color-text-primary);
+    font-weight: 600;
+}
+
+/* 标题降档：浮窗窄，避免 h1 过嚣张 */
+.rich-content.cs-desc h1,
+.rich-content.cs-desc h2,
+.rich-content.cs-desc h3,
+.rich-content.cs-desc h4,
+.rich-content.cs-desc h5,
+.rich-content.cs-desc h6 {
+    margin: 1em 0 0.45em;
+    color: var(--color-text-primary);
+    font-weight: 600;
+    line-height: 1.45;
+}
+
+.rich-content.cs-desc h1 { font-size: 1.3em; }
+.rich-content.cs-desc h2 { font-size: 1.18em; }
+.rich-content.cs-desc h3 { font-size: 1.08em; }
+.rich-content.cs-desc h4,
+.rich-content.cs-desc h5,
+.rich-content.cs-desc h6 { font-size: 1em; }
+
+.rich-content.cs-desc ul {
+    margin: 0.5em 0 0.8em;
+    padding-left: 1.3em;
+    list-style: disc;
+}
+
+.rich-content.cs-desc ol {
+    margin: 0.5em 0 0.8em;
+    padding-left: 1.3em;
+    list-style: decimal;
+}
+
+.rich-content.cs-desc li {
+    margin: 0.25em 0;
+    list-style: inherit;
+}
+
+/* 正文引用块：与卷首语录区分（语录=大引号斜体，正文引用=淡底竖线） */
+.rich-content.cs-desc blockquote {
+    margin: 0.9em 0 0;
+    padding: 0.5em 0.9em;
+    border-left: 2px solid var(--color-border-card);
+    border-radius: 0 8px 8px 0;
+    background: rgba(106, 140, 137, 0.05);
+    font-size: 0.96em;
+    color: var(--color-text-secondary);
+}
+
+.night-mode .rich-content.cs-desc blockquote {
+    background: rgba(132, 168, 185, 0.08);
+}
+
+.rich-content.cs-desc img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 10px;
+    margin: 0.7em 0;
+}
+
+.rich-content.cs-desc pre {
+    margin: 0.8em 0;
+    padding: 10px 12px;
+    overflow-x: auto;
+}
+
+.rich-content.cs-desc hr {
+    margin: 1.1em 0;
+}
+
+/* 卡片底部已合并到 `.cs-head-actions` 与 `.cs-bottom` */
 
 /* ---------- 按钮 ---------- */
 .cs-btn {
@@ -645,6 +899,43 @@
     color: var(--color-text-secondary);
 }
 
+/* 头部右侧：状态徽标 + 单独打开 */
+.cs-window-head-extra {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* 仅详情浮窗：把头部操作推到最右侧（紧贴关闭按钮） */
+.cs-viewer .cs-window-head-extra {
+    margin-left: auto;
+}
+
+.cs-window-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 7px;
+    color: var(--color-text-tertiary);
+    font-size: 11px;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.cs-window-action:hover {
+    background: var(--color-bg-item-hover);
+    color: var(--color-text-accent);
+}
+
+.cs-window-action i {
+    font-size: 11px;
+}
+
 .cs-window-body {
     flex: 1;
     min-height: 0;
@@ -672,28 +963,55 @@
     z-index: 2;
 }
 
-.cs-resize-e {
+/* 缩放手柄：FloatingWindow 实际输出的是 fw-resize-*（与 cs-resize 基类叠加），
+   以前写成 .cs-resize-* 导致手柄零尺寸、完全拖不动。 */
+.fw-resize-e {
     top: 44px;
     right: 0;
     bottom: 12px;
-    width: 6px;
+    width: 8px;
     cursor: ew-resize;
 }
 
-.cs-resize-s {
+.fw-resize-s {
     left: 12px;
     right: 12px;
     bottom: 0;
-    height: 6px;
+    height: 8px;
     cursor: ns-resize;
 }
 
-.cs-resize-se {
+.fw-resize-se {
     right: 0;
     bottom: 0;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     cursor: nwse-resize;
+}
+
+/* 右下角拖拽柄：品牌色斜纹，提示可自由缩放（不用白边高亮） */
+.fw-resize-se::after {
+    content: "";
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    width: 9px;
+    height: 9px;
+    background-image: repeating-linear-gradient(
+        -45deg,
+        rgba(106, 140, 137, 0.5) 0 1.5px,
+        transparent 1.5px 4px
+    );
+    border-radius: 1px;
+    pointer-events: none;
+}
+
+.night-mode .fw-resize-se::after {
+    background-image: repeating-linear-gradient(
+        -45deg,
+        rgba(132, 168, 185, 0.55) 0 1.5px,
+        transparent 1.5px 4px
+    );
 }
 
 .cs-status {
@@ -1082,7 +1400,7 @@
 .cs-media-avatar > img {
     width: 72px;
     height: 72px;
-    border-radius: 50%;
+    border-radius: 16px;
     object-fit: cover;
     display: flex;
     align-items: center;
@@ -1349,29 +1667,48 @@
 
 /* ---------- 移动端 ---------- */
 @media (max-width: 700px) {
-    .cs-portrait {
-        width: 104px;
-        height: 128px;
-        font-size: 36px;
+    .cs-card {
+        padding: 14px 14px 12px;
     }
 
-    .cs-info {
-        padding: 12px 12px 10px 11px;
+    .cs-head {
+        gap: 11px;
+    }
+
+    .cs-avatar {
+        width: 60px;
+        height: 60px;
+        border-radius: 14px;
+        font-size: 22px;
     }
 
     .cs-name {
-        font-size: 18px;
+        font-size: 16px;
     }
 
-    .cs-body {
-        padding: 0 12px 12px;
+    .cs-head-actions {
+        gap: 6px;
     }
 
-    .cs-like {
-        right: 8px;
-        top: 8px;
-        padding: 3px 9px;
-        font-size: 11px;
+    .cs-edit-btn {
+        width: 28px;
+        padding: 0;
+    }
+
+    .cs-edit-btn .cs-edit-label {
+        display: none;
+    }
+
+    /* 四格属性在手机改两列，奇数列去分隔线 */
+    .cs-attrs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px 0;
+        padding: 11px 0;
+    }
+
+    .cs-attr:nth-child(odd) {
+        border-left: 0;
+        padding-left: 0;
     }
 
     .cs-window {
@@ -1398,6 +1735,17 @@
         padding-top: calc(10px + env(safe-area-inset-top));
         cursor: default;
         touch-action: auto;
+    }
+
+    /* 手机上只留图标，把标题空间留给名字 */
+    .cs-window-action {
+        width: 26px;
+        padding: 0;
+        justify-content: center;
+    }
+
+    .cs-window-action span {
+        display: none;
     }
 
     .cs-resize {

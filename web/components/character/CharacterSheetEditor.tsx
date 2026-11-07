@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import FloatingWindow from "@/components/ui/FloatingWindow";
 import RichTextEditor from "@/components/editor/RichTextEditor";
+import ImageEditModal from "./ImageEditModal";
 import { useToast } from "@/components/Toast";
 import { ApiException, guildApi, mediaApi, type GuildListItem } from "@/lib/api";
 import {
@@ -28,7 +29,7 @@ type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 const AUTOSAVE_DELAY = 3000;
 const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
-const MAX_IMAGE_BYTES = 5 << 20;
+const MAX_IMAGE_BYTES = 10 << 20;
 
 const SECTIONS = [
   { key: "basic", label: "基本档案" },
@@ -71,6 +72,8 @@ export default function CharacterSheetEditor({ sheetId, onClose, onSaved }: Char
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [uploading, setUploading] = useState<"avatar" | "image" | null>(null);
+  // 选图后先进裁剪模态框，确认后才是上传
+  const [pendingImage, setPendingImage] = useState<{ file: File; kind: "avatar" | "image" } | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey>("basic");
@@ -285,16 +288,22 @@ export default function CharacterSheetEditor({ sheetId, onClose, onSaved }: Char
     }
   };
 
-  const pickImage = async (file: File | undefined, kind: "avatar" | "image") => {
+  /** 选图：仅做格式/体积预校验，然后弹出裁剪框 */
+  const pickImage = (file: File | undefined, kind: "avatar" | "image") => {
     if (!file) return;
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
       toast("仅支持 PNG/JPG/WebP/GIF", "error");
       return;
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      toast("图片大小不能超过 5MB", "error");
+      toast("图片大小不能超过 10MB", "error");
       return;
     }
+    setPendingImage({ file, kind });
+  };
+
+  /** 上传裁剪后的图片 */
+  const uploadImage = async (file: File, kind: "avatar" | "image") => {
     setUploading(kind);
     try {
       const r = await mediaApi.upload(file, kind === "avatar" ? "character_avatar" : "character_image");
@@ -304,6 +313,8 @@ export default function CharacterSheetEditor({ sheetId, onClose, onSaved }: Char
         const next = [...formRef.current.image_media_ids, r.id].slice(0, CHARACTER_LIMITS.images);
         update({ image_media_ids: next });
       }
+      setPendingImage(null);
+      toast(kind === "avatar" ? "头像已更新" : "图片已添加", "success");
     } catch (e) {
       toast(e instanceof ApiException ? e.message : "上传失败", "error");
     } finally {
@@ -362,7 +373,7 @@ export default function CharacterSheetEditor({ sheetId, onClose, onSaved }: Char
       placement="center"
       titleId="cs-editor-title"
       closeAriaLabel="关闭编辑器"
-      escapeGuardSelector=".follow-list-overlay, .donate-overlay"
+      escapeGuardSelector=".follow-list-overlay, .donate-overlay, .ie-modal"
       classes={{
         root: "cs-window",
         header: "cs-window-header",
@@ -605,6 +616,8 @@ export default function CharacterSheetEditor({ sheetId, onClose, onSaved }: Char
                 value={form.description_html}
                 onChange={(html) => update({ description_html: html })}
                 placeholder="详细描写这个角色：来历、性格、与谁有关…"
+                stickyToolbar={false}
+                contentMaxHeight={300}
               />
             </section>
 
@@ -795,6 +808,19 @@ export default function CharacterSheetEditor({ sheetId, onClose, onSaved }: Char
           </div>
         </div>
       )}
+
+      {pendingImage ? (
+        <ImageEditModal
+          key={`${pendingImage.kind}-${pendingImage.file.name}-${pendingImage.file.size}-${pendingImage.file.lastModified}`}
+          file={pendingImage.file}
+          mode={pendingImage.kind}
+          busy={uploading === pendingImage.kind}
+          onCancel={() => {
+            if (!uploading) setPendingImage(null);
+          }}
+          onConfirm={(cropped) => void uploadImage(cropped, pendingImage.kind)}
+        />
+      ) : null}
     </FloatingWindow>
   );
 }

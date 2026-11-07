@@ -1,6 +1,6 @@
 "use client";
 
-// 设定详情悬浮窗（桌面「展开更多」；移动端走卡片内联展开，不打开本窗）。
+// 设定详情悬浮窗（桌面「显示更多」；移动端走卡片内联展开，不打开本窗）。
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -53,12 +53,22 @@ export default function CharacterSheetWindow({ sheetId, onClose, onLikeChange }:
       open
       onClose={onClose}
       title={<>{sheet?.name || "角色设定"}</>}
-      headerExtra={sheet?.status === 1 ? <span className="cs-status cs-status-1">已公开</span> : null}
-      storageKeyPrefix="ouo:character-viewer"
-      defaultWidth={520}
+      headerExtra={
+        sheet ? (
+          <span className="cs-window-head-extra">
+            {sheet.status === 1 ? <span className="cs-status cs-status-1">已公开</span> : null}
+            <Link href={`/character/${sheet.id}`} className="cs-window-action" title="在新页面打开完整设定">
+              <i className="fa fa-external-link" aria-hidden="true"></i>
+              <span>单独打开</span>
+            </Link>
+          </span>
+        ) : null
+      }
+      storageKeyPrefix="ouo:character-viewer-v2"
+      defaultWidth={720}
       defaultHeight={560}
-      minWidth={380}
-      minHeight={360}
+      minWidth={400}
+      minHeight={420}
       placement="right"
       titleId="cs-viewer-title"
       closeAriaLabel="关闭设定"
@@ -81,16 +91,13 @@ export default function CharacterSheetWindow({ sheetId, onClose, onLikeChange }:
       ) : (
         <div className="cs-viewer-inner">
           <CharacterSheetCard sheet={sheet} expanded hideExpand onLike={sheet.mine ? undefined : handleLike} showOwner />
-          <div className="cs-viewer-foot">
-            <Link href={`/character/${sheet.id}`} className="cs-btn cs-btn-ghost">
-              <i className="fa fa-external-link" aria-hidden="true"></i> 单独打开
-            </Link>
-            {sheet.owner_name ? (
+          {sheet.owner_name ? (
+            <div className="cs-viewer-foot">
               <Link href={`/users/${sheet.user_id}`} className="cs-viewer-owner">
                 来自 {sheet.owner_name} 的个人主页
               </Link>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </div>
       )}
     </FloatingWindow>

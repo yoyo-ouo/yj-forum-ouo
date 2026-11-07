@@ -172,7 +172,7 @@ export default function CharacterSheetSection({ userId, isSelf, hidden = false }
             </p>
           ) : null}
           {!isMobile && active?.status === 1 ? (
-            <p className="cs-section-hint cs-section-hint-desktop">展开更多会用悬浮窗展示完整设定，可拖拽、可调整大小。</p>
+            <p className="cs-section-hint cs-section-hint-desktop">点「显示更多」会用悬浮窗展示完整设定，可拖拽、可调整大小。</p>
           ) : null}
         </>
       )}
