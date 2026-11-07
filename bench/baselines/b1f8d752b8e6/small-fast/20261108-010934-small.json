@@ -1,0 +1,258 @@
+{
+  "run": {
+    "run_id": "20261108-010934-small",
+    "scale": "small",
+    "profile": "fast",
+    "fingerprint": {
+      "cpu": "AMD Ryzen 5 7500F 6-Core Processor",
+      "cores": 12,
+      "mem_mb": 15075,
+      "pg": "18.6(Debian18.6-1.pgdg13+2)",
+      "k6": "2.3.0+dirty",
+      "go": "go1.26.8"
+    },
+    "fingerprint_key": "b1f8d752b8e6",
+    "config_hash": "01ae02232223",
+    "started_at": "2026-11-07T17:09:35Z",
+    "finished_at": "2026-11-07T17:12:45Z"
+  },
+  "generated_at": "2026-11-07T17:12:45Z",
+  "warm": [
+    {
+      "name": "read-anon",
+      "phase": "warm",
+      "rps": 1999.9016794337044,
+      "count": 40000,
+      "p50_ms": 0.17858849999999998,
+      "p95_ms": 1.393342499999999,
+      "p99_ms": 2.6523249100000013,
+      "fail_rate": 0,
+      "dropped_iterations": 0,
+      "checks_pass": 0,
+      "checks_fail": 0,
+      "index": 0,
+      "delta_pct": 0
+    },
+    {
+      "name": "search",
+      "phase": "warm",
+      "rps": 119.99466518117964,
+      "count": 2400,
+      "p50_ms": 0.252434,
+      "p95_ms": 1.716917399999999,
+      "p99_ms": 2.179478159999998,
+      "fail_rate": 0,
+      "dropped_iterations": 0,
+      "checks_pass": 0,
+      "checks_fail": 0,
+      "index": 0,
+      "delta_pct": 0
+    },
+    {
+      "name": "read-auth",
+      "phase": "warm",
+      "rps": 799.8607570399714,
+      "count": 16000,
+      "p50_ms": 2.2724385,
+      "p95_ms": 13.746016,
+      "p99_ms": 18.3941754,
+      "fail_rate": 0,
+      "dropped_iterations": 0,
+      "checks_pass": 0,
+      "checks_fail": 0,
+      "index": 0,
+      "delta_pct": 0
+    },
+    {
+      "name": "write",
+      "phase": "warm",
+      "rps": 199.98309005769468,
+      "count": 4001,
+      "p50_ms": 5.493736,
+      "p95_ms": 9.485865,
+      "p99_ms": 15.401772,
+      "fail_rate": 0,
+      "dropped_iterations": 0,
+      "checks_pass": 0,
+      "checks_fail": 0,
+      "index": 0,
+      "delta_pct": 0
+    },
+    {
+      "name": "media",
+      "phase": "warm",
+      "rps": 99.99847864314562,
+      "count": 2000,
+      "p50_ms": 2.0631570000000004,
+      "p95_ms": 3.6314827,
+      "p99_ms": 5.401709459999998,
+      "fail_rate": 0,
+      "dropped_iterations": 0,
+      "checks_pass": 0,
+      "checks_fail": 0,
+      "index": 0,
+      "delta_pct": 0
+    },
+    {
+      "name": "mixed",
+      "phase": "warm",
+      "rps": 1199.966755126285,
+      "count": 24001,
+      "p50_ms": 0.91224,
+      "p95_ms": 7.518576,
+      "p99_ms": 12.566597,
+      "fail_rate": 0,
+      "dropped_iterations": 0,
+      "checks_pass": 0,
+      "checks_fail": 0,
+      "index": 0,
+      "delta_pct": 0
+    }
+  ],
+  "cold": null,
+  "sse": {
+    "connections": 300,
+    "events": 60600,
+    "disconnects": 0,
+    "events_per_sec": 3029.18796633916,
+    "connect_p50_ms": 224.608,
+    "connect_p95_ms": 331.776,
+    "connect_p99_ms": 350.664,
+    "first_event_p95_ms": 331.836,
+    "connect_errors": 0
+  },
+  "composite_score": 0,
+  "has_baseline": false,
+  "baseline_same_fingerprint": false,
+  "valid": true,
+  "bottleneck": {
+    "pool_max_conns": 10,
+    "pool_peak_acquired": 10,
+    "pool_empty_acquire": 1213,
+    "pool_acquire_ms": 58482,
+    "cache_hit_rate": 78.7190423775454,
+    "cache_hits": 57213,
+    "cache_misses": 15467,
+    "peak_rss_mb": 88.22265625,
+    "cpu_total_sec": 26,
+    "goroutine_peak": 611,
+    "heap_peak_mb": 33.237022399902344,
+    "pg_hit_rate": 99.99798092057014,
+    "top_sql": [
+      {
+        "calls": 2430,
+        "total_exec_ms": 25824.464115000002,
+        "mean_exec_ms": 10.62735148765433,
+        "query": "SELECT c.id, c.post_id, c.user_id, c.content, c.content_format, c.parent_id, c.likes, c.status,\n\t\tc.created_at, u.name, u.avatar,\n\t\tCOALESCE(g.name, $4), COALESCE(g.theme_color, $5), COALESCE(g.leader_user_id = c.user_id, $6),\n\t\tp.title\n\t\tFROM comments c JOIN users u ON c.user_id = u.id\n\t\tJOIN comme"
+      },
+      {
+        "calls": 2375,
+        "total_exec_ms": 5001.327418999993,
+        "mean_exec_ms": 2.105822071157892,
+        "query": "SELECT p.id, p.user_id, p.title, CASE WHEN p.content_format = $4 THEN LEFT(regexp_replace(p.content, $5, $6, $7), $8) ELSE LEFT(p.content, $9) END, p.category, p.likes, p.views,\n\t\tp.created_at, u.name, u.avatar,\n\t\t(SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = $10) AS comment"
+      },
+      {
+        "calls": 3095,
+        "total_exec_ms": 2223.8538600000024,
+        "mean_exec_ms": 0.718531134087238,
+        "query": "SELECT p.id, p.user_id, p.title, CASE WHEN p.content_format = $4 THEN LEFT(regexp_replace(p.content, $5, $6, $7), $8) ELSE LEFT(p.content, $9) END, p.category, p.likes, p.views,\n\t\tp.created_at, u.name, u.avatar,\n\t\t(SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = $10) AS comment"
+      },
+      {
+        "calls": 2015,
+        "total_exec_ms": 1137.5980629999997,
+        "mean_exec_ms": 0.5645647955334977,
+        "query": "SELECT * FROM ((SELECT $4 AS type, p.id, p.title, CASE WHEN p.content_format = $5 THEN LEFT(regexp_replace(p.content, $6, $7, $8), $9) ELSE LEFT(p.content, $10) END AS summary, p.category,\n\tp.likes, p.views, p.created_at, p.updated_at,\n\tp.user_id, u.name, u.avatar,\n\tp.guild_id, g.name, g.theme_color"
+      },
+      {
+        "calls": 2430,
+        "total_exec_ms": 967.5038119999996,
+        "mean_exec_ms": 0.3981497168724275,
+        "query": "SELECT COUNT(*) FROM comments c\n\t\tWHERE c.parent_id IN (SELECT id FROM comments WHERE user_id = $1 AND status = $2)\n\t\tAND c.status = $3 AND c.user_id \u003c\u003e $1"
+      },
+      {
+        "calls": 16965,
+        "total_exec_ms": 935.4334959999993,
+        "mean_exec_ms": 0.05513902127910386,
+        "query": "SELECT p.id, p.user_id, p.title, p.content, p.content_format, p.category, p.likes, p.views, p.status,\n\t\tp.created_at, p.updated_at, u.name, u.avatar, p.guild_id, g.name, g.theme_color,\n\t\tCOALESCE(ug.name, $2), COALESCE(ug.theme_color, $3), COALESCE(ug.leader_user_id = p.user_id, $4),\n\t\tp.published_a"
+      },
+      {
+        "calls": 12001,
+        "total_exec_ms": 914.5678690000012,
+        "mean_exec_ms": 0.07620763844679597,
+        "query": "SELECT c.id, c.post_id, c.user_id, c.content, c.content_format, c.parent_id, c.likes, c.status,\n\t\tc.created_at, u.name, u.avatar,\n\t\tCOALESCE(g.name, $3), COALESCE(g.theme_color, $4), COALESCE(g.leader_user_id = c.user_id, $5)\n\t\tFROM comments c JOIN users u ON c.user_id = u.id\n\t\tLEFT JOIN guild_membe"
+      },
+      {
+        "calls": 31416,
+        "total_exec_ms": 779.6254659999992,
+        "mean_exec_ms": 0.024816191303794283,
+        "query": "SELECT s.user_id FROM sessions s\n\t\tJOIN users u ON u.id = s.user_id\n\t\tWHERE s.token=$1 AND s.expires_at \u003e NOW()\n\t\t  AND COALESCE(u.is_banned, $2) = $3 AND u.deleted_at IS NULL"
+      },
+      {
+        "calls": 5115,
+        "total_exec_ms": 520.3919460000018,
+        "mean_exec_ms": 0.10173840586510258,
+        "query": "INSERT INTO notifications\n\t\t(user_id, type, actor_id, target_type, target_id, context_post_id, context_comment_id, payload, dedupe_key)\n\t\tVALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)\n\t\tON CONFLICT (dedupe_key) WHERE dedupe_key \u003c\u003e $10 DO NOTHING\n\t\tRETURNING id"
+      },
+      {
+        "calls": 1378,
+        "total_exec_ms": 440.76957400000015,
+        "mean_exec_ms": 0.3198618098693754,
+        "query": "SELECT p.id, p.user_id, p.title, CASE WHEN p.content_format = $3 THEN LEFT(regexp_replace(p.content, $4, $5, $6), $7) ELSE LEFT(p.content, $8) END, p.category, p.likes, p.views,\n\t       p.created_at, u.name, u.avatar,\n\t       (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = $9)"
+      }
+    ],
+    "seq_scans": [
+      {
+        "table": "guilds",
+        "seq_scan": 60378,
+        "idx_scan": 202933
+      },
+      {
+        "table": "guild_members",
+        "seq_scan": 41043,
+        "idx_scan": 217825
+      },
+      {
+        "table": "users",
+        "seq_scan": 35235,
+        "idx_scan": 381068
+      },
+      {
+        "table": "spirit_daily_usage",
+        "seq_scan": 3275,
+        "idx_scan": 571
+      },
+      {
+        "table": "guild_articles",
+        "seq_scan": 2625,
+        "idx_scan": 3498
+      },
+      {
+        "table": "guide_nodes",
+        "seq_scan": 1973,
+        "idx_scan": 10
+      },
+      {
+        "table": "schema_migrations",
+        "seq_scan": 69,
+        "idx_scan": 0
+      },
+      {
+        "table": "posts",
+        "seq_scan": 36,
+        "idx_scan": 202277
+      },
+      {
+        "table": "media_assets",
+        "seq_scan": 15,
+        "idx_scan": 1261
+      },
+      {
+        "table": "comments",
+        "seq_scan": 14,
+        "idx_scan": 4646362
+      }
+    ]
+  },
+  "capacity_max_rps": 0,
+  "capacity_slo_ms": 200
+}

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "phases": ["cold", "warm"],
+  "scoring": {
+    "clamp": [10, 400],
+    "error_rate_invalid": 0.01,
+    "weights": {
+      "read-anon": 0.25,
+      "search": 0.15,
+      "read-auth": 0.10,
+      "write": 0.10,
+      "media": 0.05,
+      "mixed": 0.30,
+      "sse": 0.05
+    }
+  },
+  "scenarios": [
+    {"name": "smoke", "script": "smoke.js", "duration": "30s", "vus": 1},
+    {"name": "read-anon", "script": "read-anon.js", "duration": "60s", "rate": 300, "pre_vus": 50, "max_vus": 200},
+    {"name": "search", "script": "search.js", "duration": "45s", "rate": 20, "pre_vus": 20, "max_vus": 80},
+    {"name": "read-auth", "script": "read-auth.js", "duration": "45s", "rate": 120, "pre_vus": 30, "max_vus": 120},
+    {"name": "write", "script": "write.js", "duration": "45s", "rate": 30, "pre_vus": 20, "max_vus": 80},
+    {"name": "media", "script": "media.js", "duration": "30s", "rate": 20, "pre_vus": 10, "max_vus": 40},
+    {"name": "mixed", "script": "mixed.js", "duration": "90s", "rate": 250, "pre_vus": 60, "max_vus": 250}
+  ],
+  "sse": {
+    "connections": 200,
+    "duration": "30s"
+  }
+}
