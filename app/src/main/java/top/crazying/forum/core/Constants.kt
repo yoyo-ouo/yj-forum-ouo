@@ -91,19 +91,6 @@ object Constants {
         chain.proceed(applyClientHeaders(chain.request()))
     }
 
-    /** WIKI 页（已改为原生 Compose 渲染，仅 Live2D 子页用 WebView 兜底）。 */
-    const val WIKI_PATH = "/WIKI"
-    val WIKI_URL = BASE_URL + WIKI_PATH
-
-    /** Live2D 交互模型页（唯一保留 WebView 的页面，已注入样式去掉网页外壳）。 */
-    const val LIVE2D_PATH = "/Live2D"
-    val LIVE2D_URL = BASE_URL + LIVE2D_PATH
-
-    /** WIKI 静态资源（封面 / 横幅 / 说明文档）。 */
-    const val WIKI_IMG_DIR = "/static/img/wiki"
-    const val MOUSE_IMG_DIR = "/static/img/mouse/Liunx"
-    const val MOUSE_README_PATH = "/static/mouse/Liunx/README.md"
-
     const val HEALTHZ_PATH = API_PREFIX + "/healthz"
 
     // ────────────────── 应用更新 ──────────────────

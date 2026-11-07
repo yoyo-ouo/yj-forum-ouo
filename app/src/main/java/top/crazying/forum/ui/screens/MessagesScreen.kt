@@ -118,9 +118,10 @@ fun MessagesScreen(nav: Navigator) {
             val lastId = page.maxOfOrNull { it.optLong("id", 0L) } ?: 0L
             if (lastId > 0) App.api.markChatRead(lastId)
         } else {
-            // 首屏已拉到最新一页，直接以服务端当前时间为界标记已读；
-            // 不传客户端时间，避免设备时钟偏差 / 时间串比较误差导致最新一条漏标。
-            App.api.markMessagesRead(category)
+            // 以列表最新一条的 created_at 为水位，避免把拉取之后才到达、
+            // 用户尚未看到的新消息一并标记为已读。
+            val latest = page.firstOrNull()?.optString("created_at").orEmpty()
+            App.api.markMessagesRead(category, latest.ifBlank { null })
         }
     }
 

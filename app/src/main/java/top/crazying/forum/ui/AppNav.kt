@@ -13,7 +13,6 @@ sealed interface Screen {
     data object Home : Screen
     data object Forum : Screen
     data object World : Screen
-    data object Wiki : Screen
     data object EasterEgg : Screen
     data object Me : Screen
 
@@ -42,7 +41,6 @@ val BOTTOM_TABS: List<Tab> = listOf(
     Tab("首页", Screen.Home),
     Tab("论坛", Screen.Forum),
     Tab("世界", Screen.World),
-    Tab("WIKI", Screen.Wiki),
     Tab("彩蛋", Screen.EasterEgg),
     Tab("我的", Screen.Me),
 )

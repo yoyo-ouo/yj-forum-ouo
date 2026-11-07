@@ -46,7 +46,6 @@ import top.crazying.forum.ui.screens.PrivacyScreen
 import top.crazying.forum.ui.screens.ProfileEditScreen
 import top.crazying.forum.ui.screens.SearchScreen
 import top.crazying.forum.ui.screens.UserScreen
-import top.crazying.forum.ui.screens.WikiScreen
 import top.crazying.forum.ui.screens.WorldScreen
 import top.crazying.forum.ui.screens.YearConvertScreen
 
@@ -55,7 +54,7 @@ import top.crazying.forum.ui.screens.YearConvertScreen
  *
  * insets 策略：最外层 Scaffold 刻意关掉 contentWindowInsets（`WindowInsets(0,0,0,0)`），
  * 由各页面自行用 `statusBarsPadding()` / `navigationBarsPadding()` / `imePadding()` 处理，
- * 这样 WIKI（全屏 WebView）等页面可以自行决定是否让内容顶到状态栏。
+ * 这样各页面可以自行决定是否让内容顶到状态栏。
  */
 @Composable
 fun ForumRoot() {
@@ -174,7 +173,6 @@ fun ForumRoot() {
                             Screen.Home -> HomeScreen(nav, feedStore)
                             Screen.Forum -> ForumScreen(nav, feedStore)
                             Screen.World -> WorldScreen(nav, feedStore, rootScope)
-                            Screen.Wiki -> WikiScreen()
                             Screen.EasterEgg -> EasterEggScreen(nav)
                             Screen.Me -> MeScreen(nav)
                             Screen.Messages -> MessagesScreen(nav)
@@ -211,7 +209,6 @@ private fun tabIcon(screen: Screen): ImageVector = when (screen) {
     Screen.Home -> LineIcons.Home
     Screen.Forum -> LineIcons.Forum
     Screen.World -> LineIcons.World
-    Screen.Wiki -> LineIcons.Book
     Screen.EasterEgg -> LineIcons.Sparkle
     else -> LineIcons.User
 }

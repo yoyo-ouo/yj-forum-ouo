@@ -91,7 +91,6 @@ fun ForumDrawer(
         DrawerEntry("首页", LineIcons.Home, Screen.Home),
         DrawerEntry("论坛", LineIcons.Forum, Screen.Forum),
         DrawerEntry("世界", LineIcons.World, Screen.World),
-        DrawerEntry("WIKI", LineIcons.Book, Screen.Wiki),
         DrawerEntry("彩蛋", LineIcons.Sparkle, Screen.EasterEgg),
         DrawerEntry("消息中心", LineIcons.Bell, Screen.Messages, badge = true),
         DrawerEntry("我的", LineIcons.User, Screen.Me),

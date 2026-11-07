@@ -169,7 +169,6 @@ fun EasterEggScreen(nav: Navigator) {
                 .background(colors.bgCard)
                 .padding(4.dp),
         ) {
-            EggLink("访问 WIKI") { nav.switchTab(Screen.Wiki) }
             EggLink("进入世界频道") { nav.switchTab(Screen.World) }
             EggLink("搜索帖子与用户") { nav.push(Screen.Search()) }
         }
