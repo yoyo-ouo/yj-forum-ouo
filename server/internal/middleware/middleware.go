@@ -173,45 +173,133 @@ func SecurityHeaders() gin.HandlerFunc {
 	}
 }
 
-func shouldGzip(c *gin.Context) bool {
-	ct := c.Writer.Header().Get("Content-Type")
-	return strings.Contains(ct, "text/") || strings.Contains(ct, "application/json") ||
-		strings.Contains(ct, "application/javascript") || strings.Contains(ct, "image/svg+xml")
+// gzipEligible 该 Content-Type 是否值得压缩。
+// SSE（text/event-stream）必须排除：压缩会缓冲事件，实时推送直接失效。
+func gzipEligible(contentType string) bool {
+	if contentType == "" || strings.Contains(contentType, "text/event-stream") {
+		return false
+	}
+	return strings.Contains(contentType, "text/") ||
+		strings.Contains(contentType, "application/json") ||
+		strings.Contains(contentType, "application/javascript") ||
+		strings.Contains(contentType, "image/svg+xml")
 }
 
-// gzipWriter 包装 ResponseWriter 做 gzip 压缩。
+// gzipWriter 延迟决定是否压缩的 ResponseWriter。
+//
+// 为什么必须延迟：Content-Type 由 handler 在写响应时才设置（c.JSON → writeContentType），
+// 中间件在 c.Next() 之前读 Header 时它还是空的——旧实现据此判断，于是永远不压缩。
+// 这里把「写响应头」推迟到第一次 Write（此时 Content-Type 已就绪）；
+// 无 body 的响应（204/304/重定向）由 Gzip 尾部 finish() 兜底写出。
 type gzipWriter struct {
 	gin.ResponseWriter
-	writer *gzip.Writer
+	acceptGzip  bool
+	decided     bool
+	compress    bool
+	status      int
+	wroteHeader bool
+	gz          *gzip.Writer
+}
+
+// Status 返回待写出的状态码（gin 的 Logger 在 c.Next() 之后读取）。
+func (g *gzipWriter) Status() int {
+	if g.status != 0 {
+		return g.status
+	}
+	return g.ResponseWriter.Status()
+}
+
+// Written 是否已向后端写出响应头。
+func (g *gzipWriter) Written() bool {
+	return g.wroteHeader || g.ResponseWriter.Written()
+}
+
+// WriteHeader 暂存状态码，等第一次 Write 时连同 Content-Encoding 一起写出。
+func (g *gzipWriter) WriteHeader(code int) {
+	if g.decided {
+		g.ResponseWriter.WriteHeader(code)
+		return
+	}
+	g.status = code
+}
+
+// WriteHeaderNow gin 在渲染前调用；此时 body 还没写，不能提前落盘响应头。
+func (g *gzipWriter) WriteHeaderNow() {
+	if g.wroteHeader {
+		g.ResponseWriter.WriteHeaderNow()
+		return
+	}
+	if g.status == 0 {
+		g.status = g.ResponseWriter.Status()
+	}
+}
+
+// decide 首次写 body 时确定是否压缩，并写出响应头。
+func (g *gzipWriter) decide() {
+	if g.decided {
+		return
+	}
+	g.decided = true
+	if g.acceptGzip && gzipEligible(g.ResponseWriter.Header().Get("Content-Type")) {
+		h := g.ResponseWriter.Header()
+		h.Set("Content-Encoding", "gzip")
+		h.Add("Vary", "Accept-Encoding")
+		// 压缩后长度未知，必须丢掉（否则客户端会截断/挂起）
+		h.Del("Content-Length")
+		g.compress = true
+		g.gz = gzip.NewWriter(g.ResponseWriter)
+	}
+	if g.status == 0 {
+		g.status = g.ResponseWriter.Status()
+	}
+	g.ResponseWriter.WriteHeader(g.status)
+	g.wroteHeader = true
 }
 
 func (g *gzipWriter) Write(data []byte) (int, error) {
-	return g.writer.Write(data)
+	g.decide()
+	if g.compress {
+		return g.gz.Write(data)
+	}
+	return g.ResponseWriter.Write(data)
 }
 
-// Flush 透传 flush，避免流式响应被 gzip 缓冲。
+func (g *gzipWriter) WriteString(s string) (int, error) {
+	g.decide()
+	if g.compress {
+		return g.gz.Write([]byte(s))
+	}
+	return g.ResponseWriter.WriteString(s)
+}
+
+// Flush 先落定压缩决策，再透传 flush（避免流式响应被 gzip 缓冲）。
 func (g *gzipWriter) Flush() {
-	_ = g.writer.Flush()
+	g.decide()
+	if g.compress {
+		_ = g.gz.Flush()
+	}
 	g.ResponseWriter.Flush()
 }
 
-// Gzip 压缩中间件。
+// finish 收尾：保证响应头一定写出（含 204/304 等无 body 情况）并关闭 gzip 流。
+func (g *gzipWriter) finish() {
+	g.decide()
+	if g.compress {
+		_ = g.gz.Close()
+	}
+}
+
+// Gzip 压缩中间件（JSON/文本响应启用 gzip，SSE 与 HEAD 除外）。
 func Gzip() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ct := c.Writer.Header().Get("Content-Type")
-		if !strings.Contains(ct, "text/event-stream") &&
-			strings.Contains(c.GetHeader("Accept-Encoding"), "gzip") &&
-			(strings.Contains(ct, "text/") || strings.Contains(ct, "application/json") || strings.Contains(ct, "application/javascript") || strings.Contains(ct, "image/svg+xml")) {
-			gz := gzip.NewWriter(c.Writer)
-			gw := &gzipWriter{ResponseWriter: c.Writer, writer: gz}
-			c.Writer.Header().Set("Content-Encoding", "gzip")
-			c.Writer.Header().Add("Vary", "Accept-Encoding")
-			c.Writer = gw
+		if c.Request.Method == http.MethodHead || !strings.Contains(c.GetHeader("Accept-Encoding"), "gzip") {
 			c.Next()
-			gz.Close()
 			return
 		}
+		gw := &gzipWriter{ResponseWriter: c.Writer, acceptGzip: true}
+		c.Writer = gw
 		c.Next()
+		gw.finish()
 	}
 }
 

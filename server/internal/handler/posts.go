@@ -279,9 +279,15 @@ func (h *PostsHandler) ProcessScheduledPublishes(ctx context.Context) {
 	h.Cache.Posts.Delete(randomPoolKey)
 	h.Cache.Search.DeletePrefix("search:")
 	for _, p := range pending {
-		h.Cache.PostDetail.Delete("post:detail:" + p.ID)
+		h.invalidatePostDetail(p.ID)
 	}
 	log.Printf("[POST] 定时发布完成 %d 篇", len(pending))
+}
+
+// invalidatePostDetail 失效帖子详情缓存（含 include_comments=0 的「仅正文」变体）。
+func (h *PostsHandler) invalidatePostDetail(postID string) {
+	h.Cache.PostDetail.Delete("post:detail:" + postID)
+	h.Cache.PostDetail.Delete("post:detail:" + postID + ":postonly")
 }
 
 // ---- GET /ov2/api/posts/:id ----
@@ -292,7 +298,13 @@ func (h *PostsHandler) Detail(c *gin.Context) {
 	id := c.Param("id")
 	me := currentUserFromCookie(c, h.Sessions)
 	noTrack := c.Query("track") == "0"
+	// include_comments=0：只回帖子本体。SEO/首屏正文不需要评论时跳过 50 条评论查询，
+	// 前端改为并行拉 /posts/:id/comments，正文不再被评论拖住。默认 1 保持旧契约。
+	includeComments := c.Query("include_comments") != "0"
 	key := "post:detail:" + id
+	if !includeComments {
+		key += ":postonly"
+	}
 	// SEO（track=0）复用匿名详情缓存读：不计数、只读不写，避免每次 SEO 拉取都打到 DB 导致超时
 	if me == "" {
 		if v, ok := h.Cache.PostDetail.Get(key); ok {
@@ -333,10 +345,13 @@ func (h *PostsHandler) Detail(c *gin.Context) {
 		liked = h.DB.HasLikedPost(c.Request.Context(), id, me)
 		favorited = h.DB.HasFavoritedPost(c.Request.Context(), id, me)
 	}
-	// 评论（附带，取前 50）
-	comments, _ := h.DB.GetPostComments(c.Request.Context(), id, 1, 50)
-	if me != "" {
-		markCommentLikedByMe(h.DB, c.Request.Context(), me, comments)
+	// 评论（附带，取前 50）；include_comments=0 时跳过，但字段保留空数组以免客户端契约变化
+	comments := []models.Comment{}
+	if includeComments {
+		comments, _ = h.DB.GetPostComments(c.Request.Context(), id, 1, 50)
+		if me != "" {
+			markCommentLikedByMe(h.DB, c.Request.Context(), me, comments)
+		}
 	}
 	resp := gin.H{"success": true, "post": post, "comments": comments, "liked": liked, "favorited": favorited}
 	if noTrack {
@@ -373,7 +388,7 @@ func (h *PostsHandler) Like(c *gin.Context) {
 	if liked {
 		h.notifyPostLike(c.Request.Context(), id, uid)
 	}
-	h.Cache.PostDetail.Delete("post:detail:" + id)
+	h.invalidatePostDetail(id)
 	h.Cache.Posts.DeletePrefix("posts:list:")
 	h.Cache.Posts.Delete(randomPoolKey)
 	c.JSON(http.StatusOK, gin.H{"success": true, "liked": liked, "likes": likes})
@@ -428,7 +443,7 @@ func (h *PostsHandler) Favorite(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "操作失败"})
 		return
 	}
-	h.Cache.PostDetail.Delete("post:detail:" + id)
+	h.invalidatePostDetail(id)
 	c.JSON(http.StatusOK, gin.H{"success": true, "favorited": favorited})
 }
 
@@ -447,7 +462,7 @@ func (h *PostsHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "无权限删除该帖子"})
 		return
 	}
-	h.Cache.PostDetail.Delete("post:detail:" + id)
+	h.invalidatePostDetail(id)
 	h.Cache.Posts.DeletePrefix("posts:list:")
 	h.Cache.Posts.Delete(randomPoolKey)
 	c.JSON(http.StatusOK, gin.H{"success": true})

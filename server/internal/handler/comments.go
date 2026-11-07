@@ -19,39 +19,55 @@ const maxCommentContentBytes = 64 * 1024
 
 // ---- GET /ov2/api/posts/:id/comments ----
 
-// Comments 评论列表（匿名缓存 comments:post:ID；登录用户实时返回含 liked_by_me）。
+// defaultCommentsPageSize 评论列表默认每页条数（与前端首屏一致）。
+const defaultCommentsPageSize = 50
+
+// Comments 评论列表（共享缓存 comments:post:ID:page:size）。
+//
+// 缓存里只存「匿名基底」（liked_by_me 全为 false）：登录用户命中缓存后
+// 再叠一次个人点赞态（单条 IN 查询）。旧实现见登录直接 BYPASS 缓存，
+// 于是每个登录访客每次都打完整的评论 JOIN 查询——这正是评论区慢的主因。
 func (h *PostsHandler) Comments(c *gin.Context) {
 	id := c.Param("id")
-	page, _ := parsePage(c)
-	pageSize := 50
+	page, pageSize := parsePageWithDefault(c, defaultCommentsPageSize)
 	me := currentUserFromCookie(c, h.Sessions)
 	// 定时未发布帖（非作者视角）与不存在的帖子：评论列表同样 404
 	if !h.postVisible(c, id, me) {
 		return
 	}
-	key := "comments:post:" + id + ":" + itoa(page)
-	if me == "" {
-		if v, ok := h.Cache.Comments.Get(key); ok {
-			c.Header("X-Cache", "HIT")
-			c.JSON(http.StatusOK, v)
+	key := "comments:post:" + id + ":" + itoa(page) + ":" + itoa(pageSize)
+	cacheState := "MISS"
+	v, ok := h.Cache.Comments.Get(key)
+	if !ok {
+		comments, err := h.DB.GetPostComments(c.Request.Context(), id, page, pageSize)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 			return
 		}
+		v = gin.H{"success": true, "comments": comments, "page": page, "page_size": pageSize}
+		h.Cache.Comments.Set(key, v, 60*time.Second)
+	} else {
+		cacheState = "HIT"
 	}
-	comments, err := h.DB.GetPostComments(c.Request.Context(), id, page, pageSize)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
+	if me == "" {
+		c.Header("X-Cache", cacheState)
+		c.JSON(http.StatusOK, v)
 		return
 	}
-	resp := gin.H{"success": true, "comments": comments, "page": page, "page_size": pageSize}
-	if me != "" {
-		// 含个人点赞状态，不走共享缓存
-		markCommentLikedByMe(h.DB, c.Request.Context(), me, comments)
-		c.Header("X-Cache", "BYPASS")
-	} else {
-		h.Cache.Comments.Set(key, resp, 60*time.Second)
-		c.Header("X-Cache", "MISS")
-	}
-	c.JSON(http.StatusOK, resp)
+	// 登录态：复制切片再写个人字段，绝不污染共享缓存
+	out := gin.H{"success": true, "comments": cloneComments(v), "page": page, "page_size": pageSize}
+	markCommentLikedByMe(h.DB, c.Request.Context(), me, out["comments"].([]models.Comment))
+	c.Header("X-Cache", cacheState+":BYME")
+	c.JSON(http.StatusOK, out)
+}
+
+// cloneComments 从缓存值复制评论切片（浅拷贝足够：只覆写 liked_by_me）。
+func cloneComments(v any) []models.Comment {
+	m, _ := v.(gin.H)
+	src, _ := m["comments"].([]models.Comment)
+	out := make([]models.Comment, len(src))
+	copy(out, src)
+	return out
 }
 
 // ---- POST /ov2/api/posts/:id/comments ----
@@ -126,7 +142,7 @@ func (h *PostsHandler) CreateComment(c *gin.Context) {
 	// 异步通知（站内通知 + 邮件 outbox）
 	go h.notifyComment(comment)
 	h.Cache.Comments.DeletePrefix("comments:post:" + postID)
-	h.Cache.PostDetail.Delete("post:detail:" + postID)
+	h.invalidatePostDetail(postID)
 	c.JSON(http.StatusCreated, gin.H{"success": true, "comment": comment})
 }
 
@@ -233,7 +249,7 @@ func (h *PostsHandler) DeleteComment(c *gin.Context) {
 	// 使评论列表与帖子详情缓存失效
 	if comment != nil {
 		h.Cache.Comments.DeletePrefix("comments:post:" + comment.PostID)
-		h.Cache.PostDetail.Delete("post:detail:" + comment.PostID)
+		h.invalidatePostDetail(comment.PostID)
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
@@ -263,7 +279,7 @@ func (h *PostsHandler) LikeComment(c *gin.Context) {
 	}
 	// 使评论列表与帖子详情缓存失效
 	h.Cache.Comments.DeletePrefix("comments:post:" + comment.PostID)
-	h.Cache.PostDetail.Delete("post:detail:" + comment.PostID)
+	h.invalidatePostDetail(comment.PostID)
 	c.JSON(http.StatusOK, gin.H{"success": true, "liked": liked, "likes": likes})
 }
 
