@@ -5,7 +5,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"yj-forum/server/internal/database"
 )
@@ -15,7 +19,8 @@ type SessionManager struct {
 	DB *database.DB
 }
 
-const sessionTTL = 24 * time.Hour // 对齐 legacy PERMANENT_SESSION_LIFETIME=86400
+// SessionTTL 会话有效期，统一为 30 天（与 Web 的 forum_session/user_id、legacy token 一致）。
+const SessionTTL = 30 * 24 * time.Hour
 
 // Create 创建会话，返回 token。
 func (m *SessionManager) Create(ctx context.Context, userID string) (string, error) {
@@ -25,7 +30,8 @@ func (m *SessionManager) Create(ctx context.Context, userID string) (string, err
 	}
 	t := hex.EncodeToString(token)
 	_, err := m.DB.Exec(ctx, `INSERT INTO sessions (token, user_id, expires_at)
-		VALUES ($1,$2, NOW() + INTERVAL '24 hours')`, t, userID)
+		VALUES ($1,$2, NOW() + $3::interval)`, t, userID,
+		fmt.Sprintf("%d hours", int(SessionTTL.Hours()))
 	if err != nil {
 		return "", err
 	}
@@ -33,6 +39,8 @@ func (m *SessionManager) Create(ctx context.Context, userID string) (string, err
 }
 
 // Validate 验证会话，返回 user_id（不存在或过期则空串）。
+// 数据库故障会返回 error，调用方应返回 5xx 而不是 401：否则一次短暂的 DB 异常
+// 就会被客户端当成「已退出登录」并清空本地凭证。
 func (m *SessionManager) Validate(ctx context.Context, token string) (string, error) {
 	if token == "" {
 		return "", nil
@@ -44,7 +52,10 @@ func (m *SessionManager) Validate(ctx context.Context, token string) (string, er
 		WHERE s.token=$1 AND s.expires_at > NOW()
 		  AND COALESCE(u.is_banned, 0) = 0 AND u.deleted_at IS NULL`, token).Scan(&userID)
 	if err != nil {
-		return "", nil
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", fmt.Errorf("auth: 校验会话失败: %w", err)
 	}
 	return userID, nil
 }

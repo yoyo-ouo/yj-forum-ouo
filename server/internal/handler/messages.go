@@ -101,7 +101,12 @@ func (h *MessageHandler) AuthRequired() gin.HandlerFunc {
 			return
 		}
 		userID, err := h.Sessions.Validate(c.Request.Context(), token)
-		if err != nil || userID == "" {
+		if err != nil {
+			// 数据库故障返回 5xx，避免客户端把偶发异常当成会话失效而清空凭证
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "服务暂时不可用，请稍后重试"})
+			return
+		}
+		if userID == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "message": "登录已过期，请重新登录"})
 			return
 		}

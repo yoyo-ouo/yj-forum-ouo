@@ -17,7 +17,12 @@ func (h *AuthHandler) AuthRequired() gin.HandlerFunc {
 			return
 		}
 		userID, err := h.Sessions.Validate(c.Request.Context(), token)
-		if err != nil || userID == "" {
+		if err != nil {
+			// 校验过程中的数据库故障不能等同于「未登录」：返回 5xx，客户端保留凭证稍后重试
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "服务暂时不可用，请稍后重试"})
+			return
+		}
+		if userID == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "message": "登录已过期，请重新登录"})
 			return
 		}

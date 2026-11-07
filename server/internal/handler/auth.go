@@ -211,8 +211,9 @@ func (h *AuthHandler) issueSession(c *gin.Context, userID string) {
 	}
 	secure := h.Cfg.AppEnv == "prod"
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(cookieName, token, 86400, "/", "", secure, true) // HttpOnly
-	c.SetCookie("user_id", userID, 86400*30, "/", "", secure, false)
+	// 统一 30 天：session Cookie、user_id、DB 会话与 legacy token 有效期保持一致
+	c.SetCookie(cookieName, token, int(auth.SessionTTL/time.Second), "/", "", secure, true) // HttpOnly
+	c.SetCookie("user_id", userID, int(auth.SessionTTL/time.Second), "/", "", secure, false)
 }
 
 func hasLetterAndDigit(s string) bool {

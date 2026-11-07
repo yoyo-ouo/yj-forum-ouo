@@ -117,7 +117,7 @@ func Load() *Config {
 		AltchaExpires:   time.Duration(getEnvInt("ALTCHA_EXPIRES_SECONDS", 600)) * time.Second,
 		AltchaAppSecret: getEnv("ALTCHA_APP_SECRET", ""),
 
-		LegacyTokenTTL:       time.Duration(getEnvInt("LEGACY_TOKEN_TTL_HOURS", 168)) * time.Hour,
+		LegacyTokenTTL:       time.Duration(getEnvInt("LEGACY_TOKEN_TTL_HOURS", 720)) * time.Hour,
 		LegacyAppSunset:      getEnv("LEGACY_APP_SUNSET", ""),
 		LegacyTokenNotBefore: parseTimeEnv("LEGACY_TOKEN_NOT_BEFORE"),
 

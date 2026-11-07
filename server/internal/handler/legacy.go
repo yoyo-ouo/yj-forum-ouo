@@ -29,7 +29,7 @@ import (
 
 const (
 	legacyUserKey    = "legacyUser"
-	legacySessionTTL = 86400 // forum_session 24h，对齐 SessionManager
+	legacySessionTTL = 30 * 24 * 3600 // forum_session 30 天，与 auth.SessionTTL 保持一致
 	maxLegacyAvatar  = 5 << 20
 )
 
@@ -301,12 +301,12 @@ func (h *legacyHandler) issueSession(c *gin.Context, userID string) {
 	secure := h.cfg != nil && h.cfg.AppEnv == "prod"
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(cookieName, token, legacySessionTTL, "/", "", secure, true)
-	c.SetCookie("user_id", userID, legacySessionTTL*30, "/", "", secure, false)
+	c.SetCookie("user_id", userID, legacySessionTTL, "/", "", secure, false)
 }
 
 // setLegacyCookies 写 legacy token + ID Cookie。
 func (h *legacyHandler) setLegacyCookies(c *gin.Context, userID, token string) {
-	maxAge := 7 * 24 * 3600
+	maxAge := legacySessionTTL // legacy token 与 forum_session 一致：30 天
 	if h.cfg != nil && h.cfg.LegacyTokenTTL > 0 {
 		maxAge = int(h.cfg.LegacyTokenTTL / time.Second)
 	}
