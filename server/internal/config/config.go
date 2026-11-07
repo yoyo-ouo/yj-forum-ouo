@@ -64,11 +64,6 @@ type Config struct {
 	// ALTCHA_APP_SECRET：APP 专用验证通道密钥（留空即关闭该通道）
 	AltchaAppSecret string
 
-	// 旧 APP 兼容层
-	LegacyTokenTTL       time.Duration
-	LegacyAppSunset      string
-	LegacyTokenNotBefore time.Time
-
 	// 下载页 GitHub Releases
 	GitHubToken string
 }
@@ -117,10 +112,6 @@ func Load() *Config {
 		AltchaExpires:   time.Duration(getEnvInt("ALTCHA_EXPIRES_SECONDS", 600)) * time.Second,
 		AltchaAppSecret: getEnv("ALTCHA_APP_SECRET", ""),
 
-		LegacyTokenTTL:       time.Duration(getEnvInt("LEGACY_TOKEN_TTL_HOURS", 168)) * time.Hour,
-		LegacyAppSunset:      getEnv("LEGACY_APP_SUNSET", ""),
-		LegacyTokenNotBefore: parseTimeEnv("LEGACY_TOKEN_NOT_BEFORE"),
-
 		GitHubToken: getEnv("GITHUB_TOKEN", ""),
 	}
 
@@ -159,18 +150,6 @@ func getEnvBool(key string, def bool) bool {
 		}
 	}
 	return def
-}
-
-func parseTimeEnv(key string) time.Time {
-	v := os.Getenv(key)
-	if v == "" {
-		return time.Time{}
-	}
-	t, err := time.Parse(time.RFC3339, v)
-	if err != nil {
-		return time.Time{}
-	}
-	return t
 }
 
 func splitComma(s string) []string {

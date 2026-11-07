@@ -116,12 +116,14 @@ func (d *DB) ListLikeMessages(ctx context.Context, userID, cursor string, limit 
 			FROM post_likes pl
 			JOIN posts p ON p.id = pl.post_id
 			WHERE p.user_id = $1 AND p.status = 1 AND p.published_at <= NOW()
+				AND pl.user_id <> p.user_id
 			UNION ALL
 			SELECT 'comment_like'::text, cl.id, cl.user_id, c.post_id, cl.comment_id, cl.created_at
 			FROM comment_likes cl
 			JOIN comments c ON c.id = cl.comment_id
 			JOIN posts p ON p.id = c.post_id
 			WHERE c.user_id = $1 AND c.status = 1 AND p.status = 1 AND p.published_at <= NOW()
+				AND cl.user_id <> c.user_id
 		)
 		SELECT i.source, i.row_id, COALESCE(i.actor_id, ''), COALESCE(u.name, ''), COALESCE(u.avatar, ''),
 			CASE WHEN i.source = 'post_like' THEN 'post' ELSE 'comment' END AS target_type,
@@ -164,7 +166,7 @@ func (d *DB) ListLikeMessages(ctx context.Context, userID, cursor string, limit 
 		items = items[:limit]
 	}
 	next := ""
-	if hasMore && len(items) > 0 {
+	if len(items) > 0 {
 		last := items[len(items)-1]
 		source := "post_like"
 		if strings.HasPrefix(last.ID, "cl_") {
@@ -227,7 +229,7 @@ func (d *DB) ListCommentMessages(ctx context.Context, userID, cursor string, lim
 		items = items[:limit]
 	}
 	next := ""
-	if hasMore && len(items) > 0 {
+	if len(items) > 0 {
 		last := items[len(items)-1]
 		next = encodeMessageCursor(last.CreatedAt, "comment", last.ID)
 	}

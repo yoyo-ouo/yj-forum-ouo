@@ -13,7 +13,7 @@ type GuidesHandler struct {
 	DB *database.DB
 }
 
-// ---- GET /api/v1/guides ----
+// ---- GET /ov2/api/guides ----
 
 // List 指南节点列表（不含正文；空列表返回 []）。
 func (h *GuidesHandler) List(c *gin.Context) {
@@ -25,7 +25,7 @@ func (h *GuidesHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"nodes": nodes}})
 }
 
-// ---- GET /api/v1/guides/:id ----
+// ---- GET /ov2/api/guides/:id ----
 
 // Detail 指南节点详情（含正文）；不存在返回 404。
 func (h *GuidesHandler) Detail(c *gin.Context) {

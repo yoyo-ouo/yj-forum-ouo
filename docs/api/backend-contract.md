@@ -1,6 +1,6 @@
 # 后端实现契约（Batch 2 并行模块共享）
 
-> 所有新端点挂在 `/ov2/api`（`/api/v1` 自动别名）。模块 agent 只新增自己的文件与 `RegisterXxxRoutes(api *gin.RouterGroup, deps ...)`，**不要改 `router.go` / `main.go` / 迁移 / `media` 核心**。
+> 所有新端点挂在 `/ov2/api`（`/ov2/api` 自动别名）。模块 agent 只新增自己的文件与 `RegisterXxxRoutes(api *gin.RouterGroup, deps ...)`，**不要改 `router.go` / `main.go` / 迁移 / `media` 核心**。
 
 ## 0. 通用
 

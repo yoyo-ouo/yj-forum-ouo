@@ -322,6 +322,27 @@ func (d *DB) GetPendingJoinRequest(ctx context.Context, guildID int64, userID st
 	return &req, nil
 }
 
+// GetLatestJoinRequest 该用户对该会馆的最近一次申请（任意状态；含处理备注）。
+func (d *DB) GetLatestJoinRequest(ctx context.Context, guildID int64, userID string) (*models.GuildJoinRequest, error) {
+	var req models.GuildJoinRequest
+	var handledAt, createdAt *time.Time
+	err := d.QueryRow(ctx, `SELECT id, guild_id, user_id, status, COALESCE(reason, ''),
+		COALESCE(handled_note, ''), COALESCE(handled_by, ''), handled_at, created_at
+		FROM guild_join_requests WHERE guild_id = $1 AND user_id = $2
+		ORDER BY id DESC LIMIT 1`, guildID, userID).
+		Scan(&req.ID, &req.GuildID, &req.UserID, &req.Status, &req.Reason, &req.HandledNote,
+			&req.HandledBy, &handledAt, &createdAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	req.HandledAt = handledAt
+	req.CreatedAt = createdAt
+	return &req, nil
+}
+
 // CreateJoinRequest 创建入馆申请（status=0 待审），返回申请 ID。
 func (d *DB) CreateJoinRequest(ctx context.Context, guildID int64, userID, reason string) (int64, error) {
 	var id int64

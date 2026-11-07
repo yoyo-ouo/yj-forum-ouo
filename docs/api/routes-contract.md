@@ -6,19 +6,19 @@
 
 | 优先级 | 前缀 | 语义 | 认证 | CSRF | 说明 |
 |---|---|---|---|---|---|
-| 1 | `/ov2/api/**` | **新 API（canonical）** | `forum_session` Cookie | 需要（GET 豁免） | 所有新前端/新功能只走这里 |
-| 2 | `/api/v1/**` | **新 shape 别名** | `forum_session` Cookie | 需要（GET 豁免） | 一个版本周期内保留；响应头 `Deprecation: true` |
-| 3 | `/api/**`（除 `/api/v1/**`） | **legacy shape 兼容层** | legacy `token`+`ID` Cookie 或 `forum_session` | 显式跳过 | 旧 APP；独立 handler，不转译 ov2 |
+| 1 | `/ov2/api/**` | **唯一 API 前缀** | `forum_session` Cookie | 需要（GET 豁免） | 所有前端/新功能只走这里 |
 
-- `/api/v1` **不是**旧 V1 路径；旧 V1 路径（如 `/api/login`、`/api/World/ALL`）属于 `/api/**` 兼容层。
-- Gin 路由按静态段优先匹配：`/api/v1/...` 比 `/api/*` 更具体；兼容层不要注册 `/api/v1` 通配。
-- 若发现旧 V1 与 `/api/v1` 同名不同 shape（需用真实客户端抓包确认），迁到 `/api/legacy-v1/*` 或按 `X-Client-Version` 分流，禁止覆盖 `/api/v1`。
+> **2026-11-07 起**：`/api/v1/**` 别名与 `/api/**` 旧 APP 兼容层均已移除，不再接受请求；旧客户端请升级到使用 `/ov2/api` 的版本。
+> 非 API 静态资源 `/avatar/*` 仍保留。
 
-## 2. 兼容层端点清单（初版，待真实 APP 抓包补全）
+## 2. 历史兼容层端点清单（已移除，仅存档）
 
 ### 旧 V1 形态
 
 `POST /api/login`、`POST /api/register`、`POST /api/logout`、`POST /api/send-register-code`、`POST /api/send-code-reset-password`、`POST /api/reset-password-by-code`、`GET /api/user/info`、`POST /api/users/change`、`GET /api/users/{id}/info`、`GET /api/users/{id}/posts|favorites|following|followers`、`POST /api/users/{id}/follow`、`GET /api/users/me/replies`、`POST /api/user/avatar/upload`、`/api/posts*`、`/api/comments*`、`GET /api/World/ALL`、`POST /api/World/Send`、`GET /api/search`、`POST /api/report-bug`、`GET /api/huiguan`、`GET /Easter-Egg`、`GET /avatar/{filename}`。
+
+> **2026-11-07 起：`/api/*` 旧 APP 兼容层与 `/api/v1` 别名已移除，API 仅保留 `/ov2/api`。**
+> 以下 `/api/*` 与 `/api/v1` 内容为历史记录，仅用于对照旧客户端；请勿据此新增调用。
 
 ### forum-new 形态
 

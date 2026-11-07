@@ -116,6 +116,24 @@ export function timeAgo(ts?: string): string {
   return d.toLocaleDateString();
 }
 
+/**
+ * 是否为「定时未发布」帖子。
+ *
+ * 不能只看 published_at > now：立即帖入库时 published_at = NOW()，
+ * 服务端与浏览器时钟只要有毫秒级偏差，刚发布跳转就会被误判为定时帖。
+ * 因此要求发布时间比创建时间晚 30 秒以上（服务端定时下限为 1 分钟），且仍在未来。
+ */
+export function isScheduledPost(publishedAt?: string, createdAt?: string): boolean {
+  if (!publishedAt) return false;
+  const publish = new Date(publishedAt).getTime();
+  // 只防时钟抖动：发布前 5 秒内不再显示定时标记
+  if (!Number.isFinite(publish) || publish <= Date.now() + 5_000) return false;
+  const created = createdAt ? new Date(createdAt).getTime() : NaN;
+  if (!Number.isFinite(created)) return true;
+  // 立即帖 published_at == created_at；定时帖至少相差 1 分钟（服务端下限），留 30 秒余量
+  return publish - created > 30_000;
+}
+
 // 完整时间（帖子详情等）
 export function formatTime(ts?: string): string {
   if (!ts) return "";

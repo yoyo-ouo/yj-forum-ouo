@@ -26,7 +26,7 @@ type AccountHandler struct {
 	Cache    *CacheSet
 }
 
-// ---- POST /api/v1/users/me/delete ----
+// ---- POST /ov2/api/users/me/delete ----
 
 type deleteAccountReq struct {
 	Mode        string `json:"mode"`

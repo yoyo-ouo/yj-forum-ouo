@@ -32,7 +32,7 @@ PORT=$PORT_WEB pnpm dev &
 echo
 echo "✅ 开发环境已启动："
 echo "   前端:  http://localhost:${PORT_WEB}"
-echo "   后端:  http://localhost:${PORT_GO}/api/v1"
+echo "   后端:  http://localhost:${PORT_GO}/ov2/api"
 echo "   数据库: postgres://postgres:localdev123@localhost:5432/yj_forum"
 echo "   (Ctrl+C 停止；生产请用 deploy/yj-forum.service 与 deploy/yj-web.service)"
 wait

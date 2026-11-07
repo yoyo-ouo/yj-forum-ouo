@@ -98,13 +98,39 @@ type UnreadCounts struct {
 func (d *DB) UnreadCounts(ctx context.Context, userID string) (UnreadCounts, error) {
 	var counts UnreadCounts
 	const epoch = "'epoch'::timestamptz"
+	// 未读必须与「消息列表」同源：点赞列表读 post_likes/comment_likes、评论列表读 comments。
+	// 若改用 notifications.created_at（写入晚于点赞/评论行几毫秒），用户查看后按列表最新
+	// 时间标记已读时，通知行仍会略晚于标记时间，导致未读数永远清不掉。
 	err := d.QueryRow(ctx, `SELECT
-		(SELECT COUNT(*) FROM notifications n
-			WHERE n.user_id = $1 AND n.type IN ('post_like', 'comment_like')
-			AND n.created_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'likes'), `+epoch+`)),
-		(SELECT COUNT(*) FROM notifications n
-			WHERE n.user_id = $1 AND n.type IN ('post_comment', 'comment_reply')
-			AND n.created_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'comments'), `+epoch+`)),
+		(SELECT COUNT(*) FROM post_likes pl
+			JOIN posts p ON p.id = pl.post_id
+			WHERE p.user_id = $1 AND p.status = 1 AND p.published_at <= NOW()
+			AND pl.user_id <> p.user_id
+			AND pl.created_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'likes'), `+epoch+`))
+		+
+		(SELECT COUNT(*) FROM comment_likes cl
+			JOIN comments c ON c.id = cl.comment_id
+			JOIN posts p ON p.id = c.post_id
+			WHERE c.user_id = $1 AND c.status = 1 AND p.status = 1 AND p.published_at <= NOW()
+			AND cl.user_id <> c.user_id
+			AND cl.created_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'likes'), `+epoch+`)),
+		(SELECT COUNT(*) FROM (
+			-- 我的帖子下的新评论
+			SELECT c.id FROM comments c
+			JOIN posts p ON p.id = c.post_id
+			WHERE p.user_id = $1 AND p.status = 1 AND p.published_at <= NOW()
+				AND c.status = 1 AND c.user_id <> $1
+				AND c.created_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'comments'), `+epoch+`)
+			UNION
+			-- 对我的评论的回复（父评论属于我）
+			SELECT c.id FROM comments c
+			JOIN comments pc ON pc.id = c.parent_id
+			JOIN posts p ON p.id = c.post_id
+			WHERE pc.user_id = $1 AND pc.status = 1
+				AND p.status = 1 AND p.published_at <= NOW()
+				AND c.status = 1 AND c.user_id <> $1
+				AND c.created_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'comments'), `+epoch+`)
+		) unread_comments),
 		(SELECT COUNT(*) FROM broadcast_notices b
 			WHERE b.published_at <= NOW() AND b.published_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'system'), `+epoch+`))
 		+
@@ -277,7 +303,7 @@ func (d *DB) ListSystem(ctx context.Context, userID, cursor string, limit int) (
 		items = items[:limit]
 	}
 	next := ""
-	if hasMore && len(items) > 0 {
+	if len(items) > 0 {
 		last := items[len(items)-1]
 		next = SystemCursor(last.CreatedAt, last.Source, last.ID)
 	}

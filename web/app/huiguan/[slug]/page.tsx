@@ -8,6 +8,7 @@ import GlobalLoading from "@/components/GlobalLoading";
 import PostCard from "@/components/PostCard";
 import { useToast } from "@/components/Toast";
 import GuildLogo from "@/components/ui/GuildLogo";
+import GuildJoinRequestModal from "@/components/ui/GuildJoinRequestModal";
 import { ListEmpty, LoadMoreButton } from "@/components/ui/ListState";
 import Modal from "@/components/ui/Modal";
 import { UserAvatar } from "@/components/ui/UserAvatar";
@@ -31,6 +32,7 @@ export default function GuildDetailPage() {
   const [busy, setBusy] = useState(false);
   const [bioOpen, setBioOpen] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [requestOpen, setRequestOpen] = useState(false);
   const pageRef = useRef(1);
 
   // 会馆详情（my_state：未登录为 null）
@@ -57,6 +59,16 @@ export default function GuildDetailPage() {
   const patchData = (patch: Partial<{ guild: GuildDetail | null; myState: GuildMyState | null }>) => {
     setData((d) => (d && d.slug === slug ? { ...d, ...patch } : d));
   };
+
+  // 加入/撤回/再次申请后重新拉取详情：my_state 需由后端重新计算（其他会馆归属、最近申请）。
+  const refreshDetail = useCallback(async () => {
+    try {
+      const r = await guildApi.detail(slug);
+      setData((d) => (d && d.slug === slug ? { ...d, guild: r.guild, myState: r.my_state ?? null } : d));
+    } catch {
+      /* 保留当前展示，下次操作或刷新页面会重新拉取 */
+    }
+  }, [slug]);
 
   // 内容混合流（帖子 + 文章，后端按时间倒序）
   const loadFeed = useCallback(
@@ -98,15 +110,21 @@ export default function GuildDetailPage() {
   const announcements = guild?.announcements || [];
   const ann = useCarousel(announcements.length);
 
-  // ---- 加入区三态 ----
+  // ---- 加入区状态 ----
+  // 已加入本馆 / 已加入其他会馆 / 有待审或已处理申请 / 可申请
   const isMember = !!myState?.is_member;
   const isPending = !!myState?.has_pending_request;
+  const latestRequest = myState?.latest_request || null;
+  // 已通过但当前不是成员（例如后来退出了会馆）：不再显示「查看申请进度」，直接允许重新申请。
+  const activeRequest = latestRequest && latestRequest.status !== 1 ? latestRequest : null;
+  const currentOtherGuild = myState?.current_guild && myState.current_guild.id !== guild?.id ? myState.current_guild : null;
 
   const doJoin = async () => {
     setBusy(true);
     try {
       await guildApi.join(slug);
-      patchData({ myState: { ...(myState || { is_member: false, is_leader: false }), has_pending_request: true } });
+      await refreshDetail();
+      setRequestOpen(false);
       toast("申请已提交，等待馆长审核", "success");
     } catch (e) {
       toast(e instanceof ApiException ? e.message : "申请失败", "error");
@@ -119,7 +137,8 @@ export default function GuildDetailPage() {
     setBusy(true);
     try {
       await guildApi.cancelJoin(slug);
-      if (myState) patchData({ myState: { ...myState, has_pending_request: false } });
+      await refreshDetail();
+      setRequestOpen(false);
       toast("申请已撤回", "success");
     } catch (e) {
       toast(e instanceof ApiException ? e.message : "操作失败", "error");
@@ -228,36 +247,38 @@ export default function GuildDetailPage() {
           </div>
         </div>
 
-        {/* 加入区 */}
-        <div className="guild-join-area">
-          {!myState ? (
-            <Link className="guild-join-btn" href="/auth">
-              <i className="fa fa-sign-in"></i> 登录后加入
-            </Link>
-          ) : isMember ? (
-            <>
-              <span className="guild-joined-badge">
-                <i className="fa fa-check"></i> 已加入
-              </span>
-              <button className="guild-leave-btn" disabled={busy} onClick={() => setConfirmLeave(true)}>
-                {busy ? "处理中..." : "退出会馆"}
+        {/* 加入区：已加入其他会馆时整块隐藏（不显示任何提示） */}
+        {!currentOtherGuild && (
+          <div className="guild-join-area">
+            {!myState ? (
+              <Link className="guild-join-btn" href="/auth">
+                <i className="fa fa-sign-in"></i> 登录后加入
+              </Link>
+            ) : isMember ? (
+              <>
+                <span className="guild-joined-badge">
+                  <i className="fa fa-check"></i> 已加入
+                </span>
+                <button className="guild-leave-btn" disabled={busy} onClick={() => setConfirmLeave(true)}>
+                  {busy ? "处理中..." : "退出会馆"}
+                </button>
+              </>
+            ) : isPending || activeRequest ? (
+              <>
+                <button className="guild-join-btn pending" disabled={busy} onClick={() => setRequestOpen(true)}>
+                  <i className="fa fa-hourglass-half"></i> 查看申请进度
+                </button>
+                <span className="guild-request-inline-status">
+                  {isPending ? "审核中" : activeRequest?.status === 2 ? "未通过" : "已撤回"}
+                </span>
+              </>
+            ) : (
+              <button className="guild-join-btn" disabled={busy} onClick={doJoin}>
+                <i className="fa fa-plus"></i> {busy ? "提交中..." : "申请加入"}
               </button>
-            </>
-          ) : isPending ? (
-            <>
-              <button className="guild-join-btn pending" disabled>
-                <i className="fa fa-hourglass-half"></i> 审核中…
-              </button>
-              <button className="guild-cancel-link" disabled={busy} onClick={doCancelJoin}>
-                撤回申请
-              </button>
-            </>
-          ) : (
-            <button className="guild-join-btn" disabled={busy} onClick={doJoin}>
-              <i className="fa fa-plus"></i> {busy ? "提交中..." : "申请加入"}
-            </button>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 馆长条 */}
@@ -379,6 +400,17 @@ export default function GuildDetailPage() {
       </div>
 
       {hasMore && <LoadMoreButton loading={loadingMore} onClick={loadMore} id="guild-load-more" />}
+
+      {/* 入馆申请进度 */}
+      <GuildJoinRequestModal
+        open={requestOpen}
+        onClose={() => setRequestOpen(false)}
+        guildName={guild.name}
+        request={activeRequest}
+        busy={busy}
+        onCancel={isPending ? doCancelJoin : undefined}
+        onReapply={activeRequest && (activeRequest.status === 2 || activeRequest.status === 3) ? doJoin : undefined}
+      />
 
       {/* 退出会馆二次确认（取消不动作） */}
       {confirmLeave && (

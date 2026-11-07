@@ -4,7 +4,7 @@
 
 <h1 align="center">妖精论坛 · Fairy Forum</h1>
 
-《罗小黑战记》同人社区论坛，基于 Next.js 16 + Go 的 ov2 重构版。
+<p align="center">《罗小黑战记》同人社区论坛：Next.js 16 + Go 全栈，包含会馆、文章、世界频道与消息中心。</p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-CC%20BY--NC%204.0-6A8C89?style=flat&labelColor=444444" alt="License: CC BY-NC 4.0"></a>
@@ -21,11 +21,15 @@
 </p>
 
 <p align="center">
-  <a href="docs/screenshots/ov2-home-2026-10.png"><img src="docs/screenshots/ov2-home-2026-10.png" width="49%" alt="ov2 首页：会馆广场与随机推荐信息流"></a>
-  <a href="docs/screenshots/ov2-post-2026-10.png"><img src="docs/screenshots/ov2-post-2026-10.png" width="49%" alt="ov2 帖子详情：引用卡片、富文本与图片"></a>
+  <a href="docs/screenshots/ov2-home-2026-11.png"><img src="docs/screenshots/ov2-home-2026-11.png" width="49%" alt="首页：会馆广场、随机推荐与全站公告"></a>
+  <a href="docs/screenshots/ov2-forum-2026-11.png"><img src="docs/screenshots/ov2-forum-2026-11.png" width="49%" alt="论坛：公共广场与会馆信息流"></a>
+</p>
+<p align="center">
+  <a href="docs/screenshots/ov2-post-2026-11.png"><img src="docs/screenshots/ov2-post-2026-11.png" width="49%" alt="帖子详情：作者会馆标签、富文本与评论区"></a>
+  <a href="docs/screenshots/ov2-guild-2026-11.png"><img src="docs/screenshots/ov2-guild-2026-11.png" width="49%" alt="会馆页：主题色头图、公告与帖子混排"></a>
 </p>
 
-<p align="center"><sub>ov2 开发预览：首页随机推荐 · 帖子详情（帖子 / 用户 / 文章引用卡片）</sub></p>
+<p align="center"><sub>线上站点实拍（2026-11）：首页 / 论坛 / 帖子详情 / 会馆</sub></p>
 
 > [!IMPORTANT]
 > 本项目是《罗小黑战记》的**非官方同人创作**，与寒木春华动画工作室无任何关联，未获官方授权；仅供学习、交流与非商业用途。完整声明见[文末](#非官方声明与许可)。
@@ -38,31 +42,37 @@
 - [快速开始](#快速开始)
 - [生产部署](#生产部署)
 - [项目结构](#项目结构)
+- [相关仓库](#相关仓库)
 - [文档](#文档)
 - [贡献与反馈](#贡献与反馈)
 - [非官方声明与许可](#非官方声明与许可)
 
 ## 项目介绍
 
-妖精论坛是《罗小黑战记》同人社区，尝试还原动画中妖精与人类共存的网络社区：公共广场、会馆、文章、WIKI 与世界频道。
+妖精论坛是《罗小黑战记》同人社区，尝试还原动画中妖精与人类共存的网络社区：公共广场、会馆、文章、世界频道、消息中心与移动端体验。
 
-**ov2** 是本仓库正在进行的重构预览版：从 Flask 单体迁移为「Next.js 渲染层 + Go 服务层」，PostgreSQL 持久化，图片走 S3 兼容媒体服务（可回退本地目录）。旧版 Flask 实现归档于 [crazying-dev/forum](https://github.com/crazying-dev/forum)，仅作对照，不再维护。
+**ov2** 已上线：「Next.js 渲染层 + Go 服务层」架构，PostgreSQL 持久化，图片走 S3 兼容媒体服务（可回退本地目录）。
 
-> [!NOTE]
-> ov2 为重构预览版，尚未替换线上 legacy 站点；[线上站点](https://www.yjlt.top)目前仍运行旧版。
+| 入口 | 地址 |
+|---|---|
+| 线上站点 | <https://www.yjlt.top>（注册后即可体验） |
+| 管理后台 | [yj-forum-admin](https://github.com/yoyo-ouo/yj-forum-admin)（会馆审批、图片存储、用户与内容管理） |
+| Android 客户端 | [Android 分支](https://github.com/yoyo-ouo/yj-forum-ouo/tree/Android)（Kotlin + Jetpack Compose） |
 
 ## 功能特性
 
 | 模块 | 能力 |
 |---|---|
-| 内容 | 帖子发布 / 分类 / 随机推荐 / 点赞 / 收藏 / 举报 / 软删除；嵌套评论与评论点赞；Markdown 与富文本编辑；帖子、用户、文章引用卡片；图片上传 |
-| 会馆 | 会馆广场、详情、公告、成员与馆长页；帖子 + 文章混排信息流；入馆申请（管理端审批）与退馆 |
+| 内容 | 帖子发布 / 分类 / 随机推荐 / 点赞 / 收藏 / 举报 / 软删除；富文本编辑（兼容历史 Markdown）；帖子、用户、文章引用卡片；图片上传与 S3 媒体存储 |
+| 评论 | 富文本评论、回复（一级归并展示）、评论点赞、评论图片与引用、删除 |
+| 会馆 | 会馆广场 / 详情 / 公告 / 成员名单 / 馆长介绍 / 会馆介绍页；帖子 + 文章混排信息流；入馆申请、申请进度、审批通知与退馆 |
 | 信息流 | 全站「全部 / 公共广场 / 会馆」三档筛选，分类过滤与分页加载 |
-| 社交 | 关注 / 粉丝 / 互关、用户主页、消息中心（赞、评论、系统通知、管理团队会话，SSE 实时未读） |
-| 世界频道 | 全站公开实时聊天：SSE 推送、桌面浮窗 / 移动端弹层、富文本 + 最多 9 张图、单条 2000 字 |
-| 账号与安全 | 邮箱验证码注册 / 登录 / 重置、邮箱换绑、账号注销、第三方 OAuth（TheDoorOfBings）、ALTCHA 人机验证、限流 / CSRF / SafeHTML |
-| 多端 | Windows / Android / Linux / macOS 客户端下载与版本检查、PWA 安装、旧 APP 兼容层 |
-| 站点体验 | 亮 / 暗主题（时段自动切换）、WIKI（官方 / 个人 / 鼠标 / Live2D）、论坛指南、更新日志、每日一言、彩蛋、RSS、版本投票、Bug 反馈 |
+| 社交 | 关注 / 粉丝 / 互关、共同关注、用户主页、「谁赞了我」 |
+| 消息 | 消息中心：赞 / 评论 / 系统 / 管理团队四类消息，SSE 实时未读，全部消息聚合接口，分类已读 |
+| 世界频道 | 公开实时聊天：SSE 推送 / 轮询降级、桌面浮窗 / 移动端弹层、富文本 + 最多 9 张图、单条 2000 字 |
+| 账号与安全 | 邮箱验证码注册 / 登录 / 重置、邮箱换绑、账号注销、第三方 OAuth、ALTCHA 人机验证（含 APP 零 PoW 通道）、限流 / CSRF / SafeHTML、14 天会话 |
+| 多端 | Windows / Android / Linux 客户端下载与版本检查、PWA 安装、GitHub Releases 镜像下载 |
+| 站点体验 | 亮 / 暗主题（时段自动切换）、论坛指南、反馈中心、更新日志、每日一言、彩蛋、无限年换算、服务条款与隐私政策 |
 
 ## 技术栈
 
@@ -101,10 +111,9 @@ make dev                # Docker PGSQL + Go :8090 + Next.js :3200
 
 | 服务 | 地址 |
 |---|---|
-| 前端 | http://localhost:3200 |
-| API（canonical） | http://localhost:8090/ov2/api |
-| API（别名） | http://localhost:8090/api/v1（响应头 `Deprecation: true`） |
-| 开发数据库 | postgres://postgres:localdev123@localhost:5432/yj_forum |
+| 前端 | <http://localhost:3200> |
+| API（唯一前缀） | <http://localhost:8090/ov2/api> |
+| 开发数据库 | `postgres://postgres:localdev123@localhost:5432/yj_forum` |
 
 `make dev` 会自动拉起 Docker Desktop 并幂等创建 `ouo-postgres` 容器；后端启动时自动执行嵌入二进制的 SQL 迁移。
 
@@ -129,7 +138,7 @@ make dev                # Docker PGSQL + Go :8090 + Next.js :3200
 2. **后端**：`make server-build` 编译二进制，交给 `deploy/yj-forum.service`（systemd）；
 3. **前端**：`pnpm build` 产出 `.next/standalone`，由 `deploy/yj-web.service` 运行；
 4. **媒体**：SeaweedFS（S3 兼容）或本地目录，上传经 `/ov2/api/media/*` 代理；
-5. **Nginx**：`/ov2/api/*`、`/api/*`、`/avatar/*` 反代 Go；其余反代 Next.js（会馆/指南图片已改为 `/ov2/api/media/<id>` 媒体直出，原 `/guild-img/*`、`/guide-img/*` 反代已退役）；
+5. **Nginx**：`/ov2/api/*`、`/avatar/*` 反代 Go；其余反代 Next.js（会馆/指南图片统一走 `/ov2/api/media/<id>` 媒体直出）；
 6. **管理端**：[yj-forum-admin](https://github.com/yoyo-ouo/yj-forum-admin) 独立部署，负责会馆审批、图片存储与用户 / 内容管理。
 
 ## 项目结构
@@ -140,13 +149,21 @@ make dev                # Docker PGSQL + Go :8090 + Next.js :3200
 │   ├── cmd/yj-forum/      # 入口（迁移 SQL 嵌入二进制）
 │   └── internal/          # auth / handler / middleware / database / cache / email / media
 ├── web/                   # Next.js 渲染层
-│   ├── app/               # App Router 页面（首页 / 论坛 / 帖子 / 会馆 / 消息 / WIKI…）
+│   ├── app/               # App Router 页面（首页 / 论坛 / 帖子 / 会馆 / 消息 / 指南 / 反馈…）
 │   ├── components/        # Header / Card / 编辑器 / 世界频道 / 引用卡片
 │   ├── lib/               # API 客户端、store、SEO、Sanitize
-│   └── public/assets/     # 本地化图片 / 字体 / CSS / JS / Live2D
+│   └── public/assets/     # 本地化图片 / 图标字体 / CSS / JS
 ├── deploy/                # dev.sh / systemd / Nginx / SeaweedFS
 └── docs/                  # 架构 / API / 迁移 / 验收 / 截图
 ```
+
+## 相关仓库
+
+| 仓库 | 说明 |
+|---|---|
+| [yj-forum-ouo](https://github.com/yoyo-ouo/yj-forum-ouo) | 论坛本体：Next.js Web + Go API（当前仓库） |
+| [yj-forum-admin](https://github.com/yoyo-ouo/yj-forum-admin) | 管理后台：会馆审批、用户与内容管理、运营配置 |
+| [Android 分支](https://github.com/yoyo-ouo/yj-forum-ouo/tree/Android) | Android 客户端：Kotlin + Jetpack Compose（同一远程仓库的独立分支） |
 
 ## 文档
 
@@ -154,10 +171,9 @@ make dev                # Docker PGSQL + Go :8090 + Next.js :3200
 |---|---|
 | [技术架构](docs/architecture.md) | 渲染层 / 服务层职责、数据流、安全设计 |
 | [API 文档](docs/api/README.md) | canonical `/ov2/api`、OpenAPI、端点索引、SSE 与媒体 |
-| [迁移基线](docs/migration-baseline.md) | 0018–0027 上线前检查清单与决策树 |
-| [迁移对照](docs/migration-notes.md) | legacy Flask ↔ ov2 端点映射 |
+| [迁移基线](docs/migration-baseline.md) | 0018–0031 上线前检查清单与决策树 |
 | [资产清单](docs/资产清单.md) | 外部 CDN 资源本地化映射 |
-| [验收报告](docs/验收报告.md) | 新旧功能对照验收（含界面截图对比） |
+| [验收报告](docs/验收报告.md) | 功能验收记录（含界面截图） |
 | [部署指南](deploy/README.md) | Nginx + systemd + 数据库 + 媒体 |
 
 ## 贡献与反馈

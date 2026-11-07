@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { fetchApi, siteUrl } from "@/lib/seo";
 
-// 全量 sitemap：静态页 + 会馆 + 帖子/文章（分页遍历 /api/v1/feed，带上限保护）。
+// 全量 sitemap：静态页 + 会馆 + 帖子/文章（分页遍历 /ov2/api/feed，带上限保护）。
 // revalidate 1 小时；API 不可用时降级为静态路由（不影响构建与访问）。
 
 export const revalidate = 3600;
@@ -9,7 +9,7 @@ export const revalidate = 3600;
 const MAX_FEED_PAGES = 200; // 200 页 × 50 条 ≈ 10000 条内容上限（安全保护）
 
 /** 静态文档页最近评审日期（避免每次再生都刷新 lastmod，稀释其可信度） */
-const DOCS_UPDATED = new Date("2026-09-26T00:00:00.000Z");
+const DOCS_UPDATED = new Date("2026-11-07T00:00:00.000Z");
 
 interface FeedItemLite {
   type: "post" | "article";
@@ -39,13 +39,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/`, lastModified: now, changeFrequency: "daily", priority: 1 },
     { url: `${base}/forum`, lastModified: now, changeFrequency: "hourly", priority: 0.9 },
     { url: `${base}/huiguan`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
-    { url: `${base}/WIKI`, lastModified: DOCS_UPDATED, changeFrequency: "weekly", priority: 0.6 },
-    { url: `${base}/WIKI/GuanFang`, lastModified: DOCS_UPDATED, changeFrequency: "monthly", priority: 0.4 },
-    { url: `${base}/WIKI/Personal`, lastModified: DOCS_UPDATED, changeFrequency: "weekly", priority: 0.5 },
-    { url: `${base}/WIKI/Personal/mouse`, lastModified: DOCS_UPDATED, changeFrequency: "monthly", priority: 0.4 },
-    { url: `${base}/WIKI/Personal/mouse/Liunx`, lastModified: DOCS_UPDATED, changeFrequency: "monthly", priority: 0.3 },
-    { url: `${base}/WIKI/Personal/Live2D`, lastModified: DOCS_UPDATED, changeFrequency: "monthly", priority: 0.4 },
     { url: `${base}/privacy`, lastModified: DOCS_UPDATED, changeFrequency: "yearly", priority: 0.2 },
+    { url: `${base}/terms`, lastModified: DOCS_UPDATED, changeFrequency: "yearly", priority: 0.2 },
   ];
 
   // 会馆详情页

@@ -2,8 +2,7 @@
 const CACHE_NAME = 'yj-forum-v1';
 const STATIC_ASSETS = [
   '/assets/css/main.css',
-  '/assets/js/marked.min.js',
-  '/assets/fonts/CEFFontsCJK.woff2'
+  '/assets/js/marked.min.js'
 ];
 
 self.addEventListener('install', (e) => {
@@ -16,7 +15,7 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.pathname.startsWith('/api/')) return; // API 不缓存
+  if (e.request.method !== 'GET' || url.pathname.startsWith('/ov2/api/') || url.pathname.startsWith('/api/')) return; // API 不缓存
   // 静态资源：缓存优先
   if (url.pathname.startsWith('/assets/')) {
     e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {

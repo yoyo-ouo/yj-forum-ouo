@@ -16,7 +16,7 @@ import SpaceBadge from "@/components/ui/SpaceBadge";
 import BackButton from "@/components/ui/BackButton";
 import { postApi, Comment, ApiException } from "@/lib/api";
 import { useStore } from "@/lib/store";
-import { formatTime } from "@/lib/constants";
+import { formatTime, isScheduledPost } from "@/lib/constants";
 
 /** 定时发布时间展示（YYYY-MM-DD HH:mm，本地时区） */
 function fmtDateTime(v?: string) {
@@ -24,11 +24,6 @@ function fmtDateTime(v?: string) {
   if (!v || isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-/** published_at 在未来即定时未发布（未发布帖仅作者可见，故仅作者会看到该标记） */
-function isScheduled(v?: string) {
-  return !!v && new Date(v).getTime() > Date.now();
 }
 
 export default function PostDetailPage() {
@@ -188,7 +183,7 @@ export default function PostDetailPage() {
           <div className="post-meta-top">
             <CategoryBadge category={post.category} className="post-category-badge" />
             <SpaceBadge name={post.guild_name} color={post.guild_theme_color} />
-            {isScheduled(post.published_at) && (
+            {isScheduledPost(post.published_at, post.created_at) && (
               <span className="post-scheduled-tag-wrap">
                 <span className="post-scheduled-tag" title="尚未到达发布时间，仅自己可见">
                   <i className="fa fa-clock-o"></i> 定时发布 {fmtDateTime(post.published_at)}

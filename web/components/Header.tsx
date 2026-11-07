@@ -103,10 +103,14 @@ export default function Header() {
     const onVisible = () => {
       if (document.visibilityState === "visible") loadUnread();
     };
+    // 消息中心标记已读后立即刷新徽标（无需等待路由变化/窗口重新可见）
+    const onMessagesRead = () => loadUnread();
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("ouo:messages-read", onMessagesRead);
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("ouo:messages-read", onMessagesRead);
     };
   }, [user, pathname]);
 
@@ -317,7 +321,6 @@ export default function Header() {
               {unreadTotal > 0 && <span className="mobile-menu-badge">{unreadBadge}</span>}
             </Link>
             <Link className="mobile-menu-item" href="/huiguan" onClick={() => setShowMobileMenu(false)}><i className="fa fa-home"></i> 会馆</Link>
-            <Link className="mobile-menu-item" href="/WIKI" onClick={() => setShowMobileMenu(false)}><i className="fa fa-book"></i> WIKI</Link>
             <button className="mobile-menu-item" onClick={() => { setShowMobileMenu(false); setShowWorld(true); }}><i className="fa fa-globe"></i> 世界频道</button>
             <div className="mobile-menu-divider"></div>
             {/* 工具与服务 */}

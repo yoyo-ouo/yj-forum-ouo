@@ -63,11 +63,6 @@ export const MESSAGE_TYPE_META: Record<MessageType, MessageTypeMeta> = {
   },
 };
 
-/** URL `?type=` 校验（非法值回退到全部）。 */
-export function isMessageType(value: string | null | undefined): value is MessageType {
-  return value === "all" || value === "likes" || value === "comments" || value === "system" || value === "chat";
-}
-
 /** 三类通知统一后的列表条目。 */
 export type FeedItem =
   | { kind: "like"; key: string; created_at: string; like: LikeMessage }

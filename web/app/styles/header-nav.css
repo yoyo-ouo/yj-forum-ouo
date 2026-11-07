@@ -336,7 +336,7 @@
     color: var(--color-text-accent);
 }
 
-/* 更多下拉：WIKI 小图标带圆形背景 */
+/* 更多下拉：图标小图带圆形背景 */
 #header .setting-dropdown-item > img {
     width: 20px;
     height: 20px;
@@ -495,7 +495,7 @@
     box-sizing: border-box;
 }
 
-/* 控制台 WIKI 图标：显式重置（对抗全局 svg,img{all:inherit} 从按钮继承的 min-height/padding/背景），仅保留 28px 图标本体 */
+/* 控制台图标：显式重置（对抗全局 svg,img{all:inherit} 从按钮继承的 min-height/padding/背景），仅保留 28px 图标本体 */
 .console-tile img {
     all: unset;
     display: block;

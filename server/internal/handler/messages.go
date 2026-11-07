@@ -82,6 +82,7 @@ func RegisterMessageRoutes(api *gin.RouterGroup, h *MessageHandler) {
 	}
 	g := api.Group("/messages", h.AuthRequired())
 	g.GET("/summary", h.Summary)
+	g.GET("/all", h.All)
 	g.GET("/likes", h.Likes)
 	g.GET("/comments", h.Comments)
 	g.GET("/system", h.System)
@@ -125,17 +126,55 @@ func (h *MessageHandler) Summary(c *gin.Context) {
 	})
 }
 
+// ---- GET /messages/all ----
+
+// All 一次性返回「全部」消息的首屏/下一页：点赞、评论、系统三路各自游标分页。
+// 前端不再依赖页面 URL 的 ?type=all，也不需要发三次请求。
+func (h *MessageHandler) All(c *gin.Context) {
+	uid := CurrentUser(c)
+	limit := messageLimit(c)
+	ctx := c.Request.Context()
+
+	likes, likesMore, likesNext, err := h.DB.ListLikeMessages(ctx, uid, c.Query("likes_cursor"), limit)
+	if err != nil {
+		messagePageError(c, err)
+		return
+	}
+	comments, commentsMore, commentsNext, err := h.DB.ListCommentMessages(ctx, uid, c.Query("comments_cursor"), limit)
+	if err != nil {
+		messagePageError(c, err)
+		return
+	}
+	system, systemMore, systemNext, err := h.DB.ListSystem(ctx, uid, c.Query("system_cursor"), limit)
+	if err != nil {
+		messagePageError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"likes":    gin.H{"items": likes, "has_more": likesMore, "next_cursor": likesNext},
+		"comments": gin.H{"items": comments, "has_more": commentsMore, "next_cursor": commentsNext},
+		"system":   gin.H{"items": system, "has_more": systemMore, "next_cursor": systemNext},
+	})
+}
+
+// messagePageError 统一把游标类错误映射为 400，其余为 500。
+func messagePageError(c *gin.Context, err error) {
+	status := http.StatusInternalServerError
+	if strings.Contains(err.Error(), "游标") {
+		status = http.StatusBadRequest
+	}
+	c.JSON(status, gin.H{"success": false, "message": "查询失败"})
+}
+
 // ---- GET /messages/likes ----
 
 func (h *MessageHandler) Likes(c *gin.Context) {
 	uid := CurrentUser(c)
 	items, hasMore, next, err := h.DB.ListLikeMessages(c.Request.Context(), uid, c.Query("cursor"), messageLimit(c))
 	if err != nil {
-		status := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "游标") {
-			status = http.StatusBadRequest
-		}
-		c.JSON(status, gin.H{"success": false, "message": "查询失败"})
+		messagePageError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "items": items, "has_more": hasMore, "next_cursor": next})
@@ -147,11 +186,7 @@ func (h *MessageHandler) Comments(c *gin.Context) {
 	uid := CurrentUser(c)
 	items, hasMore, next, err := h.DB.ListCommentMessages(c.Request.Context(), uid, c.Query("cursor"), messageLimit(c))
 	if err != nil {
-		status := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "游标") {
-			status = http.StatusBadRequest
-		}
-		c.JSON(status, gin.H{"success": false, "message": "查询失败"})
+		messagePageError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "items": items, "has_more": hasMore, "next_cursor": next})
@@ -163,11 +198,7 @@ func (h *MessageHandler) System(c *gin.Context) {
 	uid := CurrentUser(c)
 	items, hasMore, next, err := h.DB.ListSystem(c.Request.Context(), uid, c.Query("cursor"), messageLimit(c))
 	if err != nil {
-		status := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "游标") {
-			status = http.StatusBadRequest
-		}
-		c.JSON(status, gin.H{"success": false, "message": "查询失败"})
+		messagePageError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "items": items, "has_more": hasMore, "next_cursor": next})
@@ -191,7 +222,11 @@ func (h *MessageHandler) Read(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "category 需为 likes/comments/system"})
 		return
 	}
-	lastRead := time.Now().UTC()
+	// 以服务端请求时刻为上限：前端传回的 created_at 会经 JS Date 截断到毫秒，
+	// 加 1 毫秒仅用于覆盖微秒截断；不再使用 1 秒容忍（会误清未展示的新消息）。
+	// 客户端时间晚于服务端时直接钳制为 now。
+	now := time.Now().UTC()
+	lastRead := now
 	if raw := strings.TrimSpace(req.LastReadAt); raw != "" {
 		t, err := time.Parse(time.RFC3339Nano, raw)
 		if err != nil {
@@ -201,7 +236,9 @@ func (h *MessageHandler) Read(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "last_read_at 需为 RFC3339"})
 			return
 		}
-		lastRead = t.UTC()
+		if candidate := t.UTC().Add(time.Millisecond); candidate.Before(now) {
+			lastRead = candidate
+		}
 	}
 	if err := h.DB.MarkCategoryRead(c.Request.Context(), uid, req.Category, lastRead); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存失败"})

@@ -35,8 +35,8 @@ type apiHandlers struct {
 	emailChangeVerifyLimit gin.HandlerFunc
 }
 
-// Register 注册全部路由：/ov2/api 为 canonical；/api/v1 为新 shape 别名（一个版本周期）。
-// 旧 APP 兼容层 /api/* 由 legacy.RegisterRoutes 单独挂载（Step 6）。
+// Register 注册全部路由：/ov2/api 为唯一 API 前缀。
+// 原 /api/v1 别名与旧 APP 兼容层 /api/* 已移除；仅保留 /avatar/* 等静态资源兼容路由。
 func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth.SessionManager, mailer *email.Sender, mediaSvc *media.Service, cacheSet *CacheSet) *PostsHandler {
 	r.Use(middleware.Logger())
 	r.Use(middleware.SecurityHeaders())
@@ -110,15 +110,9 @@ func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth
 	apiV2 := r.Group("/ov2/api")
 	registerAPIRoutes(apiV2, h)
 
-	apiV1 := r.Group("/api/v1")
-	apiV1.Use(func(c *gin.Context) {
-		c.Header("Deprecation", "true")
-		c.Next()
-	})
-	registerAPIRoutes(apiV1, h)
-
-	// 旧 APP 兼容层：/api/*（不含 /api/v1），独立 handler，显式跳过 CSRF
-	RegisterLegacyRoutes(r, cfg, db, sessions, mailer)
+	// 旧头像静态资源（非 API）：历史 /avatar/<uuid>.webp 仍可直接访问，
+	// 新头像已走媒体服务 /ov2/api/media/<id>。
+	r.GET("/avatar/:filename", postsH.ServeAvatar)
 
 	return postsH
 }
@@ -149,6 +143,7 @@ func registerAPIRoutes(api *gin.RouterGroup, h apiHandlers) {
 	api.PATCH("/users/me", authH.AuthRequired(), authH.UpdateMe)
 	api.POST("/users/me/sign-in", authH.AuthRequired(), authH.SignIn)
 	api.GET("/users/me/replies", authH.AuthRequired(), authH.MyReplies)
+	api.GET("/users/me/likes", authH.AuthRequired(), authH.MyLikes)
 	api.POST("/users/me/verify-email", authH.AuthRequired(), miscH.SendVerifyEmailCode)
 	api.POST("/users/me/verify-email/confirm", middleware.RateLimit("verify_email", 10, 5*time.Minute), authH.AuthRequired(), miscH.VerifyCodeEmail)
 	api.POST("/users/me/delete", middleware.RateLimit("account_delete", 5, 300*time.Second), authH.AuthRequired(), accountH.DeleteAccount)

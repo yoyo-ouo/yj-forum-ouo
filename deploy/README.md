@@ -11,7 +11,6 @@ Browser
   ▼
 Nginx (宝塔管理 80/443)
   ├── /ov2/api/*      → Go 后端  127.0.0.1:8090（canonical；SSE 单独 location）
-  ├── /api/*          → Go 后端  127.0.0.1:8090（/api/v1 别名 + 旧 APP 兼容层）
   ├── /avatar/*       → Go 后端  127.0.0.1:8090（旧头像兼容）
   ├── /static/*       → Next.js  127.0.0.1:3000（旧帖图/默认头像兼容）
   └── 其余            → Next.js  127.0.0.1:3000
@@ -134,7 +133,7 @@ systemctl enable --now yj-web
 1. 宝塔面板创建站点（域名绑定）。
 2. 将 `deploy/nginx/yj-forum.conf` 内容合并入站点配置（注意替换 `server_name` 为实际域名）。
 3. 无需再配置 `/guild-img/`、`/guide-img/` 反代（已退役，图片走 `/ov2/api/media/`）。
-4. 媒体上传（`POST /ov2/api/media/images`，图片 ≤5MB；头像 ≤10MB）需 Nginx/反代允许较大请求体：配置已在 `location /ov2/api/` 与 `location /api/` 内置 `client_max_body_size 12m;`，若在 http 层统一配置请核对（不足会返回 413）。
+4. 媒体上传（`POST /ov2/api/media/images`，图片 ≤5MB；头像 ≤10MB）需 Nginx/反代允许较大请求体：配置已在 `location /ov2/api/` 内置 `client_max_body_size 12m;`，若在 http 层统一配置请核对（不足会返回 413）。
 5. SSE 必须走 `location = /ov2/api/world/stream` 与 `location = /ov2/api/messages/stream` 的专用配置（`proxy_buffering off`、`proxy_read_timeout 3600s`、`gzip off`），否则会出现“连上但不流动”。
 6. 宝塔内申请 SSL 证书，开启 HTTPS（注释段提供 443 示范）。
 
@@ -142,7 +141,7 @@ systemctl enable --now yj-web
 
 ```bash
 # 健康检查
-curl http://127.0.0.1:8090/api/v1/votes/version/stats
+curl http://127.0.0.1:8090/ov2/api/votes/version/stats
 curl -I http://127.0.0.1:3000/
 # 浏览器访问域名，完成注册 → 登录 → 发帖全流程
 ```
@@ -160,7 +159,6 @@ curl -I http://127.0.0.1:3000/
 | `S3_ENABLED` / `S3_ENDPOINT` / `S3_BUCKET` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` | server/.env（ouo + admin） | SeaweedFS S3；新上传写 S3；未启用回退本地/GridFS |
 | `ALTCHA_ENABLED` / `ALTCHA_HMAC_KEY` | server/.env | ALTCHA v2；启用时登录/注册/发码/重置/Bug 提交需要 challenge/grant |
 | `ALTCHA_APP_SECRET` | server/.env | APP 专用零 PoW 通道密钥（与 `ALTCHA_HMAC_KEY` 隔离）；留空则 `/captcha/app/*` 返回 404，客户端回退 ALTCHA 求解 |
-| `LEGACY_TOKEN_TTL_HOURS` / `LEGACY_APP_SUNSET` | server/.env | 旧 APP 兼容层的 token 窗口与下线日期 |
 | `GITHUB_TOKEN` | server/.env | 下载页 GitHub Releases 可选 token（提高限额） |
 | `PUBLIC_BASE_URL` | server/.env | 邮件中链接的站点地址 |
 | `API_TARGET` | web/.env | Next rewrites 的 Go 地址（构建时写进路由清单）兼服务端 SSR/SEO 直连地址（运行期读取；生产由 Nginx 分发 API） |

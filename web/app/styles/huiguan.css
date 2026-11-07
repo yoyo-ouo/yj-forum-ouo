@@ -1030,3 +1030,101 @@
     border-color: var(--color-primary);
     color: var(--color-primary);
 }
+
+/* ---- 入馆申请进度 ---- */
+.guild-request-inline-status {
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+}
+
+.guild-request-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.guild-request-status.is-pending {
+    color: #b9770e;
+    background: rgba(245, 158, 11, 0.12);
+}
+
+.guild-request-status.is-approved {
+    color: #1d7a52;
+    background: rgba(34, 160, 107, 0.12);
+}
+
+.guild-request-status.is-rejected {
+    color: #e74c3c;
+    background: rgba(231, 76, 60, 0.12);
+}
+
+.guild-request-status.is-withdrawn {
+    color: var(--color-text-tertiary);
+    background: var(--color-bg-item);
+}
+
+.guild-request-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 12px 0;
+}
+
+.guild-request-meta > div {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.guild-request-meta dt {
+    flex: none;
+    min-width: 68px;
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+    line-height: 1.8;
+}
+
+.guild-request-meta dd {
+    min-width: 0;
+    margin: 0;
+    color: var(--color-text-primary);
+    font-size: 13px;
+    line-height: 1.8;
+    word-break: break-word;
+}
+
+.guild-request-block {
+    margin: 10px 0;
+}
+
+.guild-request-block h4 {
+    margin: 0 0 4px;
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.guild-request-block p {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.guild-request-hint {
+    margin: 8px 0 0;
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.guild-request-hint i {
+    margin-right: 4px;
+}

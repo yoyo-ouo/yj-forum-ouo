@@ -47,10 +47,6 @@ export default function ConsoleModal({
       </h3>
       <p className="console-subtitle">更多功能与偏好设置</p>
       <div className="console-grid">
-        <button className="console-tile" type="button" onClick={() => go("/WIKI")}>
-          <img src="/assets/img/wiki_avatar_l.png" alt="" />
-          <span>WIKI</span>
-        </button>
         <button className="console-tile" type="button" onClick={() => { onClose(); onDonate(); }}>
           <i className="fa fa-heart"></i>
           <span>赞赏</span>

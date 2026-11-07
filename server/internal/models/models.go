@@ -246,14 +246,15 @@ type GuildMember struct {
 
 // GuildJoinRequest 入馆申请。
 type GuildJoinRequest struct {
-	ID        int64      `json:"id"`
-	GuildID   int64      `json:"guild_id"`
-	UserID    string     `json:"user_id"`
-	Status    int        `json:"status"`
-	Reason    string     `json:"reason"`
-	HandledBy string     `json:"handled_by"`
-	HandledAt *time.Time `json:"handled_at"`
-	CreatedAt *time.Time `json:"created_at"`
+	ID          int64      `json:"id"`
+	GuildID     int64      `json:"guild_id"`
+	UserID      string     `json:"user_id"`
+	Status      int        `json:"status"`
+	Reason      string     `json:"reason"`
+	HandledNote string     `json:"handled_note"`
+	HandledBy   string     `json:"-"`
+	HandledAt   *time.Time `json:"handled_at"`
+	CreatedAt   *time.Time `json:"created_at"`
 }
 
 // GuildArticleAuthor 文章作者摘要。
@@ -371,6 +372,10 @@ type GuildMyState struct {
 	IsLeader          bool  `json:"is_leader"`
 	HasPendingRequest bool  `json:"has_pending_request"`
 	RequestID         int64 `json:"request_id,omitempty"`
+	// CurrentGuild 用户当前已加入的会馆（可能是当前页面的会馆，也可能是其他会馆）。
+	CurrentGuild *GuildMembership `json:"current_guild,omitempty"`
+	// LatestRequest 用户对当前会馆最近一次入馆申请（含已处理状态，供「查看申请进度」）。
+	LatestRequest *GuildJoinRequest `json:"latest_request,omitempty"`
 }
 
 // Stats 用户统计。

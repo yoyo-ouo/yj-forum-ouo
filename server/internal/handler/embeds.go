@@ -33,7 +33,7 @@ func parseIDList(raw string) []string {
 	return ids
 }
 
-// ---- GET /api/v1/embeds ----
+// ---- GET /ov2/api/embeds ----
 
 // List 批量取引用卡片数据（users/posts/articles 均为逗号分隔 id，查不到的 id 省略）。
 func (h *EmbedsHandler) List(c *gin.Context) {

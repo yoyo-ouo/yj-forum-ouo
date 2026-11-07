@@ -1,6 +1,6 @@
 # 妖精论坛 ov2 API 文档（RESTful）
 
-- **Base URL**: `https://<domain>/api/v1`
+- **Base URL**: `https://<domain>/ov2/api`
 - **认证**: Session Cookie（`forum_session`，HttpOnly）或 `Authorization: Bearer`（预留）
 - 响应 JSON：`{"success": true/false, ...}`；错误：`{"success": false, "message": "..."}`
 - 状态码：200 成功 / 201 创建 / 400 参数错 / 401 未登录 / 403 无权限/封禁 / 404 不存在 / 429 限流 / 500 服务器错
@@ -109,7 +109,7 @@
 
 > 搜索结果：`posts[]` 与帖子列表字段同构（含会馆归属与作者会馆字段）；`users[]` 为用户摘要。响应另含 `keyword` / `page` / `page_size` 与 `posts_total` / `posts_has_more` / `users_total` / `users_has_more`（按 `type` 选择性返回）。
 
-> 兼容说明：旧 `GET /api/v1/hui-guan`（会馆 JSON 列表）**已删除**，由 `GET /api/v1/guilds` 替代；旧实时消息接口 `/api/v1/world/messages`（`/World` 页面）与 `world` 数据表一并移除，由公共广场（`/feed?space=public`）与会馆信息流取代。会馆 logo 与正文图片统一由媒体中台提供，前端请求 `/ov2/api/media/<id>`；原 `/guild-img/*` 代理已退役。
+> 兼容说明：历史 `GET /api/v1/hui-guan`（会馆 JSON 列表，旧前缀已随兼容层移除）由 `GET /ov2/api/guilds` 替代；历史实时消息接口（`/api/v1/world/messages`）与 `world` 数据表一并移除，由公共广场（`/feed?space=public`）与会馆信息流取代。会馆 logo 与正文图片统一由媒体中台提供，前端请求 `/ov2/api/media/<id>`；原 `/guild-img/*` 代理已退役。
 
 ## 限流规则（key: IP）
 

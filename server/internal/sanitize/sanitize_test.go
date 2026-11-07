@@ -57,7 +57,7 @@ func TestSanitizeRichContentDropsLongEmbedID(t *testing.T) {
 // script / 事件属性 / style 应被剔除。
 func TestSanitizeRichContentStripsXSS(t *testing.T) {
 	in := `<p onclick="alert(1)">x</p><script>alert(2)</script><style>p{color:red}</style>` +
-		`<img src="/api/v1/media/MD1" onerror="alert(3)" style="color:red">` +
+		`<img src="/ov2/api/media/MD1" onerror="alert(3)" style="color:red">` +
 		`<a href="javascript:alert(4)">y</a><iframe src="https://evil.example"></iframe>`
 	out := SanitizeRichContent(in)
 	for _, bad := range []string{"script", "onclick", "onerror", "alert(", "style=", "javascript:", "iframe"} {
@@ -72,10 +72,10 @@ func TestSanitizeRichContentKeepsFormatting(t *testing.T) {
 	in := `<h2>标题</h2><p><strong>粗</strong><em>斜</em><s>删</s></p>` +
 		`<ul><li>一</li></ul><blockquote>引用</blockquote>` +
 		`<a href="https://yjlt.top/post/PS1">链接</a><a href="/post/PS1">站内</a>` +
-		`<img src="/api/v1/media/MD1" alt="图" width="600" height="400">`
+		`<img src="/ov2/api/media/MD1" alt="图" width="600" height="400">`
 	out := SanitizeRichContent(in)
 	for _, want := range []string{"<h2>", "<strong>", "<em>", "<s>", "<ul>", "<li>", "<blockquote>",
-		`href="https://yjlt.top/post/PS1"`, `href="/post/PS1"`, `<img src="/api/v1/media/MD1" alt="图" width="600" height="400">`} {
+		`href="https://yjlt.top/post/PS1"`, `href="/post/PS1"`, `<img src="/ov2/api/media/MD1" alt="图" width="600" height="400">`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("合法标签/属性应保留 %q，实际输出：%s", want, out)
 		}

@@ -4,6 +4,13 @@
 
 `GET /ov2/api/messages/summary` → `{success,likes,comments,system,chat}`
 
+## 全部聚合
+
+`GET /ov2/api/messages/all?limit=20&likes_cursor=&comments_cursor=&system_cursor=`
+
+返回 `{success, likes:{items,has_more,next_cursor}, comments:{...}, system:{...}}`。
+前端「全部」页一次请求拿到三路数据，不再依赖页面 URL 的 `?type=all`，也不需要并发三次请求；三路游标各自独立。
+
 ## 赞 / 评论（全部历史）
 
 - `GET /messages/likes?cursor=&limit=20`

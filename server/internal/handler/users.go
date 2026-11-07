@@ -30,7 +30,7 @@ func (h *AuthHandler) isDeletedUser(ctx context.Context, id string) bool {
 	return err == nil && u.DeletedAt != nil
 }
 
-// ---- /api/v1/users/me ----
+// ---- /ov2/api/users/me ----
 
 // Me 当前登录用户。
 func (h *AuthHandler) Me(c *gin.Context) {
@@ -48,7 +48,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "user": u, "guild": guild, "is_leader": isLeader})
 }
 
-// ---- GET /api/v1/users/:id ----
+// ---- GET /ov2/api/users/:id ----
 
 // UserProfile 用户主页。
 func (h *AuthHandler) UserProfile(c *gin.Context) {
@@ -91,7 +91,7 @@ func (h *AuthHandler) UserProfile(c *gin.Context) {
 		"guild": guild, "is_leader": isLeader})
 }
 
-// ---- GET /api/v1/users/:id/posts ----
+// ---- GET /ov2/api/users/:id/posts ----
 
 // UserPosts 用户帖子。
 func (h *AuthHandler) UserPosts(c *gin.Context) {
@@ -110,7 +110,7 @@ func (h *AuthHandler) UserPosts(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "posts": posts, "page": page, "page_size": pageSize})
 }
 
-// ---- PATCH /api/v1/users/me ----
+// ---- PATCH /ov2/api/users/me ----
 
 type updateProfileReq struct {
 	Name            *string `json:"Name"`
@@ -217,7 +217,7 @@ func validAvatarURL(raw string) bool {
 	}
 	if strings.HasPrefix(raw, "/") {
 		return strings.HasPrefix(raw, "/avatar/") || strings.HasPrefix(raw, "/static/img/avatars/") ||
-			strings.HasPrefix(raw, "/ov2/api/media/") || strings.HasPrefix(raw, "/api/v1/media/")
+			strings.HasPrefix(raw, "/ov2/api/media/")
 	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || u.User != nil {
@@ -232,7 +232,7 @@ func validAvatarURL(raw string) bool {
 	return true
 }
 
-// ---- POST /api/v1/users/me/sign-in ----
+// ---- POST /ov2/api/users/me/sign-in ----
 
 // SignIn 每日签到（当日未签到则灵力 +10；重复签到 409）。
 func (h *AuthHandler) SignIn(c *gin.Context) {
@@ -253,7 +253,7 @@ func (h *AuthHandler) SignIn(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"spirit": spirit, "last_sign_in": lastSignIn}})
 }
 
-// ---- POST /api/v1/users/:id/follow ----
+// ---- POST /ov2/api/users/:id/follow ----
 
 // ToggleFollow 关注/取消。
 func (h *AuthHandler) ToggleFollow(c *gin.Context) {
@@ -275,7 +275,7 @@ func (h *AuthHandler) ToggleFollow(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "following": following})
 }
 
-// ---- GET /api/v1/users/:id/following / followers ----
+// ---- GET /ov2/api/users/:id/following / followers ----
 
 func (h *AuthHandler) Following(c *gin.Context) {
 	h.followList(c, "following")
@@ -306,7 +306,7 @@ func (h *AuthHandler) followList(c *gin.Context, kind string) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "users": users, "page": page, "page_size": pageSize, "has_more": hasMore})
 }
 
-// ---- GET /api/v1/users/:id/mutual ----
+// ---- GET /ov2/api/users/:id/mutual ----
 
 // Mutual 共同关注（viewer 来自 cookie；匿名或看自己时返回空列表）。
 func (h *AuthHandler) Mutual(c *gin.Context) {
@@ -325,7 +325,7 @@ func (h *AuthHandler) Mutual(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "users": users, "page": page, "page_size": pageSize, "has_more": hasMore})
 }
 
-// ---- GET /api/v1/users/me/replies ----
+// ---- GET /ov2/api/users/me/replies ----
 
 // MyReplies 我收到的回复。
 func (h *AuthHandler) MyReplies(c *gin.Context) {
@@ -343,7 +343,28 @@ func (h *AuthHandler) MyReplies(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "replies": replies, "total": total})
 }
 
-// ---- GET /api/v1/users/:id/comments ----
+// ---- GET /ov2/api/users/me/likes ----
+
+// MyLikes 谁赞了我：当前用户的帖子/评论收到的全部点赞（仅本人可见）。
+func (h *AuthHandler) MyLikes(c *gin.Context) {
+	uid := CurrentUser(c)
+	if uid == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": "请先登录"})
+		return
+	}
+	items, hasMore, next, err := h.DB.ListLikeMessages(c.Request.Context(), uid, c.Query("cursor"), messageLimit(c))
+	if err != nil {
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "游标") {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"success": false, "message": "查询失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "items": items, "has_more": hasMore, "next_cursor": next})
+}
+
+// ---- GET /ov2/api/users/:id/comments ----
 
 // UserComments 用户发表的评论。
 func (h *AuthHandler) UserComments(c *gin.Context) {
@@ -361,7 +382,7 @@ func (h *AuthHandler) UserComments(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "comments": comments, "total": total, "page": page, "page_size": pageSize})
 }
 
-// ---- GET /api/v1/users/:id/favorites ----
+// ---- GET /ov2/api/users/:id/favorites ----
 
 // UserFavorites 用户收藏。
 func (h *AuthHandler) UserFavorites(c *gin.Context) {

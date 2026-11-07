@@ -115,7 +115,7 @@ export const OG_IMAGE = { url: "/og-image.png", width: 1200, height: 630, alt: "
 
 /** 站点级默认标题（首页 / 兜底）与描述 */
 export const SITE_TITLE = "妖精论坛 - 罗小黑战记同人社区";
-export const SITE_DESCRIPTION = "妖精论坛是《罗小黑战记》同人社区：分享帖子、加入会馆、浏览 Wiki 与同人创作。";
+export const SITE_DESCRIPTION = "妖精论坛是《罗小黑战记》同人社区：分享帖子、加入会馆、参与同人创作与交流。";
 
 export interface PageSeoOptions {
   /** 裸标题（不含站点名；根 layout 的 title 模板会补「妖精论坛 - 」前缀） */

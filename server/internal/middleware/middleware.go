@@ -89,13 +89,6 @@ func CSRF(allowedOrigins []string) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		// 旧 APP 兼容层 /api/*（不含 /api/v1 新 shape 别名）显式跳过 CSRF：
-		// 旧客户端不带 Origin/Referer；改由 legacy token + IP/UA/版本限流保护。
-		p := c.Request.URL.Path
-		if strings.HasPrefix(p, "/api/") && !strings.HasPrefix(p, "/api/v1/") {
-			c.Next()
-			return
-		}
 		origin := c.GetHeader("Origin")
 		referer := c.GetHeader("Referer")
 		if isAllowed(origin, allowedOrigins, c) || isAllowed(referer, allowedOrigins, c) {

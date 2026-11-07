@@ -2,11 +2,10 @@
 
 // ===== 消息中心主容器 =====
 // - 桌面：260px 类型栏 + 自适应详情
-// - 移动：类型列表 → 详情两屏，返回按钮 + ?type= 深链
+// - 移动：顶部标题/连接状态 + 横向类型切换器 + 正文列表单屏（类型由前端状态管理）
 // - SSE 未读/通知/聊天事件 + 15s 无事件轮询降级
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import GlobalLoading from "@/components/GlobalLoading";
 import { ApiException } from "@/lib/api";
@@ -22,7 +21,6 @@ import ChatPanel from "./ChatPanel";
 import MessageList from "./MessageList";
 import MessageTypeList from "./MessageTypeList";
 import {
-  isMessageType,
   MESSAGE_TYPE_META,
   notificationToFeedItem,
   type FeedItem,
@@ -42,21 +40,18 @@ function connectionLabel(status: MessageStreamStatus): string {
 }
 
 export default function MessageCenter() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const { user, userId, loadingUser } = useStore();
   const authedUserId = user?.id || userId;
   const ready = !loadingUser && !!authedUserId;
 
-  const typeParam = searchParams.get("type");
-  // URL 是唯一数据源：?type= 深链 / 浏览器前进后退均自动生效
-  const activeType: MessageType = isMessageType(typeParam) ? typeParam : "all";
-  // 移动端两屏由 URL 决定：有合法 ?type= 即显示详情，无则显示类型列表（浏览器前进/后退自动同步）
-  const mobileDetailOpen = isMessageType(typeParam);
-  // 逻辑用（不参与渲染）：移动端初始即按媒体查询判断，避免首屏误标已读
-  const [isMobile, setIsMobile] = useState<boolean>(
-    () => typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches
-  );
+  // 移动端消息中心为固定顶栏 + 内部滚动：给 body 加类以禁用整页滚动并隐藏页脚。
+  useEffect(() => {
+    document.body.classList.add("msg-page-active");
+    return () => document.body.classList.remove("msg-page-active");
+  }, []);
+
+  // 类型完全由前端状态管理，页面 URL 不再依赖 ?type=；数据由 /messages/all 或分类 API 提供。
+  const [activeType, setActiveType] = useState<MessageType>("all");
 
   const [summary, setSummary] = useState<MessageSummary>(EMPTY_SUMMARY);
   const [initialUnread, setInitialUnread] = useState<MessageSummary>(EMPTY_SUMMARY);
@@ -68,14 +63,6 @@ export default function MessageCenter() {
   const [liveUnreadKeys, setLiveUnreadKeys] = useState<Set<string>>(() => new Set());
   const [liveMessages, setLiveMessages] = useState<ChatMessage[]>([]);
   const [refreshToken, setRefreshToken] = useState(0);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 768px)");
-    const onChange = () => setIsMobile(mq.matches);
-    onChange();
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
 
   const loadSummary = useCallback(async () => {
     if (!ready) return;
@@ -152,29 +139,21 @@ export default function MessageCenter() {
   });
 
   // ---- 列表 / 聊天 ----
-  const detailVisible = !isMobile || mobileDetailOpen;
-  const feedEnabled = ready && !authExpired && detailVisible && activeType !== "chat";
+  // 单屏布局：当前类型即正文内容，无需再按移动端详情开关延迟加载
+  const feedEnabled = ready && !authExpired && activeType !== "chat";
   const handleRead = useCallback((category: MessageCategory) => {
     setSummary((prev) => ({ ...prev, [category]: 0 }));
   }, []);
   const handleChatRead = useCallback(() => {
     setSummary((prev) => ({ ...prev, chat: 0 }));
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("ouo:messages-read"));
   }, []);
 
   const feed = useMessageFeed(activeType, feedEnabled, incoming, handleRead, refreshToken);
 
-  const selectType = useCallback(
-    (type: MessageType) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("type", type);
-      router.replace(`/messages?${params.toString()}`, { scroll: false });
-    },
-    [router, searchParams]
-  );
-
-  const backToList = useCallback(() => {
-    router.replace("/messages", { scroll: false });
-  }, [router]);
+  const selectType = useCallback((type: MessageType) => {
+    setActiveType(type);
+  }, []);
 
   if (loadingUser) {
     return (
@@ -203,7 +182,7 @@ export default function MessageCenter() {
 
   return (
     <div className="msg-page">
-      <div className={`msg-shell${mobileDetailOpen ? " mobile-detail-open" : ""}`}>
+      <div className={`msg-shell${activeType === "chat" ? " is-chat-view" : ""}`}>
         <aside className="msg-sidebar">
           <div className="msg-sidebar-head">
             <h1 className="msg-sidebar-title">
@@ -220,9 +199,16 @@ export default function MessageCenter() {
 
         <section className="msg-detail">
           <header className="msg-detail-head">
-            <button type="button" className="msg-back-btn" onClick={backToList} aria-label="返回消息类型">
-              <i className="fa fa-angle-left" aria-hidden="true"></i> 返回
-            </button>
+            {activeType === "chat" && (
+              <button
+                type="button"
+                className="msg-chat-back"
+                onClick={() => selectType("all")}
+                aria-label="返回消息中心"
+              >
+                <i className="fa fa-angle-left" aria-hidden="true"></i> 返回消息中心
+              </button>
+            )}
             <div className="msg-detail-heading">
               <h2 className="msg-detail-title">{meta.title}</h2>
               <span className="msg-detail-sub">{meta.subtitle}</span>
@@ -249,7 +235,7 @@ export default function MessageCenter() {
           <div className={`msg-detail-body${activeType === "chat" ? " is-chat" : ""}`}>
             {activeType === "chat" ? (
               <ChatPanel
-                visible={detailVisible}
+                visible
                 liveMessages={liveMessages}
                 refreshToken={refreshToken}
                 onRead={handleChatRead}

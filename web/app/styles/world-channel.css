@@ -111,7 +111,7 @@
     box-shadow: 0 22px 64px rgba(0, 0, 0, 0.38);
 }
 
-/* 桌面 resize 手柄：默认完全透明，悬停窗口时低干扰显现（移动端不渲染且 CSS 兜底隐藏） */
+/* 桌面 resize 手柄：始终完全透明（仅靠 cursor 提示，拖动时也不显示色条）；移动端不渲染且 CSS 兜底隐藏 */
 .world-resize-handle {
     position: absolute;
     z-index: 6;
@@ -147,7 +147,7 @@
     cursor: nwse-resize;
 }
 
-/* 右下角斜纹抓握提示：仅悬停时显示，使用文字色而非白/近白边 */
+/* 右下角斜纹抓握提示：仅拖拽 resize 时显示，使用文字色而非白/近白边 */
 .world-resize-se::after {
     content: "";
     position: absolute;
@@ -159,21 +159,6 @@
     border-bottom: 1px solid var(--color-text-tertiary);
     opacity: 0;
     transition: opacity 0.15s ease;
-}
-
-.world-window:hover .world-resize-handle {
-    background: var(--color-primary);
-    opacity: 0.16;
-}
-
-.world-window .world-resize-handle:hover,
-.world-window.resizing .world-resize-handle {
-    background: var(--color-primary);
-    opacity: 0.42;
-}
-
-.world-window:hover .world-resize-se::after {
-    opacity: 0.6;
 }
 
 /* 标题栏：桌面拖拽手柄；移动端取消 pointer 拖拽 */

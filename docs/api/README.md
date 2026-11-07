@@ -6,10 +6,9 @@
 
 | 项 | 说明 |
 |---|---|
-| canonical base | `/ov2/api`（无 v1 段） |
-| 新 shape 别名 | `/api/v1`（一个版本周期，响应头 `Deprecation: true`） |
-| 旧 APP 兼容层 | `/api/*`（legacy shape；两代路径；独立 handler） |
-| 认证 | `forum_session` HttpOnly Cookie；旧 APP 另认 `token`+`ID` |
+| canonical base | `/ov2/api`（唯一 API 前缀） |
+| 旧前缀 | `/api/v1` 与 `/api/*` 已于 2026-11-07 移除 |
+| 认证 | `forum_session` HttpOnly Cookie（14 天） |
 | 时间 | RFC3339（服务端 Go `time.Time` JSON） |
 | 分页 | `cursor` + `limit`；响应 `{items,has_more,next_cursor}` |
 
@@ -44,7 +43,7 @@
 
 - 上传：`POST /media/images`（multipart `file` + `scene`）。
 - 读取：`GET /media/:id`，按 `visibility` 做 ACL（public / 本人 / 聊天成员 / 定时帖作者）。
-- 新 URL：`/ov2/api/media/<id>`；旧 `/api/v1/media/<id>`、`/avatar/*`、`/static/*` 继续可用；`/guild-img/*`、`/guide-img/*` 兼容代理已删除（统一走 `/ov2/api/media/<id>`）。
+- 新 URL：`/ov2/api/media/<id>`；历史内容中的 `/api/v1/media/<id>` 已由迁移 `0029_legacy_media_urls` 改写为新前缀；`/avatar/*`、`/static/*` 继续可用；`/guild-img/*`、`/guide-img/*` 兼容代理已删除（统一走 `/ov2/api/media/<id>`）。
 
 ## 6. 文档索引
 

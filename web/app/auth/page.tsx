@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthInput } from "@/components/ui/AuthInput";
+import Modal from "@/components/ui/Modal";
 import { AltchaWidget, type AltchaWidgetHandle } from "@/components/AltchaWidget";
 import { useToast, ToastType } from "@/components/Toast";
 import { authApi, ApiException } from "@/lib/api";
@@ -26,6 +27,10 @@ function LoginInner() {
   const [busy, setBusy] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [pwdMatch, setPwdMatch] = useState<"" | "ok" | "no">("");
+  // 隐私政策与服务条款勾选（默认不勾选）；未勾选时先弹窗确认
+  const [agreed, setAgreed] = useState(false);
+  const [agreePrompt, setAgreePrompt] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"login" | "register" | null>(null);
   const altchaRef = useRef<AltchaWidgetHandle>(null);
 
   // URL ?mode=reset&token= 兼容：带 token 的旧链接跳转到重置链接页；仅 mode=reset 时落到忘记密码
@@ -69,7 +74,8 @@ function LoginInner() {
     return fallback;
   };
 
-  const login = async () => {
+  // 实际登录（协议确认后直接调用，避免重复弹窗）
+  const doLogin = async () => {
     if (busy) return;
     if (!name || !password) return showMsg("请输入账号和密码", "warning");
     setBusy(true);
@@ -111,7 +117,7 @@ function LoginInner() {
     }
   };
 
-  const register = async () => {
+  const doRegister = async () => {
     if (busy) return;
     if (!name || !email || !password || !code) return showMsg("请填写完整信息", "warning");
     if (password.length < 8) return showMsg("密码至少8位", "warning");
@@ -132,6 +138,36 @@ function LoginInner() {
       setBusy(false);
       altchaRef.current?.reset();
     }
+  };
+
+  // 未勾选协议时先弹窗确认；确认后自动勾选并继续刚才的操作
+  const requireAgreement = (action: "login" | "register") => {
+    if (agreed) return true;
+    setPendingAction(action);
+    setAgreePrompt(true);
+    return false;
+  };
+
+  const login = () => {
+    if (requireAgreement("login")) void doLogin();
+  };
+
+  const register = () => {
+    if (requireAgreement("register")) void doRegister();
+  };
+
+  const confirmAgreement = () => {
+    setAgreed(true);
+    setAgreePrompt(false);
+    const action = pendingAction;
+    setPendingAction(null);
+    if (action === "login") void doLogin();
+    else if (action === "register") void doRegister();
+  };
+
+  const dismissAgreement = () => {
+    setAgreePrompt(false);
+    setPendingAction(null);
   };
 
   const sendResetLink = async () => {
@@ -187,6 +223,15 @@ function LoginInner() {
               </label>
               <a href="#" className="forgot-password" onClick={(e) => { e.preventDefault(); switchMode("forgot"); }}>忘记密码？</a>
             </div>
+            <label className="auth-agree">
+              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+              <span>
+                我已阅读并同意
+                <Link href="/privacy" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>《隐私政策》</Link>
+                和
+                <Link href="/terms" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>《服务条款》</Link>
+              </span>
+            </label>
             {altchaWidget}
             <button className="auth-btn primary" disabled={busy} onClick={login}>{busy ? "登录中..." : "登录"}</button>
           </div>
@@ -221,6 +266,15 @@ function LoginInner() {
                 {countdown > 0 ? `${countdown}s` : "获取验证码"}
               </button>
             </div>
+            <label className="auth-agree">
+              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+              <span>
+                我已阅读并同意
+                <Link href="/privacy" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>《隐私政策》</Link>
+                和
+                <Link href="/terms" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>《服务条款》</Link>
+              </span>
+            </label>
             {altchaWidget}
             <button className="auth-btn primary" disabled={busy} onClick={register}>{busy ? "注册中..." : "注册"}</button>
             <div className="auth-error">{pwdMatch === "no" ? "❌ 两次密码不一致" : pwdMatch === "ok" ? "✅ 密码一致" : ""}</div>
@@ -241,9 +295,36 @@ function LoginInner() {
         )}
 
         <div className="auth-footer">
-          <p>登录即表示您同意<Link href="/privacy">隐私政策</Link>和服务条款</p>
+          <p>
+            请妥善保管账号与密码，不要与他人共享；详情见<Link href="/privacy">隐私政策</Link>与
+            <Link href="/terms">服务条款</Link>。
+          </p>
         </div>
       </div>
+
+      <Modal
+        open={agreePrompt}
+        onClose={dismissAgreement}
+        lockScroll
+        cardClassName="donate-card auth-agree-card"
+      >
+        <h3 className="auth-agree-title">
+          <i className="fa fa-shield" aria-hidden="true"></i> 同意隐私政策与服务条款
+        </h3>
+        <p className="auth-agree-text">
+          继续即表示你已阅读并同意<Link href="/privacy" target="_blank" rel="noopener noreferrer">《隐私政策》</Link>与
+          <Link href="/terms" target="_blank" rel="noopener noreferrer">《服务条款》</Link>
+          ，我们只会按照上述文件说明的方式收集与使用信息。
+        </p>
+        <div className="auth-agree-actions">
+          <button type="button" className="auth-btn auth-agree-cancel" onClick={dismissAgreement}>
+            不同意
+          </button>
+          <button type="button" className="auth-btn primary" onClick={confirmAgreement}>
+            同意并继续
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

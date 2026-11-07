@@ -1,6 +1,6 @@
 # ouo API 端点索引（自动生成）
 
-> 由 `server/internal/handler/router.go` 与 `legacy.go` 提取；canonical 前缀为 `/ov2/api`，`/api/v1` 为同 shape 别名，`/api/*` 为旧 APP 兼容层。
+> 由 `server/internal/handler/router.go` 提取；唯一 API 前缀为 `/ov2/api`。旧 `/api/v1` 别名与 `/api/*` 兼容层已于 2026-11-07 移除。
 
 | 方法 | 路径 | 分组 |
 |---|---|---|
@@ -18,6 +18,7 @@
 | PATCH | `/ov2/api/users/me` | users |
 | POST | `/ov2/api/users/me/sign-in` | users |
 | GET | `/ov2/api/users/me/replies` | users |
+| GET | `/ov2/api/users/me/likes` | users |
 | POST | `/ov2/api/users/me/verify-email` | users |
 | POST | `/ov2/api/users/me/verify-email/confirm` | users |
 | POST | `/ov2/api/users/me/delete` | users |

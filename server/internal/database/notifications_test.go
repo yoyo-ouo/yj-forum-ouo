@@ -66,9 +66,18 @@ func TestCreateNotificationDedupeAndUnread(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	// 先标记已读到一个过去时间点，确保后续通知计入未读
+	// 先标记已读到一个过去时间点，确保后续点赞计入未读
 	if err := db.MarkRead(ctx, recipient, "likes", time.Now().Add(-time.Minute)); err != nil {
 		t.Fatalf("mark read: %v", err)
+	}
+
+	// 未读与消息列表同源：必须有真实的 post_likes 行，而不是仅 notifications 行。
+	postID, err := db.SendPost(ctx, recipient, "未读计数测试", "<p>正文</p>", "general", nil, nil)
+	if err != nil {
+		t.Fatalf("send post: %v", err)
+	}
+	if _, _, err := db.LikePost(ctx, postID, actor); err != nil {
+		t.Fatalf("like post: %v", err)
 	}
 
 	in := NotificationInput{

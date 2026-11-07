@@ -40,8 +40,7 @@
     #header .header-right ul {
         gap: 8px;
     }
-    #header .header-btn span,
-    #header #LuoXiaoHeiWIKI span {
+    #header .header-btn span {
         display: none;
     }
     #header .header-btn {
@@ -311,10 +310,6 @@
         font-size: 13px;
     }
     #header .user-avatar {
-        width: 30px;
-        height: 30px;
-    }
-    #header #WIKIForIcon {
         width: 30px;
         height: 30px;
     }

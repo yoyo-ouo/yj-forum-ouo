@@ -14,8 +14,8 @@ import RichContent from "@/components/ui/RichContent";
 import HoverTip from "@/components/ui/HoverTip";
 import { useToast } from "@/components/Toast";
 import { UserAvatar } from "@/components/ui/UserAvatar";
-import { userApi, postApi, User, Post, UserBrief, ReplyItem, ApiException, GuildMembership } from "@/lib/api";
-import { ageDisplay, contrastText, themeColor } from "@/lib/constants";
+import { userApi, postApi, User, Post, UserBrief, ReplyItem, LikeItem, ApiException, GuildMembership } from "@/lib/api";
+import { ageDisplay, contrastText, isScheduledPost, themeColor } from "@/lib/constants";
 import { useStore } from "@/lib/store";
 
 function fmtDate(v?: string) {
@@ -39,11 +39,6 @@ function fmtDateTime(v?: string) {
   const d = new Date(v);
   if (isNaN(d.getTime())) return "";
   return `${fmtDate(v)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
-/** published_at 在未来即定时未发布（本人可见） */
-function isScheduled(v?: string) {
-  return !!v && new Date(v).getTime() > Date.now();
 }
 
 /** 馆长提示中的会馆名（名称已以「会馆」结尾则不重复追加） */
@@ -74,10 +69,16 @@ export default function UserPage() {
   // 移动端「编辑」按钮：直接打开编辑态；点名字/资料仍打开详情态
   const [profileModalEdit, setProfileModalEdit] = useState(false);
   const [showEmailChange, setShowEmailChange] = useState(false);
-  const [activeTab, setActiveTab] = useState<"posts" | "comments">("posts");
+  const [activeTab, setActiveTab] = useState<"posts" | "comments" | "likes">("posts");
   const [postView, setPostView] = useState<"posts" | "favorites">("posts");
   const [comments, setComments] = useState<ReplyItem[] | null>(null);
   const [favorites, setFavorites] = useState<Post[] | null>(null);
+  // 谁赞了我（仅本人）：cursor 分页
+  const [likes, setLikes] = useState<LikeItem[] | null>(null);
+  const [likesCursor, setLikesCursor] = useState("");
+  const [likesHasMore, setLikesHasMore] = useState(false);
+  const [likesLoading, setLikesLoading] = useState(false);
+  const [likesError, setLikesError] = useState("");
   // 签到：初始态用 last_sign_in 与 Asia/Shanghai 日期比对；409 视为今日已签
   const [signedToday, setSignedToday] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
@@ -125,8 +126,11 @@ export default function UserPage() {
   }, [id]);
 
   useEffect(() => {
-    if (activeTab === "comments" && comments === null) loadComments();
-  }, [activeTab, comments, loadComments]);
+    if (!isSelf || activeTab !== "comments" || comments !== null) return;
+    // 延后一个 tick，避免在 effect 内同步触发加载态更新
+    const t = window.setTimeout(() => void loadComments(), 0);
+    return () => window.clearTimeout(t);
+  }, [isSelf, activeTab, comments, loadComments]);
 
   const loadFavorites = useCallback(async () => {
     try {
@@ -140,6 +144,28 @@ export default function UserPage() {
   useEffect(() => {
     if (postView === "favorites" && favorites === null) loadFavorites();
   }, [postView, favorites, loadFavorites]);
+
+  const loadLikes = useCallback(
+    async (cursor: string, append: boolean) => {
+      setLikesLoading(true);
+      setLikesError("");
+      try {
+        const r = await userApi.myLikes(cursor, 20);
+        setLikes((prev) => (append ? [...(prev || []), ...r.items] : r.items));
+        setLikesCursor(r.next_cursor || "");
+        setLikesHasMore(!!r.has_more);
+      } catch (e) {
+        setLikesError(e instanceof ApiException ? e.message : "加载失败");
+        if (!append) setLikes([]);
+      } finally {
+        setLikesLoading(false);
+      }
+    },
+    []
+  );
+
+  // 他人主页只展示帖子列表（visibleTab 已兜底）；不需要 effect 重置 activeTab，
+  // 避免「effect 内同步 setState」造成级联渲染。
 
   /** 每日签到：成功更新灵力值；409 置为已签 */
   const doSignIn = async () => {
@@ -250,6 +276,8 @@ export default function UserPage() {
 
   // 共同关注 Tab：仅登录且非本人主页时展示
   const showMutualTab = !isSelf && !!me;
+  // 他人主页只展示帖子列表：即使 activeTab 残留为评论/谁赞了我，也不渲染对应内容。
+  const visibleTab = isSelf ? activeTab : "posts";
 
   if (loading) return <div className="loading-text" style={{ padding: 40 }}>加载中...</div>;
   if (!profile) return <div className="loading-text" style={{ padding: 40 }}>用户不存在</div>;
@@ -412,12 +440,26 @@ export default function UserPage() {
         </div>
 
         <div className="user-profile-tabs">
-          <button className={`profile-tab ${activeTab === "posts" ? "active" : ""}`} data-tab="posts" onClick={() => setActiveTab("posts")}>
+          <button className={`profile-tab ${visibleTab === "posts" ? "active" : ""}`} data-tab="posts" onClick={() => setActiveTab("posts")}>
             <i className="fa fa-file-text"></i> 帖子列表
           </button>
-          <button className={`profile-tab ${activeTab === "comments" ? "active" : ""}`} data-tab="comments" onClick={() => setActiveTab("comments")}>
-            <i className="fa fa-comment-o"></i> 评论列表
-          </button>
+          {isSelf && (
+            <button className={`profile-tab ${activeTab === "comments" ? "active" : ""}`} data-tab="comments" onClick={() => setActiveTab("comments")}>
+              <i className="fa fa-comment-o"></i> 评论列表
+            </button>
+          )}
+          {isSelf && (
+            <button
+              className={`profile-tab ${activeTab === "likes" ? "active" : ""}`}
+              data-tab="likes"
+              onClick={() => {
+                setActiveTab("likes");
+                if (likes === null) void loadLikes("", false);
+              }}
+            >
+              <i className="fa fa-thumbs-up"></i> 谁赞了我
+            </button>
+          )}
           {isSelf && (
             <Link href="/post/create" className="profile-tab profile-tab-create">
               <i className="fa fa-pencil"></i> 发布新帖
@@ -426,7 +468,7 @@ export default function UserPage() {
         </div>
 
         <div className="user-profile-content">
-          {activeTab === "posts" ? (
+          {visibleTab === "posts" ? (
             <div>
               {isSelf && (
                 <div className="profile-sub-tabs">
@@ -464,7 +506,7 @@ export default function UserPage() {
                         <span><i className="fa fa-comment"></i> {p.comment_count ?? 0}</span>
                         <span><i className="fa fa-clock-o"></i> {fmtDate(p.created_at)}</span>
                       </div>
-                      {isSelf && isScheduled(p.published_at) && (
+                      {isSelf && isScheduledPost(p.published_at, p.created_at) && (
                         <span className="post-scheduled-tag-wrap">
                           <span className="post-scheduled-tag" title="尚未到达发布时间，仅自己可见">
                             <i className="fa fa-clock-o"></i> 定时发布 {fmtDateTime(p.published_at)}
@@ -513,7 +555,7 @@ export default function UserPage() {
               </div>
             )}
           </div>
-        ) : (
+          ) : visibleTab === "comments" ? (
           <div className="user-comments-list">
             {comments === null ? (
               <p className="loading-text">加载中...</p>
@@ -558,6 +600,70 @@ export default function UserPage() {
                   </div>
                 );
               })
+            )}
+          </div>
+        ) : (
+          <div className="user-comments-list">
+            {likes === null ? (
+              <p className="loading-text">加载中...</p>
+            ) : likesError ? (
+              <p className="loading-text">
+                {likesError}{" "}
+                <button type="button" className="user-likes-retry" onClick={() => void loadLikes("", false)}>
+                  重试
+                </button>
+              </p>
+            ) : likes.length === 0 ? (
+              <p className="loading-text">还没有收到赞</p>
+            ) : (
+              <>
+                {likes.map((item) => {
+                  const targetCommentId = item.target_type === "comment" ? item.comment_id : "";
+                  const href = `/post/${item.post_id}${targetCommentId ? `#comment-${targetCommentId}` : ""}`;
+                  return (
+                    <div
+                      className="comment-item comment-item-clickable"
+                      key={item.id}
+                      role="link"
+                      tabIndex={0}
+                      title="点击跳转到被赞内容"
+                      onClick={(e) => {
+                        if ((e.target as HTMLElement).closest("a")) return;
+                        router.push(href);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") router.push(href);
+                      }}
+                    >
+                      <div className="comment-avatar">
+                        <UserAvatar src={item.actor.avatar} userId={item.actor.id} />
+                      </div>
+                      <div className="comment-body">
+                        <div className="comment-header">
+                          <span className="comment-author">{item.actor.name}</span>
+                          <span className="comment-time">{fmtDate(item.created_at)}</span>
+                        </div>
+                        <div className="comment-text">
+                          {item.target_type === "post" ? "赞了你的帖子" : "赞了你的评论"}
+                          {item.comment_excerpt && <span className="user-like-excerpt">「{item.comment_excerpt}」</span>}
+                        </div>
+                        <div className="comment-footer">
+                          <Link className="comment-post-link" href={href} onClick={(e) => e.stopPropagation()}>
+                            <i className="fa fa-thumbs-up"></i> {item.post_title || "查看帖子"}
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {likesHasMore && (
+                  <div className="user-likes-more">
+                    <button type="button" disabled={likesLoading} onClick={() => void loadLikes(likesCursor, true)}>
+                      {likesLoading ? "加载中..." : "加载更多"}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

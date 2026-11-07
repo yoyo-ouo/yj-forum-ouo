@@ -7,7 +7,7 @@
 // - 图片选中：宽度条（25/50/75/100% 按编辑区换算 + 自定义 40-2400px + 还原），
 //   宽度即时生效（Decoration 视图层内联 style，不污染序列化）
 // - 引用节点选中：版式/尺寸/字段开关（用户）/对齐；序列化严格按契约（lib/embed.ts）
-// - 图片上传：mediaApi.upload → 插入站内相对路径 /api/v1/media/{id}
+// - 图片上传：mediaApi.upload → 插入站内相对路径 /ov2/api/media/{id}
 
 import { useEffect, useRef, useState } from "react";
 import Placeholder from "@tiptap/extension-placeholder";

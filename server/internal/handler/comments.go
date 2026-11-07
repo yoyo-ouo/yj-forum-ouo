@@ -2,17 +2,14 @@ package handler
 
 import (
 	"context"
-	"html"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 
 	"yj-forum/server/internal/database"
-	"yj-forum/server/internal/email"
 	"yj-forum/server/internal/models"
 	"yj-forum/server/internal/sanitize"
 )
@@ -20,7 +17,7 @@ import (
 // maxCommentContentBytes 评论原始正文长度上限（64KB，与发帖富文本一致）。
 const maxCommentContentBytes = 64 * 1024
 
-// ---- GET /api/v1/posts/:id/comments ----
+// ---- GET /ov2/api/posts/:id/comments ----
 
 // Comments 评论列表（匿名缓存 comments:post:ID；登录用户实时返回含 liked_by_me）。
 func (h *PostsHandler) Comments(c *gin.Context) {
@@ -57,7 +54,7 @@ func (h *PostsHandler) Comments(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ---- POST /api/v1/posts/:id/comments ----
+// ---- POST /ov2/api/posts/:id/comments ----
 
 type createCommentReq struct {
 	Content  string  `json:"content" binding:"required"`
@@ -145,65 +142,43 @@ func (h *PostsHandler) awardCommentSpirit(ctx context.Context, userID, commentID
 	}
 }
 
-// notifyComment 评论通知：给帖子作者/父评论作者写站内通知，并在同一事务内入队邮件 outbox。
-// 邮件 outbox 入队失败时回退到旧的直发逻辑（保证通知不丢）。
+// notifyComment 评论通知：给帖子作者/父评论作者写站内通知。
+// 邮件提醒已按需求下线（「xxx 评论了你」不再发送邮件），仅保留消息中心站内通知。
 func (h *PostsHandler) notifyComment(comment *models.Comment) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	// 先读帖子信息：无论通知发给谁，帖子作者都因「帖子下新增评论」产生未读，
+	// 需要在 SSE 连接活跃时补推一次未读数（不额外建通知行）。
+	postAuthorID, postTitle := "", ""
+	if post, err := h.DB.GetPost(ctx, comment.PostID); err == nil && post != nil {
+		postAuthorID, postTitle = post.UserID, post.Title
+	}
+
 	// 回复则通知父评论作者，否则通知帖子作者；跳过自己给自己评论/回复自己的情况
-	var targetUserID, targetEmail string
+	var targetUserID string
 	notifType := database.NotificationPostComment
 	if comment.ParentID != nil && *comment.ParentID != "" {
 		notifType = database.NotificationCommentReply
 		pc, err := h.DB.GetComment(ctx, *comment.ParentID)
 		if err == nil && pc != nil {
-			u, err2 := h.DB.GetUserByID(ctx, pc.UserID)
-			if err2 == nil {
+			if u, err2 := h.DB.GetUserByID(ctx, pc.UserID); err2 == nil {
 				targetUserID = u.ID
-				targetEmail = u.Email
 			}
 		}
 	} else {
-		post, err := h.DB.GetPost(ctx, comment.PostID)
-		if err == nil && post != nil {
-			u, err2 := h.DB.GetUserByID(ctx, post.UserID)
-			if err2 == nil {
-				targetUserID = u.ID
-				targetEmail = u.Email
+		targetUserID = postAuthorID
+	}
+
+	if targetUserID != "" && targetUserID != comment.UserID {
+		excerpt := truncateRunes(sanitize.StripTagsAndTrim(comment.Content), 200)
+		authorName := comment.UserName
+		if authorName == "" {
+			if u, err := h.DB.GetUserByID(ctx, comment.UserID); err == nil && u != nil {
+				authorName = u.Name
 			}
 		}
-	}
-	if targetUserID == "" || targetUserID == comment.UserID {
-		return
-	}
-
-	postTitle := ""
-	if post, err := h.DB.GetPost(ctx, comment.PostID); err == nil && post != nil {
-		postTitle = post.Title
-	}
-	excerpt := truncateRunes(sanitize.StripTagsAndTrim(comment.Content), 200)
-	authorName := comment.UserName
-	if authorName == "" {
-		if u, err := h.DB.GetUserByID(ctx, comment.UserID); err == nil && u != nil {
-			authorName = u.Name
-		}
-	}
-	link := "https://" + h.Cfg.PublicBaseURL + "/post/" + comment.PostID
-	verb := "评论了你的帖子"
-	subject := "【妖精论坛】你的帖子收到新评论"
-	if notifType == database.NotificationCommentReply {
-		verb = "回复了你的评论"
-		subject = "【妖精论坛】收到新回复"
-	}
-	plain := authorName + " " + verb + "：\n" + excerpt + "\n" + link
-	htmlBody := email.BuildHTML("评论通知", authorName+" "+verb,
-		[]string{"<strong>" + html.EscapeString(authorName) + "</strong> " + verb + "：", html.EscapeString(excerpt), "点击查看详情"},
-		"查看帖子", link, "")
-
-	var notifID int64
-	created := false
-	err := h.DB.Tx(ctx, func(tx pgx.Tx) error {
-		id, ok, e := h.DB.CreateNotificationTx(ctx, tx, database.NotificationInput{
+		notifID, created, err := h.DB.CreateNotification(ctx, database.NotificationInput{
 			UserID: targetUserID, Type: notifType, ActorID: comment.UserID,
 			TargetType: "comment", TargetID: comment.ID,
 			ContextPostID: comment.PostID, ContextCommentID: comment.ID,
@@ -213,40 +188,22 @@ func (h *PostsHandler) notifyComment(comment *models.Comment) {
 			},
 			DedupeKey: "comment_notify:" + comment.ID,
 		})
-		if e != nil {
-			return e
+		if err != nil {
+			log.Printf("[COMMENT] 站内通知写入失败 comment=%s: %v", comment.ID, err)
+		} else if created {
+			PushNotificationEvent(targetUserID, notifID, gin.H{
+				"id": notifID, "type": notifType, "actor_id": comment.UserID, "actor_name": authorName,
+				"target_type": "comment", "target_id": comment.ID, "comment_id": comment.ID,
+				"post_id": comment.PostID, "post_title": postTitle, "excerpt": excerpt,
+				"parent_id": parentIDString(comment.ParentID),
+			})
+			PushUnreadEvent(ctx, h.DB, targetUserID)
 		}
-		notifID, created = id, ok
-		if !ok || targetEmail == "" {
-			return nil
-		}
-		if _, e = h.DB.EnqueueEmailTx(ctx, tx, database.EmailOutboxInput{
-			To:        []string{targetEmail},
-			Subject:   subject,
-			PlainBody: plain,
-			HTMLBody:  htmlBody,
-			DedupeKey: "comment_notify_mail:" + comment.ID,
-		}); e != nil {
-			return e
-		}
-		return nil
-	})
-	if err != nil {
-		log.Printf("[COMMENT] 通知/outbox 写入失败 comment=%s: %v", comment.ID, err)
-		// 回退：直接发信（旧逻辑），避免邮件通知完全丢失
-		if targetEmail != "" {
-			_, _ = h.Mailer.Send(subject, plain, []string{targetEmail}, htmlBody)
-		}
-		return
 	}
-	if created {
-		PushNotificationEvent(targetUserID, notifID, gin.H{
-			"id": notifID, "type": notifType, "actor_id": comment.UserID, "actor_name": authorName,
-			"target_type": "comment", "target_id": comment.ID, "comment_id": comment.ID,
-			"post_id": comment.PostID, "post_title": postTitle, "excerpt": excerpt,
-			"parent_id": parentIDString(comment.ParentID),
-		})
-		PushUnreadEvent(ctx, h.DB, targetUserID)
+
+	// 帖子作者与通知收件人不同（例如回复了他人评论）时，仍需刷新帖子作者的未读角标。
+	if postAuthorID != "" && postAuthorID != comment.UserID && postAuthorID != targetUserID {
+		PushUnreadEvent(ctx, h.DB, postAuthorID)
 	}
 }
 
@@ -257,7 +214,7 @@ func parentIDString(parent *string) string {
 	return *parent
 }
 
-// ---- DELETE /api/v1/comments/:id ----
+// ---- DELETE /ov2/api/comments/:id ----
 
 // DeleteComment 删除评论（仅作者）。
 func (h *PostsHandler) DeleteComment(c *gin.Context) {
@@ -281,7 +238,7 @@ func (h *PostsHandler) DeleteComment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-// ---- POST /api/v1/comments/:id/like ----
+// ---- POST /ov2/api/comments/:id/like ----
 
 // LikeComment 评论点赞切换。
 func (h *PostsHandler) LikeComment(c *gin.Context) {

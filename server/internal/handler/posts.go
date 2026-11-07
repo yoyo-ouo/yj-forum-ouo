@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"html"
 	"log"
 	"math/rand"
 	"net/http"
@@ -35,7 +34,7 @@ type PostsHandler struct {
 	Altcha   *altcha.Service // nil 安全：未注入时跳过 ALTCHA 校验
 }
 
-// ---- GET /api/v1/posts ----
+// ---- GET /ov2/api/posts ----
 
 // List 帖子列表（缓存 posts:list:page:size:cat）。
 func (h *PostsHandler) List(c *gin.Context) {
@@ -61,7 +60,7 @@ func (h *PostsHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ---- GET /api/v1/posts/random ----
+// ---- GET /ov2/api/posts/random ----
 
 // randomPoolKey 随机推荐候选池（缓存 60s，避免每次请求都全表 ORDER BY RANDOM）。
 const randomPoolKey = "posts:random:pool"
@@ -101,7 +100,7 @@ func (h *PostsHandler) Random(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "posts": out})
 }
 
-// ---- GET /api/v1/posts/picker-defaults ----
+// ---- GET /ov2/api/posts/picker-defaults ----
 
 // PickerDefaults 引用选择器默认项（登录用户；关注/收藏各至多 20 条，依赖 viewer 不做共享缓存）。
 func (h *PostsHandler) PickerDefaults(c *gin.Context) {
@@ -120,7 +119,7 @@ func (h *PostsHandler) PickerDefaults(c *gin.Context) {
 	}})
 }
 
-// ---- POST /api/v1/posts ----
+// ---- POST /ov2/api/posts ----
 
 type createPostReq struct {
 	Title    string `json:"title" binding:"required"`
@@ -223,10 +222,9 @@ func (h *PostsHandler) Create(c *gin.Context) {
 		return
 	}
 	if publishedAt == nil {
-		// 立即帖：灵力奖励同步完成（source 幂等），粉丝邮件异步交给 fanout worker；
-		// 定时帖由 ProcessScheduledPublishes 到点补发
+		// 立即帖：灵力奖励同步完成（source 幂等）。
+		// 粉丝发帖邮件提醒已按需求下线；定时帖由 ProcessScheduledPublishes 到点补发灵力。
 		h.awardPostSpirit(c.Request.Context(), uid, postID)
-		go h.notifyFollowers(uid, postID, title)
 	}
 	h.Cache.Posts.DeletePrefix("posts:list:")
 	h.Cache.Posts.Delete(randomPoolKey)
@@ -245,43 +243,6 @@ func (h *PostsHandler) awardPostSpirit(ctx context.Context, userID, postID strin
 	}
 }
 
-// notifyFollowers 粉丝发帖通知：优先入队 fanout job（worker 为一行一收件人 outbox，支持退避重试）；
-// 入队失败时回退到旧的直发逻辑，保证通知不丢。
-func (h *PostsHandler) notifyFollowers(userID, postID, title string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	if _, err := h.DB.EnqueueFanout(ctx, postID, userID); err == nil {
-		log.Printf("[POST] 粉丝通知已入队 fanout post=%s", postID)
-		return
-	} else {
-		log.Printf("[POST] fanout 入队失败，回退直发 post=%s: %v", postID, err)
-	}
-	emails, err := h.DB.ListFollowerEmails(ctx, userID, 5000)
-	if err != nil || len(emails) == 0 {
-		return
-	}
-	author := userID
-	if u, uerr := h.DB.GetUserByID(ctx, userID); uerr == nil && u != nil && u.Name != "" {
-		author = u.Name
-	}
-	link := "https://" + h.Cfg.PublicBaseURL + "/post/" + postID
-	plain := author + " 发布了新帖《" + title + "》\n" + link
-	// HTML 邮件中对作者/标题转义，防止用户构造的名称或标题注入 HTML
-	htmlBody := email.BuildHTML("新帖通知", author+" 发布了新帖",
-		[]string{"你关注的 <strong>" + html.EscapeString(author) + "</strong> 发布了新帖：",
-			"《" + html.EscapeString(title) + "》", "点击查看详情"},
-		"查看帖子", link, "你收到这封邮件是因为关注了 TA")
-	// 分批 100 封（兼容回退路径）
-	for start := 0; start < len(emails); start += 100 {
-		end := start + 100
-		if end > len(emails) {
-			end = len(emails)
-		}
-		_, _ = h.Mailer.Send("【妖精论坛】你关注的 "+author+" 发布了新帖", plain, emails[start:end], htmlBody)
-	}
-	log.Printf("[POST] 发帖通知已发送 %d 位粉丝", len(emails))
-}
-
 // postVisible 帖子可见性校验：不存在、已软删（status != 1）、或定时未发布且 viewer 非作者时写入 404 并返回 false。
 // 供点赞/收藏/举报/评论等路径复用（GetPostPublishInfo 仅取发布状态，不含帖子正文）；
 // 软删帖与 Detail 行为一致，一律视为不可见，不能再评论/点赞/收藏/举报/读评论列表。
@@ -298,8 +259,8 @@ func (h *PostsHandler) postVisible(c *gin.Context, postID, viewer string) bool {
 	return true
 }
 
-// ProcessScheduledPublishes 定时补发任务：把到点的定时帖原子标记为已通知（每次至多 50 条）
-// 并补发粉丝通知；有新帖转公开时失效帖子列表/搜索/详情缓存。由 main 每分钟 ticker 调用。
+// ProcessScheduledPublishes 定时补发任务：把到点的定时帖原子标记为已通知（每次至多 50 条），
+// 补发灵力奖励；有新帖转公开时失效帖子列表/搜索/详情缓存。由 main 每分钟 ticker 调用。
 func (h *PostsHandler) ProcessScheduledPublishes(ctx context.Context) {
 	pending, err := h.DB.ClaimPendingPublishPosts(ctx)
 	if err != nil {
@@ -312,8 +273,6 @@ func (h *PostsHandler) ProcessScheduledPublishes(ctx context.Context) {
 	for _, p := range pending {
 		// 到点补发灵力奖励（与立即帖一致，source 幂等避免重复）
 		h.awardPostSpirit(ctx, p.UserID, p.ID)
-		// 逐帖异步通知（与立即帖策略一致）：邮件发送不阻塞定时任务主循环
-		go h.notifyFollowers(p.UserID, p.ID, p.Title)
 	}
 	// 定时帖转为可见：失效帖子列表、搜索与单帖详情缓存
 	h.Cache.Posts.DeletePrefix("posts:list:")
@@ -325,7 +284,7 @@ func (h *PostsHandler) ProcessScheduledPublishes(ctx context.Context) {
 	log.Printf("[POST] 定时发布完成 %d 篇", len(pending))
 }
 
-// ---- GET /api/v1/posts/:id ----
+// ---- GET /ov2/api/posts/:id ----
 
 // Detail 帖子详情（匿名缓存 post:detail:ID；登录用户实时返回含个人状态）。
 // track=0：SEO 等服务端拉取不计数、只读匿名缓存不写入；其余请求同一访客同帖 30 分钟内只计一次（匿名按 IP / 登录按 uid）。
@@ -393,7 +352,7 @@ func (h *PostsHandler) Detail(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ---- POST /api/v1/posts/:id/like ----
+// ---- POST /ov2/api/posts/:id/like ----
 
 // Like 点赞切换。
 func (h *PostsHandler) Like(c *gin.Context) {
@@ -451,7 +410,7 @@ func (h *PostsHandler) notifyPostLike(ctx context.Context, postID, actorID strin
 	PushUnreadEvent(ctx, h.DB, authorID)
 }
 
-// ---- POST /api/v1/posts/:id/favorite ----
+// ---- POST /ov2/api/posts/:id/favorite ----
 
 // Favorite 收藏切换。
 func (h *PostsHandler) Favorite(c *gin.Context) {
@@ -473,7 +432,7 @@ func (h *PostsHandler) Favorite(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "favorited": favorited})
 }
 
-// ---- POST /api/v1/posts/:id/delete ----
+// ---- POST /ov2/api/posts/:id/delete ----
 
 // Delete 删除帖子（仅作者）。
 func (h *PostsHandler) Delete(c *gin.Context) {
@@ -494,7 +453,7 @@ func (h *PostsHandler) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-// ---- POST /api/v1/posts/:id/report ----
+// ---- POST /ov2/api/posts/:id/report ----
 
 type reportPostReq struct {
 	Reason string `json:"reason" binding:"required"`

@@ -55,7 +55,7 @@ type WorldHandler struct {
 	Sessions *auth.SessionManager
 }
 
-// RegisterWorldRoutes 注册世界频道路由（由 router.go 在 /ov2/api 与 /api/v1 两个 group 各调用一次）。
+// RegisterWorldRoutes 注册世界频道路由（由 router.go 在 /ov2/api group 注册）。
 //
 //	GET  /world/messages  公开列表（before_id / after_id / limit）
 //	POST /world/messages  登录发布（content_html / parent_id?）

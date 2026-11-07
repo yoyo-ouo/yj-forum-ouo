@@ -93,6 +93,19 @@ export interface ReplyItem extends Comment {
   post_title?: string;
 }
 
+/** 「谁赞了我」条目（GET /users/me/likes，仅本人可见）。 */
+export interface LikeItem {
+  id: string;
+  actor: { id: string; name: string; avatar: string };
+  target_type: "post" | "comment";
+  target_id: string;
+  post_id: string;
+  post_title: string;
+  comment_id: string;
+  comment_excerpt: string;
+  created_at: string;
+}
+
 // ---- 会馆 ----
 
 // 馆长摘要（列表/详情共用）
@@ -181,11 +194,28 @@ export interface GuildDetail {
 }
 
 // 当前用户与会馆的关系（详情页；未登录为 null）
+/** 入馆申请（status：0 待审 / 1 通过 / 2 拒绝 / 3 撤回）。 */
+export interface GuildJoinRequestInfo {
+  id: number;
+  guild_id: number;
+  user_id: string;
+  status: number;
+  reason: string;
+  handled_note?: string;
+  handled_by?: string;
+  handled_at?: string | null;
+  created_at?: string | null;
+}
+
 export interface GuildMyState {
   is_member: boolean;
   is_leader: boolean;
   has_pending_request: boolean;
   request_id?: number;
+  /** 用户当前已加入的会馆（可能是其他会馆）。 */
+  current_guild?: GuildMembership | null;
+  /** 对该会馆最近一次申请（含已处理状态）。 */
+  latest_request?: GuildJoinRequestInfo | null;
 }
 
 // 动态流条目（帖子或文章）
@@ -489,6 +519,11 @@ export const userApi = {
     request<{ success: boolean }>("/users/me", { method: "PATCH", body: JSON.stringify(data) }),
   replies: (page = 1, pageSize = 50) =>
     request<{ replies: Comment[]; total: number }>(`/users/me/replies?page=${page}&page_size=${pageSize}`),
+  // 谁赞了我（仅本人）：cursor 分页
+  myLikes: (cursor = "", pageSize = 20) =>
+    request<{ items: LikeItem[]; has_more: boolean; next_cursor: string }>(
+      `/users/me/likes?limit=${pageSize}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`
+    ),
   // 每日签到（+10 灵力；409 = 今日已签）
   signIn: () =>
     request<{ data: { spirit: number; last_sign_in: string } }>("/users/me/sign-in", { method: "POST" }),

@@ -28,7 +28,7 @@ type AuthHandler struct {
 // cookieName 会话 cookie。
 const cookieName = "forum_session"
 
-// ---- /api/v1/auth/register ----
+// ---- /ov2/api/auth/register ----
 
 type registerReq struct {
 	Name     string `json:"name" binding:"required"`
@@ -123,7 +123,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"success": true, "id": uid})
 }
 
-// ---- /api/v1/auth/login ----
+// ---- /ov2/api/auth/login ----
 
 type loginReq struct {
 	Name     string `json:"name" binding:"required"`
@@ -189,7 +189,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "id": user.ID})
 }
 
-// ---- /api/v1/auth/logout ----
+// ---- /ov2/api/auth/logout ----
 
 // Logout 登出。
 func (h *AuthHandler) Logout(c *gin.Context) {
@@ -210,9 +210,10 @@ func (h *AuthHandler) issueSession(c *gin.Context, userID string) {
 		return
 	}
 	secure := h.Cfg.AppEnv == "prod"
+	maxAge := int(auth.SessionTTL.Seconds()) // 14 天：与 sessions.expires_at 同步
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(cookieName, token, 86400, "/", "", secure, true) // HttpOnly
-	c.SetCookie("user_id", userID, 86400*30, "/", "", secure, false)
+	c.SetCookie(cookieName, token, maxAge, "/", "", secure, true) // HttpOnly
+	c.SetCookie("user_id", userID, maxAge, "/", "", secure, false)
 }
 
 func hasLetterAndDigit(s string) bool {
@@ -228,7 +229,7 @@ func hasLetterAndDigit(s string) bool {
 	return hasLetter && hasDigit
 }
 
-// ---- /api/v1/auth/oauth/callback（兼容 TheDoorOfBings，简化 JSON 返回）----
+// ---- /ov2/api/auth/oauth/callback（兼容 TheDoorOfBings，简化 JSON 返回）----
 
 // HandleOAuth 第三方登录回调（完整 UI 在 Next.js /oauth 页）。
 func (h *AuthHandler) HandleOAuth(c *gin.Context) {

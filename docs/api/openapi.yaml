@@ -2,7 +2,7 @@ openapi: "3.1.0"
 info:
   title: "妖精论坛 ov2 API"
   version: "2.1.0"
-  description: "canonical base `/ov2/api`；`/api/v1` 为同 shape 别名；`/api/*` 为旧 APP 兼容层。SSE：`/ov2/api/world/stream`、`/ov2/api/messages/stream`。媒体统一经 `/ov2/api/media/<id>` 代理。"
+  description: "唯一 API 前缀 `/ov2/api`；旧 `/api/v1` 别名与 `/api/*` 兼容层已于 2026-11-07 移除。SSE：`/ov2/api/world/stream`、`/ov2/api/messages/stream`。媒体统一经 `/ov2/api/media/<id>` 代理。"
 servers:
   -
     url: "http://localhost:8090"
@@ -349,6 +349,26 @@ paths:
           description: "Unauthorized"
         404:
           description: "Not Found"
+        429:
+          description: "Too Many Requests"
+        500:
+          description: "Internal Server Error"
+      security:
+
+  /ov2/api/users/me/likes:
+    get:
+      tags:
+        - "users"
+      summary: "GET /ov2/api/users/me/likes"
+      operationId: "get_ov2_api_users_me_likes"
+      description: "谁赞了我：当前用户的帖子/评论收到的点赞（仅本人可见，cursor 分页）"
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Unauthorized"
         429:
           description: "Too Many Requests"
         500:

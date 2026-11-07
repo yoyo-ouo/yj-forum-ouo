@@ -79,7 +79,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       if (e instanceof ApiException && e.status === 401) {
-        // 会话确已失效：user_id Cookie 可能仍在（30 天），不能再用它冒充登录态
+        // 会话确已失效：user_id Cookie 可能仍在（14 天），不能再用它冒充登录态
         setUser(null);
         setUserId(null);
       } else {

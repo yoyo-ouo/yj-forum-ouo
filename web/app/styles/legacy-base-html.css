@@ -222,10 +222,3 @@
 
 
 /* FontAwesome 字体由 npm 包 font-awesome 提供（globals.css 顶部注释说明） */
-@font-face {
-    font-family: 'CEFFontsCJK';
-    src: url('/assets/fonts/CEFFontsCJK.woff2') format('woff2');
-    font-weight: normal;
-    font-style: normal;
-}
-

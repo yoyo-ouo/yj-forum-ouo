@@ -206,11 +206,3 @@
     --color-secondary: #D9A84E;
 }
 
-@font-face {
-    font-family: 'OriginalHandWrite';
-    src: url('https://assets.crazying-dev.top/font/CEFFontsCJK.woff2') format('woff2'),url('https://ciallovo.top/assets/fonts/CEFFontsCJK.woff2') format('woff2'), url('https://cdn.bootcdn.net/ajax/libs/webfont/1.6.28/fonts/ma-shan-zheng.woff2') format('woff2');
-    font-weight: normal;
-    font-style: normal;
-    font-display: swap;
-}
-

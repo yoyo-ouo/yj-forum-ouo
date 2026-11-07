@@ -1,10 +1,12 @@
-# 旧 APP 兼容层
+# 旧 APP 兼容层（已移除）
 
-> 完整路由优先级与两代端点清单见 [routes-contract.md](./routes-contract.md)。
+> **2026-11-07 起：`/api/*` 旧兼容层与 `/api/v1` 别名已全部移除，API 仅保留 `/ov2/api`。**
+> 本文件以下内容是移除前的历史记录，不再代表线上行为；旧版客户端请升级到已迁移 `/ov2/api` 的新版本。
+> 仍保留的非 API 资源路由：`/avatar/{filename}`（历史头像静态文件）。
 
-## 前缀
+## 前缀（历史）
 
-`/api/*`（不含 `/api/v1`）；独立 handler，显式跳过 CSRF；不转译 ov2 handler。
+~~`/api/*`（不含 `/api/v1`）；独立 handler，显式跳过 CSRF；不转译 ov2 handler。~~
 
 ## 认证
 
