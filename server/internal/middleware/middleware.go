@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,7 +24,13 @@ var (
 	rateMu      sync.Mutex
 	rateStore   = map[string]*rateEntry{}
 	lastCleanup = time.Now()
+
+	// rateLimitBypass 基准测试模式：跳过 IP 限流（仅当 BENCH_DEBUG 且非生产时开启）。
+	rateLimitBypass atomic.Bool
 )
+
+// SetRateLimitBypass 开启/关闭 IP 限流旁路（仅供基准测试调用）。
+func SetRateLimitBypass(on bool) { rateLimitBypass.Store(on) }
 
 // RateLimit 简易速率限制（key 维度 + 客户端 IP）。
 // 返回 true 表示超限（应返回 429）。
@@ -33,6 +40,10 @@ func RateLimit(key string, maxCount int, window time.Duration) gin.HandlerFunc {
 		window = time.Minute
 	}
 	return func(c *gin.Context) {
+		if rateLimitBypass.Load() {
+			c.Next()
+			return
+		}
 		ip := c.ClientIP()
 		rk := key + ":" + ip
 		rateMu.Lock()

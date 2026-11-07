@@ -68,6 +68,22 @@ func (s *CacheSet) Invalidate(scope, key string) bool {
 	return true
 }
 
+// Stats 汇总各缓存实例的命中/容量/淘汰统计（基准测试用）。
+func (s *CacheSet) Stats() map[string]cache.Stats {
+	if s == nil {
+		return nil
+	}
+	return map[string]cache.Stats{
+		"posts":       s.Posts.Stats(),
+		"post_detail": s.PostDetail.Stats(),
+		"user_info":   s.UserInfo.Stats(),
+		"guilds":      s.Guilds.Stats(),
+		"search":      s.Search.Stats(),
+		"comments":    s.Comments.Stats(),
+		"view_dedup":  s.ViewDedup.Stats(),
+	}
+}
+
 func itoa(n int) string {
 	if n == 0 {
 		return "0"

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"time"
 
@@ -116,6 +117,13 @@ func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth
 	// 旧头像静态资源（非 API）：历史 /avatar/<uuid>.webp 仍可直接访问，
 	// 新头像已走媒体服务 /ov2/api/media/<id>。
 	r.GET("/avatar/:filename", postsH.ServeAvatar)
+
+	// 基准测试调试能力：仅在 BENCH_DEBUG=true 且非生产环境时启用（config 已做生产守卫）。
+	if cfg.BenchDebug && !cfg.IsProd() {
+		middleware.SetRateLimitBypass(true)
+		RegisterDebugRoutes(r, db, cacheSet)
+		log.Printf("[BENCH] 调试端点与 IP 限流旁路已开启（仅限非生产）：/debug/metrics、/debug/pprof")
+	}
 
 	return postsH
 }
