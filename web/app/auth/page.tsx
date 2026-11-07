@@ -129,9 +129,11 @@ function LoginInner() {
       return;
     }
     try {
-      await authApi.register(name, email, password, code, altcha);
+      const r = await authApi.register(name, email, password, code, altcha);
       await refreshUser();
-      router.push("/");
+      // 注册成功直接落到个人中心：设定引导弹窗在那里一次性弹出
+      if (r?.id) router.push(`/users/${r.id}`);
+      else router.push("/");
     } catch (e) {
       showMsg(errorText(e, "注册失败"));
     } finally {

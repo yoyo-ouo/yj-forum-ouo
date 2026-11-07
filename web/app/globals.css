@@ -57,6 +57,7 @@
 /* ===== 新增功能页/组件样式（顺序按入口批次）===== */
 @import "./styles/message-center.css";
 @import "./styles/world-channel.css";
+@import "./styles/character-sheet.css";
 @import "./styles/altcha.css";
 @import "./styles/announcement.css";
 @import "./styles/changelog.css";

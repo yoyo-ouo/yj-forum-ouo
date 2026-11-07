@@ -8,19 +8,74 @@ import Link from "next/link";
 import CategoryBadge from "@/components/ui/CategoryBadge";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { UserGuildChip } from "@/components/ui/UserGuildChip";
-import { EmbedArticleItem, EmbedPostItem, EmbedUserItem } from "@/lib/api";
+import { EmbedArticleItem, EmbedCharacterItem, EmbedPostItem, EmbedUserItem } from "@/lib/api";
 import { timeAgo } from "@/lib/constants";
+import { categoryIndex } from "@/lib/character-constants";
 import { EmbedResolvedItem, EmbedSpec, hasEmbedField } from "@/lib/embed";
 
 export type QuoteVariant = "card" | "compact";
 export type QuoteSize = "sm" | "md" | "lg";
 export type QuoteAlign = "left" | "center";
 
-/** 卡片根类：类型 + 版式/尺寸/对齐（对齐仅 card 版式有意义） */
-function cardClass(kind: "user" | "post" | "article", variant: QuoteVariant, size: QuoteSize, align: QuoteAlign): string {
+function cardClass(
+  kind: "user" | "post" | "article" | "character",
+  variant: QuoteVariant,
+  size: QuoteSize,
+  align: QuoteAlign
+): string {
   const cls = ["quote-card", `quote-card-${kind}`, `quote-card-${variant}`, `quote-card-${size}`];
   if (align === "center" && variant === "card") cls.push("quote-card-center");
   return cls.join(" ");
+}
+
+/** 角色设定引用卡片：头像 + 角色名/称号 + 所属用户 + 能力标签 */
+export function CharacterQuoteCard({
+  character,
+  variant = "card",
+  size = "md",
+  align = "left",
+}: {
+  character: EmbedCharacterItem;
+  variant?: QuoteVariant;
+  size?: QuoteSize;
+  align?: QuoteAlign;
+}) {
+  const initial = (character.name || "?").slice(0, 1);
+  return (
+    <Link
+      href={`/character/${encodeURIComponent(character.id)}`}
+      className={cardClass("character", variant, size, align)}
+    >
+      <span className="quote-card-avatar quote-card-char-avatar">
+        {character.avatar ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={character.avatar} alt="" />
+        ) : (
+          initial
+        )}
+      </span>
+      <span className="quote-card-body">
+        <span className="quote-card-name-row">
+          <span className="quote-card-name">{character.name || "未命名角色"}</span>
+          {character.title ? <span className="quote-card-char-title">{character.title}</span> : null}
+        </span>
+        {variant === "card" ? (
+          <span className="quote-card-char-owner">
+            <i className="fa fa-user-o" aria-hidden="true"></i> {character.owner_name || "未知用户"} 的设定
+          </span>
+        ) : null}
+        {variant === "card" && character.abilities.length > 0 ? (
+          <span className="quote-card-char-abilities">
+            {character.abilities.slice(0, 3).map((a) => (
+              <span key={a} className={`quote-card-char-ab quote-card-char-ab-${categoryIndex(a)}`}>
+                {a}
+              </span>
+            ))}
+          </span>
+        ) : null}
+      </span>
+    </Link>
+  );
 }
 
 /** 用户引用卡片：头像（含前缀角标）+ 昵称 + 会馆 chip + 简介 */
@@ -169,6 +224,11 @@ export function QuoteCard({ spec, data }: { spec: EmbedSpec; data: EmbedResolved
   }
   if (data.type === "article" && spec.type === "article") {
     return <ArticleQuoteCard article={data.article} variant={spec.variant} size={spec.size} align={spec.align} />;
+  }
+  if (data.type === "character" && spec.type === "character") {
+    return (
+      <CharacterQuoteCard character={data.character} variant={spec.variant} size={spec.size} align={spec.align} />
+    );
   }
   return <QuoteCardMissing />;
 }

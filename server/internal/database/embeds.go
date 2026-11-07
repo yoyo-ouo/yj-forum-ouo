@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"yj-forum/server/internal/models"
@@ -66,6 +67,44 @@ func (d *DB) GetEmbedPosts(ctx context.Context, ids []string) ([]models.EmbedPos
 		posts = append(posts, p)
 	}
 	return posts, rows.Err()
+}
+
+// GetEmbedCharacters 引用卡片角色设定（仅已公开；附能力类别与所属用户）。
+func (d *DB) GetEmbedCharacters(ctx context.Context, ids []string) ([]models.EmbedCharacter, error) {
+	characters := []models.EmbedCharacter{}
+	if len(ids) == 0 {
+		return characters, nil
+	}
+	rows, err := d.Query(ctx, `SELECT s.id, s.name, s.title, s.alias, s.avatar_media_id,
+		s.user_id, COALESCE(u.name, ''), COALESCE(u.avatar, ''), s.like_count,
+		COALESCE((SELECT string_agg(a.category, ',' ORDER BY a.sort_order, a.id)
+			FROM character_sheet_abilities a WHERE a.sheet_id = s.id), '')
+		FROM character_sheets s
+		LEFT JOIN users u ON u.id = s.user_id
+		WHERE s.id = ANY($1::text[]) AND s.status = 1`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var c models.EmbedCharacter
+		var avatarMediaID, abilities string
+		if err := rows.Scan(&c.ID, &c.Name, &c.Title, &c.Alias, &avatarMediaID,
+			&c.OwnerID, &c.OwnerName, &c.OwnerAvatar, &c.LikeCount, &abilities); err != nil {
+			return nil, err
+		}
+		if avatarMediaID != "" {
+			c.Avatar = characterMediaURL(avatarMediaID)
+		}
+		c.Abilities = []string{}
+		for _, part := range strings.Split(abilities, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				c.Abilities = append(c.Abilities, part)
+			}
+		}
+		characters = append(characters, c)
+	}
+	return characters, rows.Err()
 }
 
 // GetEmbedArticles 引用卡片文章（联会馆取 guild_name；不存在的 id 自然省略）。

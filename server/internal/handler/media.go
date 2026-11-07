@@ -28,10 +28,12 @@ type MediaHandler struct {
 }
 
 var allowedMediaScenes = map[string]struct{}{
-	"post_image":    {},
-	"comment_image": {},
-	"world_message": {},
-	"chat_message":  {},
+	"post_image":       {},
+	"comment_image":    {},
+	"world_message":    {},
+	"chat_message":     {},
+	"character_avatar": {},
+	"character_image":  {},
 }
 
 // sceneMeta 返回 owner_type 与默认 visibility。
@@ -43,6 +45,8 @@ func sceneMeta(scene string) (string, string) {
 		return "world", "public"
 	case "chat_message":
 		return "chat", "private"
+	case "character_avatar", "character_image":
+		return "character", "public"
 	default:
 		return "post", "public"
 	}

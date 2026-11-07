@@ -63,6 +63,17 @@
 | GET | `/ov2/api/guides` | guides |
 | GET | `/ov2/api/guides/:id` | guides |
 | GET | `/ov2/api/site/config` | site |
+| GET | `/ov2/api/character-sheets/mine` | character-sheets |
+| GET | `/ov2/api/character-sheets/search` | character-sheets |
+| POST | `/ov2/api/character-sheets` | character-sheets |
+| POST | `/ov2/api/character-sheets/prompt-seen` | character-sheets |
+| GET | `/ov2/api/character-sheets/user/:userId` | character-sheets |
+| GET | `/ov2/api/character-sheets/:id` | character-sheets |
+| PUT | `/ov2/api/character-sheets/:id/draft` | character-sheets |
+| DELETE | `/ov2/api/character-sheets/:id/draft` | character-sheets |
+| POST | `/ov2/api/character-sheets/:id/publish` | character-sheets |
+| POST | `/ov2/api/character-sheets/:id/like` | character-sheets |
+| DELETE | `/ov2/api/character-sheets/:id` | character-sheets |
 | GET | `/ov2/api/embeds` | embeds |
 | POST | `/ov2/api/media/images` | media |
 | GET | `/ov2/api/media/:id` | media |

@@ -1,7 +1,7 @@
 "use client";
 
 // ===== 引用节点（embed）数据层 =====
-// 存储契约（三端一致）：<div data-embed="user|post|article" data-id="..."
+// 存储契约（三端一致）：<div data-embed="user|post|article|character" data-id="..."
 //   [data-variant="card|compact"] [data-size="sm|md|lg"] [data-fields="..."] [data-align="left|center"]></div>
 // 缺省属性不输出：variant 缺省 = card，size 缺省 = md，align 缺省 = left；
 // data-fields 缺省 = 全字段显示，空串 = 全不显示。
@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import {
   embedApi,
   EmbedArticleItem,
+  EmbedCharacterItem,
   EmbedKind,
   EmbedPostItem,
   EmbedResolved,
@@ -31,7 +32,8 @@ export interface EmbedSpec {
 export type EmbedResolvedItem =
   | { type: "user"; user: EmbedUserItem }
   | { type: "post"; post: EmbedPostItem }
-  | { type: "article"; article: EmbedArticleItem };
+  | { type: "article"; article: EmbedArticleItem }
+  | { type: "character"; character: EmbedCharacterItem };
 
 /** 原始属性（DOM 属性或 TipTap 节点属性）：fields 为 undefined 表示属性缺省 */
 export interface RawEmbedAttrs {
@@ -46,7 +48,7 @@ export interface RawEmbedAttrs {
 /** 归一化引用属性；类型/ id 非法时返回 null */
 export function normalizeEmbed(raw: RawEmbedAttrs): EmbedSpec | null {
   const type = (raw.type || "").trim();
-  if (type !== "user" && type !== "post" && type !== "article") return null;
+  if (type !== "user" && type !== "post" && type !== "article" && type !== "character") return null;
   const id = (raw.id || "").trim();
   if (!id) return null;
   return {
@@ -121,14 +123,21 @@ async function fetchChunk(type: EmbedKind, ids: string[]): Promise<void> {
       users: type === "user" ? ids : undefined,
       posts: type === "post" ? ids : undefined,
       articles: type === "article" ? ids : undefined,
+      characters: type === "character" ? ids : undefined,
     });
   } catch {
     return;
   }
   const now = Date.now();
   const found = new Set<string>();
-  const list: (EmbedUserItem | EmbedPostItem | EmbedArticleItem)[] =
-    type === "user" ? resp.users || [] : type === "post" ? resp.posts || [] : resp.articles || [];
+  const list: (EmbedUserItem | EmbedPostItem | EmbedArticleItem | EmbedCharacterItem)[] =
+    type === "user"
+      ? resp.users || []
+      : type === "post"
+        ? resp.posts || []
+        : type === "article"
+          ? resp.articles || []
+          : resp.characters || [];
   for (const item of list) {
     const id = item.id;
     if (!ids.includes(id)) continue;
@@ -137,7 +146,9 @@ async function fetchChunk(type: EmbedKind, ids: string[]): Promise<void> {
         ? ({ type: "user", user: item as EmbedUserItem } as EmbedResolvedItem)
         : type === "post"
           ? ({ type: "post", post: item as EmbedPostItem } as EmbedResolvedItem)
-          : ({ type: "article", article: item as EmbedArticleItem } as EmbedResolvedItem);
+          : type === "article"
+            ? ({ type: "article", article: item as EmbedArticleItem } as EmbedResolvedItem)
+            : ({ type: "character", character: item as EmbedCharacterItem } as EmbedResolvedItem);
     const key = embedKey(type, id);
     cache.set(key, { expires: now + CACHE_TTL, value });
     found.add(key);
@@ -151,7 +162,7 @@ async function fetchChunk(type: EmbedKind, ids: string[]): Promise<void> {
 
 /** 发起一批请求（同 key 的并发调用复用同一 Promise） */
 function startBatch(specs: EmbedSpec[]): Promise<void> {
-  const byType: Record<EmbedKind, string[]> = { user: [], post: [], article: [] };
+  const byType: Record<EmbedKind, string[]> = { user: [], post: [], article: [], character: [] };
   for (const spec of specs) {
     const list = byType[spec.type];
     if (!list.includes(spec.id)) list.push(spec.id);

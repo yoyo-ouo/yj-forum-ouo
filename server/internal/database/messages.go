@@ -16,8 +16,8 @@ type MessageActor struct {
 	Avatar string `json:"avatar"`
 }
 
-// LikeMessage 点赞消息（帖子赞 + 评论赞，全部历史）。
-// ID 为 "pl_<post_likes.id>" / "cl_<comment_likes.id>" 形式的稳定标识（同时用于游标）。
+// LikeMessage 点赞消息（帖子赞 + 评论赞 + 设定赞，全部历史）。
+// ID 为 "pl_<id>" / "cl_<id>" / "ch_<id>" 形式的稳定标识（同时用于游标）。
 type LikeMessage struct {
 	ID             string       `json:"id"`
 	Actor          MessageActor `json:"actor"`
@@ -27,6 +27,7 @@ type LikeMessage struct {
 	PostTitle      string       `json:"post_title"`
 	CommentID      string       `json:"comment_id"`
 	CommentExcerpt string       `json:"comment_excerpt"`
+	TargetTitle    string       `json:"target_title"`
 	CreatedAt      time.Time    `json:"created_at"`
 }
 
@@ -112,29 +113,40 @@ func (d *DB) ListLikeMessages(ctx context.Context, userID, cursor string, limit 
 	rows, err := d.Query(ctx, `
 		WITH items AS (
 			SELECT 'post_like'::text AS source, pl.id AS row_id, pl.user_id AS actor_id,
-				pl.post_id AS post_id, ''::text AS comment_id, pl.created_at
+				pl.post_id AS post_id, ''::text AS comment_id, ''::text AS character_id, pl.created_at
 			FROM post_likes pl
 			JOIN posts p ON p.id = pl.post_id
 			WHERE p.user_id = $1 AND p.status = 1 AND p.published_at <= NOW()
 				AND pl.user_id <> p.user_id
 			UNION ALL
-			SELECT 'comment_like'::text, cl.id, cl.user_id, c.post_id, cl.comment_id, cl.created_at
+			SELECT 'comment_like'::text, cl.id, cl.user_id, c.post_id, cl.comment_id, '', cl.created_at
 			FROM comment_likes cl
 			JOIN comments c ON c.id = cl.comment_id
 			JOIN posts p ON p.id = c.post_id
 			WHERE c.user_id = $1 AND c.status = 1 AND p.status = 1 AND p.published_at <= NOW()
 				AND cl.user_id <> c.user_id
+			UNION ALL
+			SELECT 'character_like'::text, csl.id, csl.user_id, '', '', csl.sheet_id, csl.created_at
+			FROM character_sheet_likes csl
+			JOIN character_sheets cs ON cs.id = csl.sheet_id
+			WHERE cs.user_id = $1 AND cs.status = 1
+				AND csl.user_id <> cs.user_id
 		)
 		SELECT i.source, i.row_id, COALESCE(i.actor_id, ''), COALESCE(u.name, ''), COALESCE(u.avatar, ''),
-			CASE WHEN i.source = 'post_like' THEN 'post' ELSE 'comment' END AS target_type,
-			CASE WHEN i.source = 'post_like' THEN i.post_id ELSE i.comment_id END AS target_id,
+			CASE i.source WHEN 'post_like' THEN 'post' WHEN 'comment_like' THEN 'comment' ELSE 'character' END AS target_type,
+			CASE i.source
+				WHEN 'post_like' THEN i.post_id
+				WHEN 'comment_like' THEN i.comment_id
+				ELSE i.character_id END AS target_id,
 			i.post_id, COALESCE(p.title, ''), i.comment_id,
 			`+excerptExpr+`,
+			COALESCE(cs.name, ''),
 			i.created_at
 		FROM items i
 		LEFT JOIN users u ON u.id = i.actor_id
 		LEFT JOIN posts p ON p.id = i.post_id
 		LEFT JOIN comments c ON c.id = i.comment_id
+		LEFT JOIN character_sheets cs ON cs.id = NULLIF(i.character_id, '')
 		WHERE $2 = '' OR (i.created_at, i.source, i.row_id) < ($3, $4, $5)
 		ORDER BY i.created_at DESC, i.source DESC, i.row_id DESC
 		LIMIT $6`, userID, strings.TrimSpace(cursor), cursorTime, cursorSource, cursorRowID, limit+1)
@@ -148,12 +160,15 @@ func (d *DB) ListLikeMessages(ctx context.Context, userID, cursor string, limit 
 		var source string
 		var rowID int64
 		if err := rows.Scan(&source, &rowID, &m.Actor.ID, &m.Actor.Name, &m.Actor.Avatar,
-			&m.TargetType, &m.TargetID, &m.PostID, &m.PostTitle, &m.CommentID, &m.CommentExcerpt, &m.CreatedAt); err != nil {
+			&m.TargetType, &m.TargetID, &m.PostID, &m.PostTitle, &m.CommentID, &m.CommentExcerpt, &m.TargetTitle, &m.CreatedAt); err != nil {
 			return nil, false, "", err
 		}
 		prefix := "pl_"
-		if source == "comment_like" {
+		switch source {
+		case "comment_like":
 			prefix = "cl_"
+		case "character_like":
+			prefix = "ch_"
 		}
 		m.ID = prefix + strconv.FormatInt(rowID, 10)
 		items = append(items, m)
@@ -169,10 +184,13 @@ func (d *DB) ListLikeMessages(ctx context.Context, userID, cursor string, limit 
 	if len(items) > 0 {
 		last := items[len(items)-1]
 		source := "post_like"
-		if strings.HasPrefix(last.ID, "cl_") {
+		switch {
+		case strings.HasPrefix(last.ID, "cl_"):
 			source = "comment_like"
+		case strings.HasPrefix(last.ID, "ch_"):
+			source = "character_like"
 		}
-		rowID, _ := strconv.ParseInt(strings.TrimPrefix(strings.TrimPrefix(last.ID, "pl_"), "cl_"), 10, 64)
+		rowID, _ := strconv.ParseInt(strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(last.ID, "pl_"), "cl_"), "ch_"), 10, 64)
 		next = encodeMessageCursor(last.CreatedAt, source, strconv.FormatInt(rowID, 10))
 	}
 	return items, hasMore, next, nil

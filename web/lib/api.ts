@@ -97,12 +97,14 @@ export interface ReplyItem extends Comment {
 export interface LikeItem {
   id: string;
   actor: { id: string; name: string; avatar: string };
-  target_type: "post" | "comment";
+  target_type: "post" | "comment" | "character";
   target_id: string;
   post_id: string;
   post_title: string;
   comment_id: string;
   comment_excerpt: string;
+  /** 设定名（target_type=character 时有效） */
+  target_title?: string;
   created_at: string;
 }
 
@@ -128,6 +130,11 @@ export interface GuildMember {
   intro?: string;
   is_leader?: boolean;
   joined_at?: string;
+  /** member（真实成员）/ character（设定角色，不写入 guild_members） */
+  kind?: "member" | "character";
+  character_id?: string;
+  character_name?: string;
+  character_title?: string;
 }
 
 // 馆长介绍页数据（GET /guilds/:slug/leader）
@@ -275,8 +282,8 @@ export interface ArticleSearchResult {
   page_size: number;
 }
 
-// 引用卡片（GET /embeds）：三类数据，查不到的 id 不出现在数组里
-export type EmbedKind = "user" | "post" | "article";
+// 引用卡片（GET /embeds）：四类数据，查不到的 id 不出现在数组里
+export type EmbedKind = "user" | "post" | "article" | "character";
 
 export interface EmbedUserItem {
   id: string;
@@ -308,11 +315,26 @@ export interface EmbedArticleItem {
   guild_name: string;
 }
 
+/** 角色设定引用卡片 */
+export interface EmbedCharacterItem {
+  id: string;
+  name: string;
+  title: string;
+  alias: string;
+  avatar: string;
+  owner_id: string;
+  owner_name: string;
+  owner_avatar: string;
+  abilities: string[];
+  like_count: number;
+}
+
 // 批量解析结果（每类 ≤30）
 export interface EmbedResolved {
   users: EmbedUserItem[];
   posts: EmbedPostItem[];
   articles: EmbedArticleItem[];
+  characters: EmbedCharacterItem[];
 }
 
 // 文章参与人
@@ -638,11 +660,12 @@ export const feedApi = {
 // ---- 引用卡片 ----
 export const embedApi = {
   // 批量解析引用 id（URLSearchParams 逗号拼接；查不到的 id 省略；每类最多 30 个）
-  resolve: (ids: { users?: string[]; posts?: string[]; articles?: string[] }) => {
+  resolve: (ids: { users?: string[]; posts?: string[]; articles?: string[]; characters?: string[] }) => {
     const qs = new URLSearchParams();
     if (ids.users?.length) qs.set("users", ids.users.join(","));
     if (ids.posts?.length) qs.set("posts", ids.posts.join(","));
     if (ids.articles?.length) qs.set("articles", ids.articles.join(","));
+    if (ids.characters?.length) qs.set("characters", ids.characters.join(","));
     return request<EmbedResolved>(`/embeds?${qs.toString()}`);
   },
 };
@@ -664,7 +687,8 @@ export const miscApi = {
     request<SearchResult>(`/search?k=${encodeURIComponent(k)}&type=${type}&page=${page}&page_size=${pageSize}`),
   reportBug: (data: { title: string; detail: string; steps?: string; contact?: string; page_url?: string }, altcha?: string) =>
     request<{ id: number }>("/reports/bug", { method: "POST", body: JSON.stringify({ ...data, ...(altcha ? { altcha } : {}) }) }),
-  easterEgg: () => request<{ ID: string; Name: string; Text: string }>("/easter-egg"),
+  easterEgg: () =>
+    request<{ ID: string; Name: string; Text: string; Kind?: "static" | "quote" }>("/easter-egg"),
 };
 
 // ---- 反馈中心（公开；status 缺省为全部，0/1/2/3 四态过滤）----

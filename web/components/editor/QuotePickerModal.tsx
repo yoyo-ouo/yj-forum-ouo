@@ -19,11 +19,13 @@ import {
   postApi,
 } from "@/lib/api";
 import { categoryLabel, timeAgo } from "@/lib/constants";
+import { characterApi, characterMediaUrl, type CharacterSheet } from "@/lib/api/character";
 
 const TABS: { key: EmbedKind; label: string }[] = [
   { key: "user", label: "用户" },
   { key: "post", label: "帖子" },
   { key: "article", label: "文章" },
+  { key: "character", label: "设定" },
 ];
 
 const PAGE_SIZE = 10;
@@ -43,6 +45,7 @@ export default function QuotePickerModal({
   const [users, setUsers] = useState<UserBrief[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [articles, setArticles] = useState<ArticleSearchItem[]>([]);
+  const [characters, setCharacters] = useState<CharacterSheet[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -70,10 +73,16 @@ export default function QuotePickerModal({
         if (reqRef.current !== reqId) return;
         setPosts((prev) => (append ? [...prev, ...(r.posts || [])] : r.posts || []));
         setHasMore(!!r.posts_has_more);
-      } else {
+      } else if (target === "article") {
         const r = await guildApi.searchArticles(kw, pageNo, PAGE_SIZE);
         if (reqRef.current !== reqId) return;
         setArticles((prev) => (append ? [...prev, ...(r.articles || [])] : r.articles || []));
+        setHasMore(!!r.has_more);
+      } else {
+        // 设定：空关键词返回最新公开设定（不要求输入）
+        const r = await characterApi.search(kw, pageNo, PAGE_SIZE);
+        if (reqRef.current !== reqId) return;
+        setCharacters((prev) => (append ? [...prev, ...(r.items || [])] : r.items || []));
         setHasMore(!!r.has_more);
       }
       pageRef.current = pageNo;
@@ -84,6 +93,7 @@ export default function QuotePickerModal({
         setUsers([]);
         setPosts([]);
         setArticles([]);
+        setCharacters([]);
         setHasMore(false);
       }
     } finally {
@@ -94,8 +104,8 @@ export default function QuotePickerModal({
     }
   }, []);
 
-  // 关键词最小长度：用户/帖子 1，文章 2（与后端一致）
-  const minChars = tab === "article" ? 2 : 1;
+  // 关键词最小长度：用户/帖子 1，文章 2，设定 0（空关键词直接出最新）
+  const minChars = tab === "article" ? 2 : tab === "character" ? 0 : 1;
 
   // 关键词/页签变化：防抖搜索（k<minChars 时不发请求，结果区仅展示提示文案；
   // 不在此直接 setState，避免 effect 内同步更新引发级联渲染）
@@ -136,7 +146,15 @@ export default function QuotePickerModal({
   const tooShort = k.length < minChars;
   // 关键词不足 minChars 时隐藏旧结果与加载态（清空动作由派生值表达）
   const busy = !tooShort && loading;
-  const list = tooShort ? 0 : tab === "user" ? users.length : tab === "post" ? posts.length : articles.length;
+  const list = tooShort
+    ? 0
+    : tab === "user"
+      ? users.length
+      : tab === "post"
+        ? posts.length
+        : tab === "article"
+          ? articles.length
+          : characters.length;
   const emptyText = tooShort
     ? `输入至少 ${minChars} 个字符开始搜索`
     : err || `没有找到相关${TABS.find((t) => t.key === tab)?.label || "内容"}`;
@@ -202,7 +220,11 @@ export default function QuotePickerModal({
           className="quote-picker-input"
           type="text"
           value={keyword}
-          placeholder={`搜索${TABS.find((t) => t.key === tab)?.label || ""}名称/标题（至少 ${minChars} 个字符）`}
+          placeholder={
+            tab === "character"
+              ? "搜索角色名、称号或作者（留空看最新）"
+              : `搜索${TABS.find((t) => t.key === tab)?.label || ""}名称/标题（至少 ${minChars} 个字符）`
+          }
           onChange={(e) => setKeyword(e.target.value)}
           autoFocus
         />
@@ -271,6 +293,37 @@ export default function QuotePickerModal({
                   </button>
                 </div>
               ))}
+            {tab === "character" &&
+              characters.map((c) => {
+                const avatar = c.avatar || characterMediaUrl(c.avatar_media_id);
+                return (
+                  <div className="follow-user-item" key={c.id}>
+                    <span className="follow-user-avatar quote-picker-char-avatar">
+                      {avatar ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={avatar} alt="" />
+                      ) : (
+                        (c.name || "?").slice(0, 1)
+                      )}
+                    </span>
+                    <div className="follow-user-info">
+                      <div className="follow-user-name-row">
+                        <span className="follow-user-name">{c.name || "未命名角色"}</span>
+                        {c.title ? <span className="quote-picker-char-title">{c.title}</span> : null}
+                        <span className="quote-picker-id">{c.owner_name}</span>
+                      </div>
+                      <p className="follow-user-intro">
+                        {(c.abilities || []).slice(0, 3).map((a) => a.category + (a.detail ? ` · ${a.detail}` : "")).join(" / ") ||
+                          c.alias ||
+                          "这个角色还没有写简介～"}
+                      </p>
+                    </div>
+                    <button className="quote-picker-insert" onClick={() => onPick("character", c.id)}>
+                      插入
+                    </button>
+                  </div>
+                );
+              })}
             {hasMore && (
               <button className="quote-picker-more" disabled={loadingMore} onClick={loadMore}>
                 {loadingMore ? "加载中..." : "加载更多"}

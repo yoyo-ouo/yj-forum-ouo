@@ -76,7 +76,9 @@ func (d *DB) PurgeUser(ctx context.Context, userID string) (string, error) {
 		// media_references 无外键不会自动清，残留引用会把媒体永久钉住（无法 GC，公开图仍可被访问）。
 		if _, err := tx.Exec(ctx, `DELETE FROM media_references
 			WHERE (owner_type = 'post' AND owner_id IN (SELECT id FROM posts WHERE user_id=$1))
-			   OR (owner_type = 'comment' AND owner_id IN (SELECT id FROM comments WHERE user_id=$1))`, userID); err != nil {
+			   OR (owner_type = 'comment' AND owner_id IN (SELECT id FROM comments WHERE user_id=$1))
+			   OR (owner_type IN ('character', 'character_draft')
+			       AND owner_id IN (SELECT id FROM character_sheets WHERE user_id=$1))`, userID); err != nil {
 			return err
 		}
 		// media_assets 仅置为已删除，物理文件交由后台过期媒体清理任务处理；
@@ -114,6 +116,12 @@ func (d *DB) PurgeUser(ctx context.Context, userID string) (string, error) {
 		if _, err := tx.Exec(ctx, `UPDATE comments SET likes = GREATEST(likes - sub.cnt, 0)
 			FROM (SELECT comment_id, COUNT(*) AS cnt FROM comment_likes WHERE user_id=$1 GROUP BY comment_id) AS sub
 			WHERE comments.id = sub.comment_id`, userID); err != nil {
+			return err
+		}
+		// 角色设定的获赞数同理：级联删除 character_sheet_likes 前回补冗余计数
+		if _, err := tx.Exec(ctx, `UPDATE character_sheets SET like_count = GREATEST(like_count - sub.cnt, 0)
+			FROM (SELECT sheet_id, COUNT(*) AS cnt FROM character_sheet_likes WHERE user_id=$1 GROUP BY sheet_id) AS sub
+			WHERE character_sheets.id = sub.sheet_id`, userID); err != nil {
 			return err
 		}
 		// 原邮箱的限流记录一并清除

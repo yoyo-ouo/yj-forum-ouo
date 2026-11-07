@@ -16,16 +16,18 @@ export interface MessageActor {
   avatar: string;
 }
 
-/** 点赞消息：帖子被赞 / 评论被赞。 */
+/** 点赞消息：帖子被赞 / 评论被赞 / 设定被赞。 */
 export interface LikeMessage {
   id: string;
   actor: MessageActor;
-  target_type: "post" | "comment";
+  target_type: "post" | "comment" | "character";
   target_id: string;
   post_id: string;
   post_title: string;
   comment_id: string;
   comment_excerpt: string;
+  /** 设定名（target_type=character 时有效） */
+  target_title?: string;
   created_at: string;
 }
 
@@ -141,6 +143,7 @@ export interface StreamNotificationItem {
   comment_id?: string;
   post_id?: string;
   post_title?: string;
+  character_name?: string;
   excerpt?: string;
   comment_excerpt?: string;
   parent_id?: string;

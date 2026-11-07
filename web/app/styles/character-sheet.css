@@ -1,0 +1,1530 @@
+/* ===== 设定记录（角色设定卡）=====
+   分片：个人中心区块 / 立绘卡 / 悬浮窗外壳 / 编辑器 / 引导弹窗 / 夜间适配
+   命名前缀 cs-，与 world-channel 完全独立（z-index 不冲突）。 */
+
+/* ---------- 六大能力系配色（日间） ---------- */
+.cs-card {
+    --cs-ab-1: #3F8C86; /* 御灵系 */
+    --cs-ab-2: #6E9A5F; /* 生灵系 */
+    --cs-ab-3: #5B7F96; /* 锁御系 */
+    --cs-ab-4: #B98A2F; /* 造物系 */
+    --cs-ab-5: #8C6FA8; /* 心灵系 */
+    --cs-ab-6: #5B6FA6; /* 空间系 */
+}
+
+.night-mode .cs-card {
+    --cs-ab-1: #4FA39C;
+    --cs-ab-2: #7FAE6E;
+    --cs-ab-3: #6E93AC;
+    --cs-ab-4: #C99C42;
+    --cs-ab-5: #9E82BC;
+    --cs-ab-6: #6E84BE;
+}
+
+/* ---------- 个人中心区块 ---------- */
+.cs-section {
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 4px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--color-border-divider);
+}
+
+.cs-section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.cs-section-head h3 {
+    margin: 0;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    letter-spacing: 0.02em;
+}
+
+.cs-section-head h3 i {
+    color: var(--color-text-accent);
+    font-size: 15px;
+}
+
+.cs-section-count {
+    font-size: 11.5px;
+    color: var(--color-text-tertiary);
+}
+
+.cs-section-hint {
+    margin: 9px 2px 0;
+    font-size: 11.5px;
+    line-height: 1.7;
+    color: var(--color-text-tertiary);
+}
+
+.cs-section-hint.is-error {
+    color: #c0443c;
+}
+
+.cs-section-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 16px 18px;
+    border: 1px dashed var(--color-border-card);
+    border-radius: 16px;
+    background: var(--color-bg-item);
+}
+
+.cs-section-empty p {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.8;
+    color: var(--color-text-secondary);
+}
+
+/* ---------- 角色切换胶囊 ---------- */
+.cs-switcher {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 2px 2px 10px;
+    scrollbar-width: thin;
+}
+
+.cs-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    padding: 3px 12px 3px 3px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-text-tertiary);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.cs-chip:hover {
+    background: var(--color-bg-item-hover);
+}
+
+.cs-chip.active {
+    background: var(--color-bg-item-active);
+    border-color: var(--color-border-card);
+    color: var(--color-text-primary);
+}
+
+.cs-chip-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(140deg, #84a8b9 0%, #3f8c86 100%);
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.cs-chip-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.cs-chip-name {
+    max-width: 90px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cs-chip-draft {
+    font-size: 9.5px;
+    line-height: 1.6;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: rgba(185, 138, 47, 0.16);
+    color: #b98a2f;
+}
+
+.cs-chip-add .cs-chip-avatar {
+    background: transparent;
+    border: 1px dashed var(--color-border-card);
+    color: var(--color-text-tertiary);
+    font-size: 15px;
+}
+
+/* ---------- 立绘卡 ---------- */
+.cs-card {
+    position: relative;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border-card);
+    border-radius: 24px;
+    box-shadow: 0 6px 22px var(--color-shadow-card);
+    overflow: hidden;
+}
+
+.cs-card.is-draft {
+    border-style: dashed;
+}
+
+.cs-hero {
+    display: flex;
+    align-items: stretch;
+    position: relative;
+    background: linear-gradient(
+        135deg,
+        rgba(63, 140, 134, 0.13) 0%,
+        rgba(46, 70, 89, 0.07) 62%,
+        transparent 100%
+    );
+}
+
+.cs-portrait {
+    width: 144px;
+    height: 176px;
+    flex-shrink: 0;
+    border-radius: 0 0 14px 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(160deg, #8fb4cb 0%, #3f8c86 66%, #2e4659 100%);
+    color: #fff;
+    font-size: 50px;
+    font-weight: 600;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+.cs-portrait img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.cs-info {
+    flex: 1;
+    min-width: 0;
+    padding: 16px 16px 14px 15px;
+}
+
+.cs-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.cs-name {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.cs-title {
+    font-size: 11px;
+    line-height: 1.7;
+    padding: 1px 10px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--color-primary) 0%, #2e4659 100%);
+    color: #fff;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.cs-badge-draft {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(185, 138, 47, 0.16);
+    color: #b98a2f;
+}
+
+.cs-badge-hidden {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(192, 68, 60, 0.14);
+    color: #c0443c;
+}
+
+.cs-card.is-hidden {
+    border-color: rgba(192, 68, 60, 0.35);
+}
+
+.cs-chip-hidden {
+    background: rgba(192, 68, 60, 0.14);
+    color: #c0443c;
+}
+
+.cs-alias {
+    margin-top: 5px;
+    font-size: 11.5px;
+    color: var(--color-text-tertiary);
+}
+
+.cs-abilities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.cs-ab {
+    font-size: 11px;
+    line-height: 1.7;
+    padding: 2.5px 10px;
+    border-radius: 999px;
+    color: #fff;
+    white-space: nowrap;
+    background: var(--cs-ab-1);
+}
+
+.cs-ab-1 { background: var(--cs-ab-1); }
+.cs-ab-2 { background: var(--cs-ab-2); }
+.cs-ab-3 { background: var(--cs-ab-3); }
+.cs-ab-4 { background: var(--cs-ab-4); }
+.cs-ab-5 { background: var(--cs-ab-5); }
+.cs-ab-6 { background: var(--cs-ab-6); }
+
+.cs-meta {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--color-text-secondary);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+}
+
+.cs-meta em {
+    font-style: normal;
+    font-size: 11px;
+    color: var(--color-text-tertiary);
+    margin-right: 5px;
+}
+
+.cs-meta-block {
+    margin-top: 2px;
+}
+
+.cs-guild {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 8px;
+    font-size: 11.5px;
+    line-height: 1.8;
+    padding: 2px 10px;
+    border-radius: 999px;
+    color: var(--color-text-accent);
+    background: rgba(63, 140, 134, 0.12);
+}
+
+.night-mode .cs-guild {
+    color: #7fc3bc;
+    background: rgba(127, 195, 188, 0.14);
+}
+
+.cs-owner {
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--color-text-tertiary);
+}
+
+.cs-like {
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 11px;
+    border: 1px solid var(--color-border-card);
+    border-radius: 16px;
+    background: var(--color-bg-card);
+    color: var(--color-text-secondary);
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.5;
+    cursor: pointer;
+    transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.cs-like:hover {
+    background: var(--color-bg-item-hover);
+}
+
+.cs-like.active {
+    color: #c0443c;
+    border-color: rgba(192, 68, 60, 0.35);
+    background: rgba(192, 68, 60, 0.08);
+}
+
+.cs-like b {
+    font-weight: 600;
+}
+
+.cs-like-static {
+    cursor: default;
+}
+
+.cs-body {
+    padding: 0 16px 14px;
+}
+
+.cs-strip {
+    display: grid;
+    gap: 6px;
+    margin-top: 11px;
+}
+
+.cs-strip-1 { grid-template-columns: 1fr; }
+.cs-strip-2 { grid-template-columns: repeat(2, 1fr); }
+.cs-strip-3 { grid-template-columns: repeat(3, 1fr); }
+
+.cs-strip img {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    border-radius: 9px;
+    display: block;
+}
+
+.cs-strip-1 img {
+    aspect-ratio: 4 / 3;
+}
+
+.cs-more {
+    margin-top: 12px;
+    padding-top: 11px;
+    border-top: 1px solid var(--color-border-divider);
+}
+
+.cs-desc {
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.9;
+    color: var(--color-text-secondary);
+}
+
+.cs-quotes {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.cs-quote {
+    margin: 0;
+    padding-left: 10px;
+    border-left: 2px solid var(--color-border-card);
+    font-size: 12.5px;
+    line-height: 1.75;
+    font-style: italic;
+    color: var(--color-text-secondary);
+}
+
+.cs-expand {
+    width: 100%;
+    margin-top: 12px;
+    padding: 10px 0 2px;
+    border: 0;
+    border-top: 1px solid var(--color-border-divider);
+    background: transparent;
+    color: var(--color-text-accent);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+
+.cs-expand:hover {
+    color: var(--color-primary);
+}
+
+.cs-expand i {
+    font-size: 13px;
+    transition: transform 0.2s ease;
+}
+
+.cs-expand.open i {
+    transform: rotate(180deg);
+}
+
+.cs-card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--color-border-divider);
+}
+
+/* ---------- 按钮 ---------- */
+.cs-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 34px;
+    padding: 0 15px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.16s ease, border-color 0.16s ease, filter 0.16s ease;
+    text-decoration: none;
+}
+
+.cs-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.cs-btn-primary {
+    background: var(--color-primary);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(106, 140, 137, 0.28);
+}
+
+.cs-btn-primary:hover:not(:disabled) {
+    filter: brightness(1.06);
+}
+
+.cs-btn-ghost {
+    background: transparent;
+    border-color: var(--color-border-primary);
+    color: var(--color-text-secondary);
+}
+
+.cs-btn-ghost:hover:not(:disabled) {
+    background: var(--color-bg-item-hover);
+}
+
+.cs-btn-danger {
+    background: transparent;
+    border-color: rgba(192, 68, 60, 0.4);
+    color: #c0443c;
+}
+
+.cs-btn-danger:hover:not(:disabled) {
+    background: rgba(192, 68, 60, 0.1);
+}
+
+.cs-spacer {
+    flex: 1;
+}
+
+/* ---------- 悬浮窗外壳 ---------- */
+.cs-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1410;
+    background: rgba(10, 20, 22, 0.16);
+}
+
+.cs-window {
+    /* 浮窗用不透明表面：表单叠在页面文字上时半透明会读不清 */
+    --cs-surface: #fbfdfc;
+    position: fixed;
+    top: 86px;
+    right: 24px;
+    /* 桌面层级低于 #header（100），高于世界频道（95），两者可共存 */
+    z-index: 97;
+    display: flex;
+    flex-direction: column;
+    width: min(520px, calc(100vw - 32px));
+    height: min(700px, calc(100vh - 102px));
+    min-width: 0;
+    min-height: 0;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 94px);
+    overflow: hidden;
+    border: 1px solid var(--color-border-card);
+    border-radius: 20px;
+    background: var(--cs-surface);
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.3);
+}
+
+.night-mode .cs-window {
+    --cs-surface: #1d2a28;
+}
+
+.theme-national .cs-window {
+    --cs-surface: #fffbf8;
+}
+
+.theme-national.night-mode .cs-window {
+    --cs-surface: #30181a;
+}
+
+.cs-window:focus {
+    outline: none;
+}
+
+.cs-window.dragging,
+.cs-window.resizing {
+    user-select: none;
+    box-shadow: 0 22px 64px rgba(0, 0, 0, 0.36);
+}
+
+.cs-window-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-border-divider);
+    background: linear-gradient(180deg, rgba(106, 140, 137, 0.07), transparent);
+    flex-shrink: 0;
+    cursor: grab;
+    touch-action: none;
+}
+
+.cs-window.dragging .cs-window-header {
+    cursor: grabbing;
+}
+
+.cs-window-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+}
+
+.cs-window-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cs-window-close {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-text-tertiary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.16s ease, color 0.16s ease;
+}
+
+.cs-window-close:hover {
+    background: var(--color-bg-icon-hover);
+    color: var(--color-text-secondary);
+}
+
+.cs-window-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+}
+
+.cs-window-footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--color-border-divider);
+    background: rgba(106, 140, 137, 0.05);
+    flex-shrink: 0;
+}
+
+.night-mode .cs-window-footer {
+    background: rgba(132, 168, 185, 0.06);
+}
+
+.cs-resize {
+    position: absolute;
+    z-index: 2;
+}
+
+.cs-resize-e {
+    top: 44px;
+    right: 0;
+    bottom: 12px;
+    width: 6px;
+    cursor: ew-resize;
+}
+
+.cs-resize-s {
+    left: 12px;
+    right: 12px;
+    bottom: 0;
+    height: 6px;
+    cursor: ns-resize;
+}
+
+.cs-resize-se {
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+}
+
+.cs-status {
+    font-size: 10.5px;
+    line-height: 1.7;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border-card);
+    color: var(--color-text-tertiary);
+    white-space: nowrap;
+}
+
+.cs-status-1 {
+    color: var(--color-text-accent);
+    background: rgba(87, 148, 145, 0.12);
+    border-color: rgba(87, 148, 145, 0.28);
+}
+
+.cs-status-2 {
+    color: #c0443c;
+    background: rgba(192, 68, 60, 0.1);
+    border-color: rgba(192, 68, 60, 0.25);
+}
+
+/* ---------- 详情视图 ---------- */
+.cs-viewer-inner {
+    padding: 14px;
+}
+
+.cs-viewer-inner .cs-card {
+    box-shadow: none;
+}
+
+.cs-viewer-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding: 0 2px;
+}
+
+.cs-viewer-owner {
+    font-size: 11.5px;
+    color: var(--color-text-tertiary);
+    text-decoration: none;
+}
+
+.cs-viewer-owner:hover {
+    color: var(--color-text-accent);
+}
+
+/* ---------- 编辑器 ---------- */
+.cs-editor .cs-window-body {
+    overflow: hidden;
+    display: flex;
+}
+
+.cs-editor-inner {
+    display: flex;
+    width: 100%;
+    min-height: 0;
+}
+
+.cs-editor-nav {
+    width: 112px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 14px 8px;
+    border-right: 1px solid var(--color-border-divider);
+    background: rgba(106, 140, 137, 0.04);
+    overflow-y: auto;
+}
+
+.night-mode .cs-editor-nav {
+    background: rgba(132, 168, 185, 0.05);
+}
+
+.cs-editor-nav button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 7px 9px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-text-tertiary);
+    font-family: inherit;
+    font-size: 11.5px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.cs-editor-nav button:hover {
+    background: var(--color-bg-item-hover);
+    color: var(--color-text-secondary);
+}
+
+.cs-editor-nav button.active {
+    background: var(--color-bg-item-active);
+    color: var(--color-text-primary);
+    font-weight: 500;
+}
+
+.cs-nav-count {
+    font-size: 9.5px;
+    color: var(--color-text-tertiary);
+}
+
+.cs-editor-form {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding: 16px 18px 24px;
+    scrollbar-width: thin;
+}
+
+.cs-sec {
+    margin-bottom: 22px;
+}
+
+.cs-sec:last-child {
+    margin-bottom: 0;
+}
+
+.cs-sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 10px;
+    scroll-margin-top: 6px;
+}
+
+.cs-sec-head h4 {
+    margin: 0;
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: var(--color-text-tertiary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cs-sec-head h4::after {
+    content: "";
+    display: block;
+    width: 28px;
+    height: 1px;
+    background: var(--color-border-divider);
+}
+
+.cs-sec-extra {
+    margin-left: auto;
+    font-size: 10.5px;
+    color: var(--color-text-tertiary);
+}
+
+.cs-field {
+    display: block;
+    margin-bottom: 12px;
+}
+
+.cs-field > span {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 11.5px;
+    color: var(--color-text-tertiary);
+    letter-spacing: 0.04em;
+}
+
+.cs-field > span em {
+    font-style: normal;
+    color: #c0443c;
+    margin-left: 2px;
+}
+
+.cs-input,
+.cs-select {
+    width: 100%;
+    height: 36px;
+    padding: 0 11px;
+    border: 1.5px solid var(--color-border-primary);
+    border-radius: 10px;
+    background: var(--color-bg-input);
+    color: var(--color-text-primary);
+    font-family: inherit;
+    font-size: 12.5px;
+    outline: none;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.cs-input:focus,
+.cs-select:focus {
+    border-color: var(--color-border-focus);
+    box-shadow: 0 0 0 3px rgba(106, 140, 137, 0.14);
+}
+
+.cs-select {
+    appearance: none;
+    padding-right: 26px;
+    background-image: linear-gradient(45deg, transparent 50%, var(--color-text-tertiary) 50%),
+        linear-gradient(135deg, var(--color-text-tertiary) 50%, transparent 50%);
+    background-position: calc(100% - 14px) 15px, calc(100% - 9px) 15px;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+}
+
+.cs-select-wide {
+    width: 100%;
+}
+
+.cs-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.cs-seg {
+    display: flex;
+    gap: 6px;
+}
+
+.cs-seg button {
+    flex: 1;
+    height: 32px;
+    border: 1.5px solid var(--color-border-primary);
+    border-radius: 9px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.cs-seg button:hover {
+    background: var(--color-bg-item-hover);
+}
+
+.cs-seg button.on {
+    background: var(--color-bg-item-active);
+    border-color: var(--color-primary);
+    color: var(--color-text-primary);
+    font-weight: 500;
+}
+
+.cs-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 2px 0 12px;
+}
+
+.cs-chips button {
+    padding: 3px 11px;
+    border: 1px solid var(--color-border-primary);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-family: inherit;
+    font-size: 11px;
+    line-height: 1.7;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.cs-chips button:hover {
+    background: var(--color-bg-item-hover);
+}
+
+.cs-chips button.on {
+    background: var(--color-bg-item-active);
+    border-color: var(--color-primary);
+    color: var(--color-text-primary);
+}
+
+.cs-ability-row {
+    display: grid;
+    grid-template-columns: 110px 1fr 26px;
+    gap: 7px;
+    align-items: center;
+    margin-bottom: 7px;
+}
+
+.cs-ability-row .cs-select,
+.cs-ability-row .cs-input {
+    height: 32px;
+    font-size: 12px;
+}
+
+.cs-quote-row {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+    margin-bottom: 7px;
+}
+
+.cs-quote-row .cs-input {
+    height: 32px;
+    font-size: 12px;
+}
+
+.cs-icon-btn {
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.cs-icon-btn:hover {
+    background: var(--color-bg-icon-hover);
+    color: #c0443c;
+}
+
+.cs-add-row {
+    width: 100%;
+    padding: 7px;
+    border: 1px dashed var(--color-border-card);
+    border-radius: 9px;
+    background: transparent;
+    color: var(--color-text-accent);
+    font-family: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.cs-add-row:hover:not(:disabled) {
+    background: var(--color-bg-item-hover);
+}
+
+.cs-add-row:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.cs-hint {
+    display: block;
+    margin-top: 5px;
+    font-size: 10.5px;
+    line-height: 1.6;
+    color: var(--color-text-tertiary);
+}
+
+.cs-sec-sub {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 14px 0 8px;
+    font-size: 11.5px;
+    color: var(--color-text-secondary);
+}
+
+.cs-sec-sub span {
+    font-size: 10.5px;
+    color: var(--color-text-tertiary);
+}
+
+.cs-media-row {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+}
+
+.cs-media-avatar {
+    position: relative;
+    width: 72px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.cs-media-avatar > span,
+.cs-media-avatar > img {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px dashed var(--color-border-card);
+    background: var(--color-bg-item);
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+}
+
+.cs-media-avatar > img {
+    border-style: solid;
+}
+
+.cs-media-avatar > button {
+    padding: 2px 10px;
+    border: 1px solid var(--color-border-primary);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-text-accent);
+    font-family: inherit;
+    font-size: 10.5px;
+    line-height: 1.7;
+    cursor: pointer;
+}
+
+.cs-media-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.cs-media-slot {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border: 1.5px dashed var(--color-border-card);
+    border-radius: 11px;
+    background: var(--color-bg-item);
+    color: var(--color-text-tertiary);
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.cs-media-slot.filled {
+    border-style: solid;
+    padding: 0;
+}
+
+.cs-media-slot img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.cs-media-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 10px;
+    cursor: pointer;
+}
+
+.cs-switch {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin-top: 14px;
+    padding-top: 12px;
+    border: 0;
+    border-top: 1px dashed var(--color-border-divider);
+    background: transparent;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.cs-switch-track {
+    width: 34px;
+    height: 19px;
+    border-radius: 999px;
+    background: rgba(106, 140, 137, 0.28);
+    position: relative;
+    flex-shrink: 0;
+    transition: background 0.2s ease;
+}
+
+.cs-switch-track::after {
+    content: "";
+    position: absolute;
+    top: 2.5px;
+    left: 2.5px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s ease;
+}
+
+.cs-switch.on .cs-switch-track {
+    background: var(--color-primary);
+}
+
+.cs-switch.on .cs-switch-track::after {
+    transform: translateX(15px);
+}
+
+.cs-switch-text {
+    font-size: 11.5px;
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+}
+
+.cs-switch-text em {
+    display: block;
+    font-style: normal;
+    font-size: 10.5px;
+    color: var(--color-text-tertiary);
+}
+
+.cs-save-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--color-text-tertiary);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cs-save-label i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-text-tertiary);
+    flex-shrink: 0;
+}
+
+.cs-save-label.is-saved i { background: #6e9a5f; }
+.cs-save-label.is-saving i { background: #b98a2f; }
+.cs-save-label.is-dirty i { background: #b98a2f; }
+.cs-save-label.is-error { color: #c0443c; }
+.cs-save-label.is-error i { background: #c0443c; }
+
+.cs-editor-state {
+    padding: 40px 20px;
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--color-text-tertiary);
+}
+
+.cs-editor-state.is-error {
+    color: #c0443c;
+}
+
+/* ---------- 引导弹窗 ---------- */
+.cs-onboard {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.cs-onboard-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
+}
+
+.cs-onboard-card {
+    position: relative;
+    width: min(430px, 100%);
+    padding: 26px 26px 22px;
+    border: 1px solid var(--color-border-card);
+    border-radius: 20px;
+    background: var(--color-bg-card);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.32);
+    text-align: center;
+}
+
+.cs-onboard-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-tertiary);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.cs-onboard-icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 12px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(140deg, rgba(132, 168, 185, 0.35), rgba(63, 140, 134, 0.25));
+    color: var(--color-text-accent);
+    font-size: 22px;
+}
+
+.cs-onboard-title {
+    margin: 0 0 10px;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.cs-onboard-text {
+    margin: 0 0 12px;
+    font-size: 12.5px;
+    line-height: 1.85;
+    color: var(--color-text-secondary);
+    text-align: left;
+}
+
+.cs-onboard-list {
+    margin: 0 0 16px;
+    padding-left: 18px;
+    text-align: left;
+    font-size: 12px;
+    line-height: 1.9;
+    color: var(--color-text-secondary);
+}
+
+.cs-onboard-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.cs-onboard-actions .cs-btn {
+    min-width: 108px;
+    height: 36px;
+}
+
+.cs-onboard-hint {
+    margin: 12px 0 0;
+    font-size: 10.5px;
+    color: var(--color-text-tertiary);
+}
+
+/* ---------- 移动端 ---------- */
+@media (max-width: 700px) {
+    .cs-portrait {
+        width: 104px;
+        height: 128px;
+        font-size: 36px;
+    }
+
+    .cs-info {
+        padding: 12px 12px 10px 11px;
+    }
+
+    .cs-name {
+        font-size: 18px;
+    }
+
+    .cs-body {
+        padding: 0 12px 12px;
+    }
+
+    .cs-like {
+        right: 8px;
+        top: 8px;
+        padding: 3px 9px;
+        font-size: 11px;
+    }
+
+    .cs-window {
+        left: 0 !important;
+        top: auto !important;
+        right: 0;
+        bottom: 0;
+        z-index: 1411;
+        width: 100%;
+        height: calc(100vh - 8px);
+        height: calc(100dvh - 8px);
+        max-width: none;
+        max-height: none;
+        border-right: none;
+        border-bottom: none;
+        border-radius: 16px 16px 0 0;
+    }
+
+    .cs-overlay {
+        background: rgba(0, 0, 0, 0.45);
+    }
+
+    .cs-window-header {
+        padding-top: calc(10px + env(safe-area-inset-top));
+        cursor: default;
+        touch-action: auto;
+    }
+
+    .cs-resize {
+        display: none;
+    }
+
+    .cs-editor-nav {
+        display: none;
+    }
+
+    .cs-editor-inner {
+        display: block;
+        overflow-y: auto;
+    }
+
+    .cs-editor-form {
+        overflow: visible;
+        padding: 14px 14px 24px;
+    }
+
+    .cs-grid-2 {
+        grid-template-columns: 1fr;
+    }
+
+    .cs-ability-row {
+        grid-template-columns: 96px 1fr 24px;
+    }
+
+    .cs-window-footer {
+        padding: 9px 12px calc(9px + env(safe-area-inset-bottom));
+        flex-wrap: wrap;
+    }
+
+    .cs-save-label {
+        flex-basis: 100%;
+    }
+
+    .cs-onboard-card {
+        padding: 22px 18px 18px;
+    }
+
+    .cs-onboard-actions .cs-btn {
+        flex: 1;
+        min-width: 0;
+    }
+}
+
+@media (max-width: 768px) {
+    .cs-section-head h3 {
+        font-size: 13.5px;
+    }
+}
+
+/* ---------- 独立角色页 ---------- */
+.cs-page {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 24px 20px 60px;
+}
+
+.cs-page-inner {
+    margin-top: 8px;
+}
+
+.cs-page-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+.cs-page-time {
+    font-size: 11.5px;
+    color: var(--color-text-tertiary);
+}
+
+.cs-page-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 60px 20px;
+    color: var(--color-text-tertiary);
+    text-align: center;
+}
+
+.cs-page-empty i {
+    font-size: 28px;
+    opacity: 0.6;
+}
+
+.cs-page-empty p {
+    margin: 0;
+    font-size: 13px;
+}
+
+@media (max-width: 700px) {
+    .cs-page {
+        padding: 16px 14px 48px;
+    }
+}
+
+/* ---------- 会馆成员页：设定角色卡 ---------- */
+.guild-member-card-character {
+    position: relative;
+    border-style: dashed;
+}
+
+.guild-member-char-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 9.5px;
+    line-height: 1.7;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: rgba(63, 140, 134, 0.14);
+    color: var(--color-text-accent);
+    letter-spacing: 0.04em;
+}
+
+.guild-member-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    display: block;
+}

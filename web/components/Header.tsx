@@ -145,6 +145,11 @@ export default function Header() {
       const egg = await miscApi.easterEgg();
       const name = eggPlainText(egg.Name);
       const text = eggPlainText(egg.Text);
+      if (egg.Kind === "quote") {
+        // 角色设定语录：「语录正文 —— 角色名」
+        toast(text ? `${text} —— ${name || "佚名"}` : name || "彩蛋", "info");
+        return;
+      }
       toast(name && text ? `${name}：${text}` : name || text || "彩蛋", "info");
     } catch {
       toast("彩蛋获取失败", "error");

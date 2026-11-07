@@ -28,6 +28,7 @@ type apiHandlers struct {
 	mediaH                 *MediaHandler
 	embedsH                *EmbedsHandler
 	guidesH                *GuidesHandler
+	characterH             *CharacterSheetsHandler
 	captchaH               *CaptchaHandler
 	siteFeatureH           *SiteFeatureHandlers
 	messagesH              *MessageHandler
@@ -91,6 +92,7 @@ func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth
 	mediaH := &MediaHandler{DB: db, Cfg: cfg, Media: mediaSvc, Sessions: sessions}
 	embedsH := &EmbedsHandler{DB: db}
 	guidesH := &GuidesHandler{DB: db}
+	characterH := &CharacterSheetsHandler{DB: db, Sessions: sessions}
 
 	hub := sse.NewHub()
 	SetMessageHub(hub)
@@ -102,7 +104,8 @@ func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth
 	h := apiHandlers{
 		authH: authH, postsH: postsH, miscH: miscH, accountH: accountH,
 		siteH: siteH, guildsH: guildsH, mediaH: mediaH, embedsH: embedsH, guidesH: guidesH,
-		captchaH: captchaH, siteFeatureH: siteFeatureH, messagesH: messagesH, worldH: worldH,
+		characterH: characterH,
+		captchaH:   captchaH, siteFeatureH: siteFeatureH, messagesH: messagesH, worldH: worldH,
 		// 邮箱换绑两步验证共用同一 IP 频控桶（两侧使用同一实例才能共享计数）
 		emailChangeVerifyLimit: middleware.RateLimit("email_change_verify", 15, 5*time.Minute),
 	}
@@ -120,6 +123,7 @@ func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth
 func registerAPIRoutes(api *gin.RouterGroup, h apiHandlers) {
 	authH, postsH, miscH, accountH := h.authH, h.postsH, h.miscH, h.accountH
 	siteH, guildsH, mediaH, embedsH, guidesH := h.siteH, h.guildsH, h.mediaH, h.embedsH, h.guidesH
+	characterH := h.characterH
 
 	api.GET("/healthz", func(c *gin.Context) {
 		c.JSON(200, gin.H{"ok": true, "service": "yj-forum"})
@@ -200,6 +204,20 @@ func registerAPIRoutes(api *gin.RouterGroup, h apiHandlers) {
 
 	// ---- 站点配置（公开）----
 	api.GET("/site/config", siteH.SiteConfig)
+
+	// ---- 设定记录（角色设定卡）----
+	// 静态路由必须写在 /:id 之前（gin 虽能区分，但保持可读性）。
+	api.GET("/character-sheets/mine", authH.AuthRequired(), characterH.Mine)
+	api.GET("/character-sheets/search", middleware.RateLimit("character_search", 120, time.Minute), characterH.Search)
+	api.POST("/character-sheets", middleware.RateLimit("character_create", 5, 10*time.Minute), authH.AuthRequired(), characterH.Create)
+	api.POST("/character-sheets/prompt-seen", authH.AuthRequired(), characterH.PromptSeen)
+	api.GET("/character-sheets/user/:userId", characterH.ByUser)
+	api.GET("/character-sheets/:id", characterH.Detail)
+	api.PUT("/character-sheets/:id/draft", middleware.RateLimit("character_draft", 120, time.Minute), authH.AuthRequired(), characterH.SaveDraft)
+	api.DELETE("/character-sheets/:id/draft", authH.AuthRequired(), characterH.DiscardDraft)
+	api.POST("/character-sheets/:id/publish", middleware.RateLimit("character_publish", 30, time.Minute), authH.AuthRequired(), characterH.Publish)
+	api.POST("/character-sheets/:id/like", middleware.RateLimit("character_like", 60, time.Minute), authH.AuthRequired(), characterH.Like)
+	api.DELETE("/character-sheets/:id", authH.AuthRequired(), characterH.Delete)
 
 	// ---- 引用卡片 / 媒体 ----
 	api.GET("/embeds", embedsH.List)

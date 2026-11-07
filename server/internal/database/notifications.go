@@ -17,6 +17,7 @@ import (
 const (
 	NotificationPostLike     = "post_like"
 	NotificationCommentLike  = "comment_like"
+	NotificationCharacterLike = "character_like"
 	NotificationPostComment  = "post_comment"
 	NotificationCommentReply = "comment_reply"
 	NotificationSystem       = "system"
@@ -113,7 +114,13 @@ func (d *DB) UnreadCounts(ctx context.Context, userID string) (UnreadCounts, err
 			JOIN posts p ON p.id = c.post_id
 			WHERE c.user_id = $1 AND c.status = 1 AND p.status = 1 AND p.published_at <= NOW()
 			AND cl.user_id <> c.user_id
-			AND cl.created_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'likes'), `+epoch+`)),
+			AND cl.created_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'likes'), `+epoch+`))
+		+
+		(SELECT COUNT(*) FROM character_sheet_likes csl
+			JOIN character_sheets cs ON cs.id = csl.sheet_id
+			WHERE cs.user_id = $1 AND cs.status = 1
+			AND csl.user_id <> cs.user_id
+			AND csl.created_at > COALESCE((SELECT last_read_at FROM message_read_state WHERE user_id = $1 AND category = 'likes'), `+epoch+`)),
 		(SELECT COUNT(*) FROM (
 			-- 我的帖子下的新评论
 			SELECT c.id FROM comments c

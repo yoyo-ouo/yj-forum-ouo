@@ -35,7 +35,7 @@ func parseIDList(raw string) []string {
 
 // ---- GET /ov2/api/embeds ----
 
-// List 批量取引用卡片数据（users/posts/articles 均为逗号分隔 id，查不到的 id 省略）。
+// List 批量取引用卡片数据（users/posts/articles/characters 均为逗号分隔 id，查不到的 id 省略）。
 func (h *EmbedsHandler) List(c *gin.Context) {
 	ctx := c.Request.Context()
 	users, err := h.DB.GetEmbedUsers(ctx, parseIDList(c.Query("users")))
@@ -53,5 +53,10 @@ func (h *EmbedsHandler) List(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "users": users, "posts": posts, "articles": articles})
+	characters, err := h.DB.GetEmbedCharacters(ctx, parseIDList(c.Query("characters")))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "users": users, "posts": posts, "articles": articles, "characters": characters})
 }

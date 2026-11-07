@@ -26,7 +26,8 @@ func (d *DB) ListGuilds(ctx context.Context) ([]models.GuildListItem, error) {
 	rows, err := d.Query(ctx, `SELECT g.id, g.uuid::text, g.slug, g.name, COALESCE(g.intro, ''), COALESCE(g.theme_color, ''), g.logo_version,
 		COALESCE(g.logo_file_id, '') AS logo_file_id,
 		(COALESCE(g.logo_file_id, '') <> '') AS has_logo,
-		(SELECT COUNT(*) FROM guild_members m WHERE m.guild_id = g.id) AS member_count,
+		(COALESCE((SELECT COUNT(*) FROM guild_members m WHERE m.guild_id = g.id), 0) +
+		 COALESCE((SELECT COUNT(*) FROM character_sheets cs WHERE cs.guild_id = g.id AND cs.status = 1), 0)) AS member_count,
 		g.created_at,
 		u.id, u.name, u.avatar, u.intro
 		FROM guilds g LEFT JOIN users u ON u.id = g.leader_user_id
@@ -62,7 +63,8 @@ func (d *DB) GetGuildBySlug(ctx context.Context, slug string) (*models.GuildDeta
 	err := d.QueryRow(ctx, `SELECT g.id, g.uuid::text, g.slug, g.name, COALESCE(g.intro, ''), COALESCE(g.logo_file_id, ''), g.logo_version, COALESCE(g.theme_color, ''),
 		g.leader_user_id, COALESCE(g.leader_bio, ''), g.leader_title, g.created_at, g.updated_at,
 		(COALESCE(g.logo_file_id, '') <> '') AS has_logo,
-		(SELECT COUNT(*) FROM guild_members m WHERE m.guild_id = g.id) AS member_count,
+		(COALESCE((SELECT COUNT(*) FROM guild_members m WHERE m.guild_id = g.id), 0) +
+		 COALESCE((SELECT COUNT(*) FROM character_sheets cs WHERE cs.guild_id = g.id AND cs.status = 1), 0)) AS member_count,
 		u.id, u.name, u.avatar, u.intro
 		FROM guilds g LEFT JOIN users u ON u.id = g.leader_user_id
 		WHERE g.slug = $1`, slug).
@@ -116,7 +118,8 @@ func (d *DB) GetGuildIntroPage(ctx context.Context, slug string) (*models.GuildI
 	var themeColor *string
 	var createdAt *time.Time
 	err := d.QueryRow(ctx, `SELECT g.uuid::text, g.slug, g.name, COALESCE(g.intro, ''), COALESCE(g.theme_color, ''), g.created_at,
-		(SELECT COUNT(*) FROM guild_members m WHERE m.guild_id = g.id) AS member_count,
+		(COALESCE((SELECT COUNT(*) FROM guild_members m WHERE m.guild_id = g.id), 0) +
+		 COALESCE((SELECT COUNT(*) FROM character_sheets cs WHERE cs.guild_id = g.id AND cs.status = 1), 0)) AS member_count,
 		(SELECT COUNT(*) FROM guild_categories c WHERE c.guild_id = g.id) AS category_count,
 		COALESCE(g.intro_cover_file_id, ''), g.intro_page_content
 		FROM guilds g WHERE g.slug = $1`, slug).
@@ -248,7 +251,8 @@ func (d *DB) GetUserGuildInfo(ctx context.Context, userID string) (*models.Guild
 	return &g, isLeader, nil
 }
 
-// ListGuildMembers 会馆成员（馆长优先，其次按加入时间）；has_more 用 pageSize+1 探测。
+// ListGuildMembers 会馆成员（真实成员 + 已公开且绑定该会馆的设定角色）。
+// 真实成员与设定角色各占一条（人数口径一致）；馆长优先，其次按时间升序；has_more 用 pageSize+1 探测。
 func (d *DB) ListGuildMembers(ctx context.Context, guildID int64, page, pageSize int) ([]models.GuildMember, bool, error) {
 	if page < 1 {
 		page = 1
@@ -257,13 +261,34 @@ func (d *DB) ListGuildMembers(ctx context.Context, guildID int64, page, pageSize
 		pageSize = 24
 	}
 	offset := (page - 1) * pageSize
-	rows, err := d.Query(ctx, `SELECT m.user_id, COALESCE(u.name, ''), COALESCE(u.avatar, ''),
-		COALESCE(u.prefix, ''), COALESCE(u.intro, ''),
-		COALESCE(g.leader_user_id = m.user_id, false) AS is_leader, m.joined_at
-		FROM guild_members m JOIN guilds g ON g.id = m.guild_id
-		LEFT JOIN users u ON u.id = m.user_id
-		WHERE m.guild_id = $1
-		ORDER BY COALESCE(g.leader_user_id = m.user_id, false) DESC, m.joined_at ASC NULLS LAST, m.user_id ASC
+	rows, err := d.Query(ctx, `
+		WITH entries AS (
+			SELECT m.user_id AS owner_id, 'member'::text AS kind, ''::text AS character_id,
+				COALESCE(u.name, '') AS name, ''::text AS character_name,
+				COALESCE(u.avatar, '') AS avatar, COALESCE(u.prefix, '') AS prefix,
+				COALESCE(u.intro, '') AS intro,
+				COALESCE(g.leader_user_id = m.user_id, false) AS is_leader,
+				m.joined_at AS sort_at, ''::text AS character_title
+			FROM guild_members m JOIN guilds g ON g.id = m.guild_id
+			LEFT JOIN users u ON u.id = m.user_id
+			WHERE m.guild_id = $1
+			UNION ALL
+			SELECT s.user_id, 'character', s.id,
+				s.name, s.name,
+				CASE WHEN s.avatar_media_id <> '' THEN '/ov2/api/media/' || s.avatar_media_id
+				     ELSE COALESCE(u.avatar, '') END,
+				COALESCE(u.prefix, ''),
+				COALESCE(NULLIF(s.title, ''), s.alias, ''),
+				false,
+				COALESCE(s.published_at, s.created_at),
+				s.title
+			FROM character_sheets s
+			LEFT JOIN users u ON u.id = s.user_id
+			WHERE s.guild_id = $1 AND s.status = 1
+		)
+		SELECT owner_id, name, avatar, prefix, intro, is_leader, sort_at, kind, character_id, character_name, character_title
+		FROM entries
+		ORDER BY is_leader DESC, sort_at ASC NULLS LAST, owner_id ASC, character_id ASC
 		LIMIT $2 OFFSET $3`, guildID, pageSize+1, offset)
 	if err != nil {
 		return nil, false, err
@@ -272,7 +297,8 @@ func (d *DB) ListGuildMembers(ctx context.Context, guildID int64, page, pageSize
 	members := []models.GuildMember{}
 	for rows.Next() {
 		var m models.GuildMember
-		if err := rows.Scan(&m.ID, &m.Name, &m.Avatar, &m.Prefix, &m.Intro, &m.IsLeader, &m.JoinedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Avatar, &m.Prefix, &m.Intro, &m.IsLeader,
+			&m.JoinedAt, &m.Kind, &m.CharacterID, &m.CharacterName, &m.CharacterTitle); err != nil {
 			return nil, false, err
 		}
 		members = append(members, m)

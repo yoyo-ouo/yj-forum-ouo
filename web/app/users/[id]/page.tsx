@@ -13,6 +13,7 @@ import Markdown from "@/components/Markdown";
 import RichContent from "@/components/ui/RichContent";
 import HoverTip from "@/components/ui/HoverTip";
 import { useToast } from "@/components/Toast";
+import CharacterSheetSection from "@/components/character/CharacterSheetSection";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { userApi, postApi, User, Post, UserBrief, ReplyItem, LikeItem, ApiException, GuildMembership } from "@/lib/api";
 import { ageDisplay, contrastText, isScheduledPost, themeColor } from "@/lib/constants";
@@ -427,6 +428,8 @@ export default function UserPage() {
               <i className="fa fa-pencil"></i> 编辑
             </button>
           )}
+          {/* 设定信息：位于账号设置（更换邮箱/注销）上方，全宽 */}
+          <CharacterSheetSection userId={id} isSelf={isSelf} hidden={!!profile.deleted} />
           {isSelf && !profile.deleted && (
             <div className="user-account-settings" id="user-account-settings">
               <button type="button" className="account-settings-btn" onClick={() => setShowEmailChange(true)}>
@@ -618,8 +621,11 @@ export default function UserPage() {
             ) : (
               <>
                 {likes.map((item) => {
+                  const isCharacterLike = item.target_type === "character";
                   const targetCommentId = item.target_type === "comment" ? item.comment_id : "";
-                  const href = `/post/${item.post_id}${targetCommentId ? `#comment-${targetCommentId}` : ""}`;
+                  const href = isCharacterLike
+                    ? `/character/${item.target_id}`
+                    : `/post/${item.post_id}${targetCommentId ? `#comment-${targetCommentId}` : ""}`;
                   return (
                     <div
                       className="comment-item comment-item-clickable"
@@ -644,12 +650,19 @@ export default function UserPage() {
                           <span className="comment-time">{fmtDate(item.created_at)}</span>
                         </div>
                         <div className="comment-text">
-                          {item.target_type === "post" ? "赞了你的帖子" : "赞了你的评论"}
+                          {isCharacterLike
+                            ? "赞了你的设定"
+                            : item.target_type === "post"
+                              ? "赞了你的帖子"
+                              : "赞了你的评论"}
                           {item.comment_excerpt && <span className="user-like-excerpt">「{item.comment_excerpt}」</span>}
                         </div>
                         <div className="comment-footer">
                           <Link className="comment-post-link" href={href} onClick={(e) => e.stopPropagation()}>
-                            <i className="fa fa-thumbs-up"></i> {item.post_title || "查看帖子"}
+                            <i className="fa fa-thumbs-up"></i>{" "}
+                            {isCharacterLike
+                              ? item.target_title || "查看设定"
+                              : item.post_title || "查看帖子"}
                           </Link>
                         </div>
                       </div>
