@@ -133,7 +133,7 @@ systemctl enable --now yj-web
 1. 宝塔面板创建站点（域名绑定）。
 2. 将 `deploy/nginx/yj-forum.conf` 内容合并入站点配置（注意替换 `server_name` 为实际域名）。
 3. 无需再配置 `/guild-img/`、`/guide-img/` 反代（已退役，图片走 `/ov2/api/media/`）。
-4. 媒体上传（`POST /ov2/api/media/images`，图片 ≤5MB；头像 ≤10MB）需 Nginx/反代允许较大请求体：配置已在 `location /ov2/api/` 内置 `client_max_body_size 12m;`，若在 http 层统一配置请核对（不足会返回 413）。
+4. 媒体上传（`POST /ov2/api/media/images`，图片 ≤10MB；头像 ≤10MB）需 Nginx/反代允许较大请求体：配置已在 `location /ov2/api/` 内置 `client_max_body_size 12m;`，若在 http 层统一配置请核对（不足会返回 413）。
 5. SSE 必须走 `location = /ov2/api/world/stream` 与 `location = /ov2/api/messages/stream` 的专用配置（`proxy_buffering off`、`proxy_read_timeout 3600s`、`gzip off`），否则会出现“连上但不流动”。
 6. 宝塔内申请 SSL 证书，开启 HTTPS（注释段提供 443 示范）。
 

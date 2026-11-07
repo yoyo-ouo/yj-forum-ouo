@@ -62,11 +62,16 @@ func (h *MediaHandler) UploadImage(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, media.MaxInputBytes+(1<<20))
 	file, err := c.FormFile("file")
 	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"success": false, "message": "图片大小不能超过10MB"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请选择图片文件"})
 		return
 	}
 	if file.Size > media.MaxInputBytes {
-		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"success": false, "message": "图片大小不能超过5MB"})
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"success": false, "message": "图片大小不能超过10MB"})
 		return
 	}
 	src, err := file.Open()
@@ -77,7 +82,7 @@ func (h *MediaHandler) UploadImage(c *gin.Context) {
 	defer src.Close()
 	data, err := io.ReadAll(io.LimitReader(src, media.MaxInputBytes+1))
 	if err != nil || len(data) > media.MaxInputBytes {
-		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"success": false, "message": "图片大小不能超过5MB"})
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"success": false, "message": "图片大小不能超过10MB"})
 		return
 	}
 

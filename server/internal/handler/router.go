@@ -236,7 +236,7 @@ func registerAPIRoutes(api *gin.RouterGroup, h apiHandlers) {
 	api.GET("/reports/bug/:id", middleware.RateLimit("report_bug_detail", 120, time.Minute), miscH.BugReportDetail)
 	api.GET("/easter-egg", miscH.EasterEgg)
 
-	api.POST("/users/me/avatar", authH.AuthRequired(), postsH.UploadAvatar)
+	api.POST("/users/me/avatar", middleware.RateLimit("avatar_upload", 10, time.Hour), authH.AuthRequired(), postsH.UploadAvatar)
 	api.GET("/avatar/:filename", postsH.ServeAvatar)
 
 	// ---- 新增模块（Batch 2）----

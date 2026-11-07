@@ -6,7 +6,7 @@
 
 | 字段 | 说明 |
 |---|---|
-| `file` | png/jpeg/webp/gif，≤5MB |
+| `file` | png/jpeg/webp/gif，≤10MB |
 | `scene` | `post_image` / `comment_image` / `world_message` / `chat_message` |
 | `owner_id` | 可选：帖子/评论/聊天室/世界消息 ID |
 | `guild_uuid` | 可选：会馆 UUID |
