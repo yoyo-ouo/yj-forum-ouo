@@ -11,6 +11,11 @@ const htmlLimitedBots =
   /[\w-]+-Google|Google-[\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight|MicroMessenger|WeChat|QQ\/|Weibo|Bytespider|BytedanceBot/i;
 
 const nextConfig: NextConfig = {
+  // dev 时代理 /ov2/api/* 会缓冲请求体；默认 10MB 会把 10MB 图片截断（生产走 nginx 不受影响）。
+  // 与 nginx 的 client_max_body_size 12m 对齐。Next 16 中该项位于 experimental（旧名 middlewareClientMaxBodySize）。
+  experimental: {
+    proxyClientMaxBodySize: "12mb",
+  },
   // 裸机部署：产出 .next/standalone/server.js（自带最小 node_modules 依赖树），
   // 由 deploy/yj-web.service 直接 `node .next/standalone/server.js` 运行；
   // 仅影响 `next build`，对 `next dev` 无影响。

@@ -510,7 +510,14 @@
 }
 
 .comment-editor-body img {
+    width: auto;
+    height: auto;
     max-width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    object-fit: contain;
     border-radius: 8px;
     margin: 6px 0;
 }

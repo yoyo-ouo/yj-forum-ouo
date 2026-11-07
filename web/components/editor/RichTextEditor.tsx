@@ -4,7 +4,8 @@
 // - 工具条：加粗/斜体/删除线/下划线/H1-H4/行内代码/代码块/引用段落/分割线/无序/有序/
 //   链接/图片上传/清除格式/撤销/重做 + 三种引用卡片
 // - 工具条与选项条（图片宽度条/引用样式条）整体吸附（顶栏下，≤480px 适配）
-// - 图片选中：宽度条（25/50/75/100% 按编辑区换算 + 自定义 40-2400px + 还原），
+// - 图片选中：宽度条（25/50/75/100% 相对宽度 + 自定义 40-2400px + 还原），
+//   百分比存 width="50%"、像素存 width="600"，二者互斥；无属性=按原图且不超过容器宽
 //   宽度即时生效（Decoration 视图层内联 style，不污染序列化）
 // - 引用节点选中：版式/尺寸/字段开关（用户）/对齐；序列化严格按契约（lib/embed.ts）
 // - 图片上传：mediaApi.upload → 插入站内相对路径 /ov2/api/media/{id}
@@ -23,7 +24,7 @@ import QuotePickerModal from "./QuotePickerModal";
 import { MAX_IMAGE_WIDTH, MIN_IMAGE_WIDTH, ResizableImage } from "./resizableImage";
 
 /** 图片约束（与服务端一致） */
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
 const EMPTY_TOOLBAR_STATE = {
@@ -43,6 +44,7 @@ const EMPTY_TOOLBAR_STATE = {
   link: false,
   isImage: false,
   imageWidth: null as number | null,
+  imageWidthPct: null as number | null,
   isEmbed: false,
   embedType: "",
   embedVariant: "card",
@@ -86,10 +88,16 @@ export default function RichTextEditor({
   value,
   onChange,
   placeholder = "在此输入内容…",
+  stickyToolbar = true,
+  contentMaxHeight,
 }: {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
+  /** 工具条是否吸附在顶栏下方（发帖页为 true；浮窗内嵌设 false：工具条不动，正文框内滚动） */
+  stickyToolbar?: boolean;
+  /** 正文编辑区最大高度（px），配合 stickyToolbar=false 使用；超出后在框内滚动 */
+  contentMaxHeight?: number;
 }) {
   const { toast } = useToast();
   const [linkOpen, setLinkOpen] = useState(false);
@@ -144,6 +152,7 @@ export default function RichTextEditor({
 
   // 吸附监测：哨兵进入顶栏区域（rootMargin 上边距 = 顶栏高度）即 "stuck"
   useEffect(() => {
+    if (!stickyToolbar) return;
     const sentinel = stickySentinelRef.current;
     if (!sentinel || typeof IntersectionObserver === "undefined") return;
     const io = new IntersectionObserver(([entry]) => setStuck(!entry.isIntersecting), {
@@ -151,7 +160,7 @@ export default function RichTextEditor({
     });
     io.observe(sentinel);
     return () => io.disconnect();
-  }, [editor]);
+  }, [editor, stickyToolbar]);
 
   const st =
     useEditorState({
@@ -175,6 +184,7 @@ export default function RichTextEditor({
               link: ed.isActive("link"),
               isImage: ed.isActive("image"),
               imageWidth: (ed.getAttributes("image").width as number | null | undefined) ?? null,
+              imageWidthPct: (ed.getAttributes("image").widthPct as number | null | undefined) ?? null,
               isEmbed: ed.isActive("embed"),
               embedType: (ed.getAttributes("embed").embedType as string | undefined) || "",
               embedVariant: (ed.getAttributes("embed").variant as string | undefined) || "card",
@@ -190,27 +200,32 @@ export default function RichTextEditor({
   // 自定义宽度输入框显示值：输入中显示缓冲值，否则显示编辑器实际宽度
   const widthInputValue = widthDraft ?? (st.imageWidth !== null ? String(st.imageWidth) : "");
 
-  /** 图片当前实时宽度（读编辑器实时值，避免 state 时序问题） */
+  /** 图片当前实时像素宽（读编辑器实时值，避免 state 时序问题） */
   const currentImageWidth = (): number | null =>
     (editor?.getAttributes("image").width as number | null | undefined) ?? null;
 
   // 不调用 .focus()：宽度输入框连续输入（≥3 位）时避免焦点被夺回正文
+  /** 固定像素宽（同时清掉百分比） */
   const setImageWidth = (width: number | null) => {
-    editor?.chain().updateAttributes("image", { width }).run();
+    editor?.chain().updateAttributes("image", { width, widthPct: null }).run();
   };
 
-  /** 解析并提交宽度（40-2400 整数；非法或与当前一致时不提交） */
+  /** 相对容器宽的百分比（同时清掉像素宽；不依赖编辑器当前宽度换算） */
+  const applyImagePercent = (pct: number) => {
+    editor?.chain().updateAttributes("image", { widthPct: pct, width: null }).run();
+  };
+
+  /** 还原为原图尺寸（两个宽度属性都清） */
+  const resetImageWidth = () => {
+    editor?.chain().updateAttributes("image", { width: null, widthPct: null }).run();
+  };
+
+  /** 解析并提交像素宽（40-2400 整数；非法或与当前一致时不提交） */
   const commitImageWidth = (raw: string | number) => {
     const n = Math.round(Number(raw));
     if (!Number.isFinite(n) || n < MIN_IMAGE_WIDTH) return;
     const clamped = Math.min(n, MAX_IMAGE_WIDTH);
     if (clamped !== currentImageWidth()) setImageWidth(clamped);
-  };
-
-  /** 百分比按编辑区宽度换算为 px */
-  const applyImagePercent = (pct: number) => {
-    const base = editor?.view.dom.clientWidth || 720;
-    setImageWidth(Math.max(MIN_IMAGE_WIDTH, Math.round((base * pct) / 100)));
   };
 
   const openLinkModal = () => {
@@ -248,7 +263,7 @@ export default function RichTextEditor({
       return;
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      toast("图片大小不能超过 5MB", "error");
+      toast("图片大小不能超过 10MB", "error");
       return;
     }
     setUploading(true);
@@ -270,7 +285,14 @@ export default function RichTextEditor({
   };
 
   return (
-    <div className="rich-editor">
+    <div
+      className={`rich-editor${stickyToolbar ? "" : " is-inline"}`}
+      style={
+        stickyToolbar || !contentMaxHeight
+          ? undefined
+          : ({ "--rich-editor-body-max": `${contentMaxHeight}px` } as React.CSSProperties)
+      }
+    >
       {editor && (
         <>
           {/* 吸附哨兵：滚过顶栏后为吸附容器加阴影 */}
@@ -361,7 +383,7 @@ export default function RichTextEditor({
             <button
               key={pct}
               type="button"
-              className="rich-editor-option-btn"
+              className={`rich-editor-option-btn ${st.imageWidthPct === pct ? "active" : ""}`}
               onClick={() => {
                 setWidthDraft(null);
                 applyImagePercent(pct);
@@ -397,7 +419,7 @@ export default function RichTextEditor({
             className="rich-editor-option-btn"
             onClick={() => {
               setWidthDraft(null);
-              setImageWidth(null);
+              resetImageWidth();
             }}
           >
             还原
@@ -479,7 +501,10 @@ export default function RichTextEditor({
         </>
       )}
 
-      <EditorContent editor={editor} className="rich-editor-content" />
+      <EditorContent
+        editor={editor}
+        className={`rich-editor-content${stickyToolbar ? "" : " is-bounded"}`}
+      />
       <p className="form-editor-tips rich-editor-tips">
         支持标题（H1-H4）、列表、引用、行内代码/代码块、分割线、链接、图片与引用卡片；点击图片可调整宽度，图片与引用会随正文一并保存。
       </p>

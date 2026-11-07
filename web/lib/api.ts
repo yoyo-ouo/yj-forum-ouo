@@ -672,7 +672,7 @@ export const embedApi = {
 
 // ---- 媒体（发帖配图） ----
 export const mediaApi = {
-  // 上传图片（需登录；multipart file，≤5MB，png/jpeg/webp/gif）；scene 可选：post_image | comment_image，缺省回退 post_image
+  // 上传图片（需登录；multipart file，仅限 10MB，png/jpeg/webp/gif）；scene 可选：post_image | comment_image，缺省回退 post_image
   upload: (file: File, scene?: string) => {
     const fd = new FormData();
     fd.append("file", file);

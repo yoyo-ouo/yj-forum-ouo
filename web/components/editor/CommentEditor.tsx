@@ -2,7 +2,7 @@
 
 // 评论富文本编辑器（TipTap 3.31.3）：
 // - 工具条：加粗/斜体/删除线、链接、图片上传（scene 可配，默认 comment_image）、emoji 面板、插入引用（@，弹窗内三 Tab）
-// - 选中图片：紧凑宽度条（25/50/75/100% + 自定义 40-2400px + 还原；宽度存 width 属性）
+// - 选中图片：紧凑宽度条（25/50/75/100% 相对宽度 + 自定义 40-2400px + 还原；百分比与像素互斥，宽度存 width 属性）
 // - Ctrl/Cmd+Enter 提交；纯文本上限默认 500（可通过 maxChars 覆盖；纯图片 / 纯引用卡片视为有效）
 // - 紧凑尺寸（.comment-editor-*），评论以 HTML 存储（服务端统一净化）
 
@@ -110,7 +110,7 @@ const EMOJI_CATEGORIES: { name: string; icon: string; emojis: string[] }[] = [
 ];
 
 /** 图片约束（与服务端一致） */
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 /** 纯文本上限（与服务端 1-500 一致） */
 const MAX_COMMENT_CHARS = 500;
@@ -132,6 +132,7 @@ const EMPTY_TOOLBAR_STATE = {
   link: false,
   isImage: false,
   imageWidth: null as number | null,
+  imageWidthPct: null as number | null,
 };
 
 /** 暴露给父级的句柄：聚焦编辑器（「评论数」按钮跳转输入框用） */
@@ -262,6 +263,7 @@ export default function CommentEditor({
               link: ed.isActive("link"),
               isImage: ed.isActive("image"),
               imageWidth: (ed.getAttributes("image").width as number | null | undefined) ?? null,
+              imageWidthPct: (ed.getAttributes("image").widthPct as number | null | undefined) ?? null,
             }
           : EMPTY_TOOLBAR_STATE,
     }) ?? EMPTY_TOOLBAR_STATE;
@@ -297,27 +299,32 @@ export default function CommentEditor({
     setLinkOpen(false);
   };
 
-  /** 图片当前实时宽度（读编辑器实时值，避免 state 时序问题） */
+  /** 图片当前实时像素宽（读编辑器实时值，避免 state 时序问题） */
   const currentImageWidth = (): number | null =>
     (editor?.getAttributes("image").width as number | null | undefined) ?? null;
 
   // 不调用 .focus()：宽度输入框连续输入（≥3 位）时避免焦点被夺回正文
+  /** 固定像素宽（同时清掉百分比） */
   const setImageWidth = (width: number | null) => {
-    editor?.chain().updateAttributes("image", { width }).run();
+    editor?.chain().updateAttributes("image", { width, widthPct: null }).run();
   };
 
-  /** 解析并提交宽度（40-2400 整数；非法或与当前一致时不提交） */
+  /** 相对容器宽的百分比（同时清掉像素宽） */
+  const applyImagePercent = (pct: number) => {
+    editor?.chain().updateAttributes("image", { widthPct: pct, width: null }).run();
+  };
+
+  /** 还原为原图尺寸 */
+  const resetImageWidth = () => {
+    editor?.chain().updateAttributes("image", { width: null, widthPct: null }).run();
+  };
+
+  /** 解析并提交像素宽（40-2400 整数；非法或与当前一致时不提交） */
   const commitImageWidth = (raw: string | number) => {
     const n = Math.round(Number(raw));
     if (!Number.isFinite(n) || n < MIN_IMAGE_WIDTH) return;
     const clamped = Math.min(n, MAX_IMAGE_WIDTH);
     if (clamped !== currentImageWidth()) setImageWidth(clamped);
-  };
-
-  /** 百分比按编辑区宽度换算为 px */
-  const applyImagePercent = (pct: number) => {
-    const base = editor?.view.dom.clientWidth || 720;
-    setImageWidth(Math.max(MIN_IMAGE_WIDTH, Math.round((base * pct) / 100)));
   };
 
   // 自定义宽度输入框显示值：输入中显示缓冲值，否则显示编辑器实际宽度
@@ -334,7 +341,7 @@ export default function CommentEditor({
       return;
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      toast("图片大小不能超过 5MB", "error");
+      toast("图片大小不能超过 10MB", "error");
       return;
     }
     if (Number.isFinite(maxImages)) {
@@ -499,7 +506,7 @@ export default function CommentEditor({
             <button
               key={pct}
               type="button"
-              className="rich-editor-option-btn"
+              className={`rich-editor-option-btn ${st.imageWidthPct === pct ? "active" : ""}`}
               onClick={() => {
                 setWidthDraft(null);
                 applyImagePercent(pct);
@@ -535,7 +542,7 @@ export default function CommentEditor({
             className="rich-editor-option-btn"
             onClick={() => {
               setWidthDraft(null);
-              setImageWidth(null);
+              resetImageWidth();
             }}
           >
             还原
