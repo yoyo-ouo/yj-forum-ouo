@@ -56,7 +56,6 @@
 | 入口 | 地址 |
 |---|---|
 | 线上站点 | <https://www.yjlt.top>（注册后即可体验） |
-| 管理后台 | [yj-forum-admin](https://github.com/yoyo-ouo/yj-forum-admin)（会馆审批、图片存储、用户与内容管理） |
 | Android 客户端 | [Android 分支](https://github.com/yoyo-ouo/yj-forum-ouo/tree/Android)（Kotlin + Jetpack Compose） |
 
 ## 功能特性
@@ -83,7 +82,6 @@
 | 数据 | PostgreSQL 18（开发 Docker / 生产外部实例）、SeaweedFS（S3 兼容媒体存储） |
 | 实时与安全 | SSE、HttpOnly Session、CSRF、限流、SafeHTML、ALTCHA |
 | 部署 | 自建服务器裸机、systemd、Nginx 反代、Next.js standalone |
-| 管理端 | [yj-forum-admin](https://github.com/yoyo-ouo/yj-forum-admin)（会馆审批、图片存储、用户与内容管理） |
 
 ## 快速开始
 
@@ -138,8 +136,7 @@ make dev                # Docker PGSQL + Go :8090 + Next.js :3200
 2. **后端**：`make server-build` 编译二进制，交给 `deploy/yj-forum.service`（systemd）；
 3. **前端**：`pnpm build` 产出 `.next/standalone`，由 `deploy/yj-web.service` 运行；
 4. **媒体**：SeaweedFS（S3 兼容）或本地目录，上传经 `/ov2/api/media/*` 代理；
-5. **Nginx**：`/ov2/api/*`、`/avatar/*` 反代 Go；其余反代 Next.js（会馆/指南图片统一走 `/ov2/api/media/<id>` 媒体直出）；
-6. **管理端**：[yj-forum-admin](https://github.com/yoyo-ouo/yj-forum-admin) 独立部署，负责会馆审批、图片存储与用户 / 内容管理。
+5. **Nginx**：`/ov2/api/*`、`/avatar/*` 反代 Go；其余反代 Next.js（会馆/指南图片统一走 `/ov2/api/media/<id>` 媒体直出）。
 
 ## 项目结构
 
@@ -162,7 +159,6 @@ make dev                # Docker PGSQL + Go :8090 + Next.js :3200
 | 仓库 | 说明 |
 |---|---|
 | [yj-forum-ouo](https://github.com/yoyo-ouo/yj-forum-ouo) | 论坛本体：Next.js Web + Go API（当前仓库） |
-| [yj-forum-admin](https://github.com/yoyo-ouo/yj-forum-admin) | 管理后台：会馆审批、用户与内容管理、运营配置 |
 | [Android 分支](https://github.com/yoyo-ouo/yj-forum-ouo/tree/Android) | Android 客户端：Kotlin + Jetpack Compose（同一远程仓库的独立分支） |
 
 ## 文档
