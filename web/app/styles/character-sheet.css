@@ -30,6 +30,20 @@
     border-top: 1px dashed var(--color-border-divider);
 }
 
+/* 区块内一律不画滚动条：角色多时胶囊条仍可横向滑动、代码块仍可横向滑动，
+   但那条细灰横条永远不会出现（它会把整块版面切一刀，非常像 bug）。 */
+.cs-section,
+.cs-section * {
+    scrollbar-width: none;
+}
+
+.cs-section::-webkit-scrollbar,
+.cs-section *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
 .cs-section-head {
     display: flex;
     align-items: baseline;
@@ -93,7 +107,13 @@
     gap: 8px;
     overflow-x: auto;
     padding: 2px 2px 10px;
-    scrollbar-width: thin;
+    scrollbar-width: none;
+}
+
+.cs-switcher::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
 }
 
 .cs-chip {
