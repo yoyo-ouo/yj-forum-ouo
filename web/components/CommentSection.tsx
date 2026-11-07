@@ -121,6 +121,9 @@ export default function CommentSection({
   onLike,
   submitting,
   loading = false,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
   canWrite = true,
 }: {
   comments: Comment[];
@@ -138,6 +141,11 @@ export default function CommentSection({
   submitting: boolean;
   /** 评论是否还在加载（正文已先渲染，评论区显示骨架） */
   loading?: boolean;
+  /** 是否还有更早的评论可加载 */
+  hasMore?: boolean;
+  /** 「加载更早的评论」进行中 */
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
   /** 是否允许写入评论（需服务端已验证的登录态；不能只信 user_id Cookie） */
   canWrite?: boolean;
 }) {
@@ -232,7 +240,8 @@ export default function CommentSection({
         ) : comments.length === 0 ? (
           <div className="comment-empty">暂无评论，快来抢沙发~</div>
         ) : (
-          mainComments.map((c) => {
+          <>
+            {mainComments.map((c) => {
             const replies = replyMap[c.id] || [];
             const hiddenCount = Math.max(0, replies.length - 2);
             // 用户操作优先；否则锚点目标所在组默认展开
@@ -275,7 +284,18 @@ export default function CommentSection({
                 )}
               </div>
             );
-          })
+          })}
+            {hasMore && onLoadMore && (
+              <button
+                type="button"
+                className="comment-load-more"
+                onClick={onLoadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? "加载中…" : "加载更早的评论"}
+              </button>
+            )}
+          </>
         )}
       </div>
     </>

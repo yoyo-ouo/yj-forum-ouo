@@ -40,6 +40,10 @@ export default function PostDetailPage() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [commentsLoading, setCommentsLoading] = useState(true);
+  // 评论游标翻页：hasMore + 下一页游标（本页最旧一条的 id）
+  const [commentsHasMore, setCommentsHasMore] = useState(false);
+  const [commentsCursor, setCommentsCursor] = useState("");
+  const [loadingMoreComments, setLoadingMoreComments] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
   const commentEditorRef = useRef<CommentEditorHandle>(null);
@@ -61,14 +65,36 @@ export default function PostDetailPage() {
 
   const loadComments = useCallback(async () => {
     try {
-      const r = await postApi.comments(id, 1, 50);
+      const r = await postApi.comments(id, 50);
       setComments(r.comments || []);
+      setCommentsHasMore(!!r.has_more);
+      setCommentsCursor(r.next_cursor || "");
     } catch {
       // 评论拉取失败不打断阅读，保持骨架/空态即可
     } finally {
       setCommentsLoading(false);
     }
   }, [id]);
+
+  /** 加载更早的评论：更早的一页拼到数组前面，整体保持时间升序（渲染时 reverse 即最新在前） */
+  const loadMoreComments = useCallback(async () => {
+    if (loadingMoreComments || !commentsCursor) return;
+    setLoadingMoreComments(true);
+    try {
+      const r = await postApi.comments(id, 50, commentsCursor);
+      setComments((prev) => {
+        const seen = new Set(prev.map((c) => c.id));
+        const older = (r.comments || []).filter((c) => !seen.has(c.id));
+        return [...older, ...prev];
+      });
+      setCommentsHasMore(!!r.has_more);
+      setCommentsCursor(r.next_cursor || "");
+    } catch (e: any) {
+      toast(e instanceof ApiException ? e.message : "加载更早的评论失败", "error");
+    } finally {
+      setLoadingMoreComments(false);
+    }
+  }, [id, commentsCursor, loadingMoreComments, toast]);
 
   useEffect(() => {
     void load();
@@ -277,6 +303,9 @@ export default function PostDetailPage() {
             onSubmit={submitComment}
             submitting={submittingComment}
             loading={commentsLoading}
+            hasMore={commentsHasMore}
+            loadingMore={loadingMoreComments}
+            onLoadMore={loadMoreComments}
             canWrite={!loadingUser && (!!user || !!userId)}
             onDelete={deleteComment}
             onLike={doLikeComment}

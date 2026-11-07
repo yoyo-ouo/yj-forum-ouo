@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,29 +23,62 @@ const maxCommentContentBytes = 64 * 1024
 // defaultCommentsPageSize 评论列表默认每页条数（与前端首屏一致）。
 const defaultCommentsPageSize = 50
 
-// Comments 评论列表（共享缓存 comments:post:ID:page:size）。
+// maxCommentsPageSize 单次翻页上限。
+const maxCommentsPageSize = 100
+
+// Comments 评论列表（游标翻页：首次取最新一批，带 before_id 取更早的一批）。
+//
+// 响应字段：comments（时间升序，兼容旧前端「reverse 后最新在前」）、page_size、
+// has_more、next_cursor（下一页游标 = 本页最旧一条的 id，无更早评论时为空）。
 //
 // 缓存里只存「匿名基底」（liked_by_me 全为 false）：登录用户命中缓存后
-// 再叠一次个人点赞态（单条 IN 查询）。旧实现见登录直接 BYPASS 缓存，
-// 于是每个登录访客每次都打完整的评论 JOIN 查询——这正是评论区慢的主因。
+// 再叠一次个人点赞态（单条 IN 查询），避免为每个登录访客重复打完整的评论 JOIN。
 func (h *PostsHandler) Comments(c *gin.Context) {
 	id := c.Param("id")
-	page, pageSize := parsePageWithDefault(c, defaultCommentsPageSize)
+	limit := defaultCommentsPageSize
+	for _, raw := range []string{c.Query("limit"), c.Query("page_size")} {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 && v <= maxCommentsPageSize {
+			limit = v
+			break
+		}
+	}
 	me := currentUserFromCookie(c, h.Sessions)
 	// 定时未发布帖（非作者视角）与不存在的帖子：评论列表同样 404
 	if !h.postVisible(c, id, me) {
 		return
 	}
-	key := "comments:post:" + id + ":" + itoa(page) + ":" + itoa(pageSize)
-	cacheState := "MISS"
-	v, ok := h.Cache.Comments.Get(key)
-	if !ok {
-		comments, err := h.DB.GetPostComments(c.Request.Context(), id, page, pageSize)
+	beforeID := strings.TrimSpace(c.Query("before_id"))
+	var before *database.CommentCursor
+	if beforeID != "" {
+		cur, exists, err := h.DB.GetCommentCursor(c.Request.Context(), beforeID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 			return
 		}
-		v = gin.H{"success": true, "comments": comments, "page": page, "page_size": pageSize}
+		// 游标必须属于本帖，避免跨帖乱序
+		if !exists || cur.PostID != id {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "翻页游标无效"})
+			return
+		}
+		before = &cur
+	}
+	key := "comments:post:" + id + ":" + itoa(limit) + ":" + beforeID
+	cacheState := "MISS"
+	v, ok := h.Cache.Comments.Get(key)
+	if !ok {
+		comments, hasMore, err := h.DB.GetPostComments(c.Request.Context(), id, limit, before)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
+			return
+		}
+		nextCursor := ""
+		if hasMore && len(comments) > 0 {
+			nextCursor = comments[0].ID // 升序返回，首条即本页最旧
+		}
+		v = gin.H{
+			"success": true, "comments": comments, "page_size": limit,
+			"has_more": hasMore, "next_cursor": nextCursor,
+		}
 		h.Cache.Comments.Set(key, v, 60*time.Second)
 	} else {
 		cacheState = "HIT"
@@ -55,7 +89,13 @@ func (h *PostsHandler) Comments(c *gin.Context) {
 		return
 	}
 	// 登录态：复制切片再写个人字段，绝不污染共享缓存
-	out := gin.H{"success": true, "comments": cloneComments(v), "page": page, "page_size": pageSize}
+	m, _ := v.(gin.H)
+	hasMore, _ := m["has_more"].(bool)
+	nextCursor, _ := m["next_cursor"].(string)
+	out := gin.H{
+		"success": true, "comments": cloneComments(v), "page_size": limit,
+		"has_more": hasMore, "next_cursor": nextCursor,
+	}
 	markCommentLikedByMe(h.DB, c.Request.Context(), me, out["comments"].([]models.Comment))
 	c.Header("X-Cache", cacheState+":BYME")
 	c.JSON(http.StatusOK, out)

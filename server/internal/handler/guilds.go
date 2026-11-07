@@ -125,21 +125,33 @@ func (h *GuildsHandler) Detail(c *gin.Context) {
 // ---- GET /ov2/api/guilds/:slug/feed ----
 
 // Feed 会馆信息流（帖子 + 文章）。
+// 缓 30s（发帖/删帖/定时转公开时由 invalidateFeedCaches 失效）；点赞/评论数允许 30s 陈旧。
 func (h *GuildsHandler) Feed(c *gin.Context) {
+	slug := c.Param("slug")
+	page, pageSize := feedPage(c)
+	category := strings.TrimSpace(c.Query("category"))
+	// 用 slug 做键：命中时连 resolveGuild 的那次查询也省了（slug 全局唯一且不随改名变化）
+	key := "feed:guild:" + slug + ":" + itoa(page) + ":" + itoa(pageSize) + ":" + category
+	if v, ok := h.Cache.Posts.Get(key); ok {
+		c.Header("X-Cache", "HIT")
+		c.JSON(http.StatusOK, v)
+		return
+	}
 	g, ok := h.resolveGuild(c)
 	if !ok {
 		return
 	}
-	page, pageSize := feedPage(c)
-	category := strings.TrimSpace(c.Query("category"))
 	items, hasMore, err := h.DB.ListGuildFeed(c.Request.Context(), g.ID, page, pageSize, category)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "items": items, "has_more": hasMore,
+	resp := gin.H{"success": true, "items": items, "has_more": hasMore,
 		"page": page, "page_size": pageSize,
-		"guild": gin.H{"id": g.ID, "slug": g.Slug, "name": g.Name, "theme_color": g.ThemeColor}})
+		"guild": gin.H{"id": g.ID, "slug": g.Slug, "name": g.Name, "theme_color": g.ThemeColor}}
+	h.Cache.Posts.Set(key, resp, 30*time.Second)
+	c.Header("X-Cache", "MISS")
+	c.JSON(http.StatusOK, resp)
 }
 
 // ---- GET /ov2/api/guilds/:slug/members ----
@@ -194,7 +206,7 @@ func (h *GuildsHandler) IntroPage(c *gin.Context) {
 
 // ---- GET /ov2/api/feed ----
 
-// GlobalFeed 全站信息流：space=all/public/guild。
+// GlobalFeed 全站信息流：space=all/public/guild（缓 30s，同会馆信息流）。
 func (h *GuildsHandler) GlobalFeed(c *gin.Context) {
 	space := c.DefaultQuery("space", "all")
 	if space != "all" && space != "public" && space != "guild" {
@@ -203,13 +215,22 @@ func (h *GuildsHandler) GlobalFeed(c *gin.Context) {
 	guildID, _ := strconv.ParseInt(c.Query("guild_id"), 10, 64)
 	category := strings.TrimSpace(c.Query("category"))
 	page, pageSize := feedPage(c)
+	key := "feed:global:" + space + ":" + strconv.FormatInt(guildID, 10) + ":" + itoa(page) + ":" + itoa(pageSize) + ":" + category
+	if v, ok := h.Cache.Posts.Get(key); ok {
+		c.Header("X-Cache", "HIT")
+		c.JSON(http.StatusOK, v)
+		return
+	}
 	items, hasMore, err := h.DB.ListGlobalFeed(c.Request.Context(), space, guildID, category, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "items": items, "has_more": hasMore,
-		"page": page, "page_size": pageSize, "space": space})
+	resp := gin.H{"success": true, "items": items, "has_more": hasMore,
+		"page": page, "page_size": pageSize, "space": space}
+	h.Cache.Posts.Set(key, resp, 30*time.Second)
+	c.Header("X-Cache", "MISS")
+	c.JSON(http.StatusOK, resp)
 }
 
 // ---- GET /ov2/api/articles/:id ----

@@ -199,6 +199,29 @@
     font-size: 13px;
 }
 
+/* 「加载更早的评论」：列表底部（时间最早的一端） */
+.comment-load-more {
+    align-self: center;
+    margin-top: 4px;
+    padding: 8px 20px;
+    border: none;
+    border-radius: 999px;
+    background: var(--color-bg-item-hover);
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease;
+}
+
+.comment-load-more:hover:not(:disabled) {
+    color: var(--color-primary);
+}
+
+.comment-load-more:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
 /* 评论骨架：正文先渲染，评论随后到达，避免整页等评论 */
 .comment-loading {
     display: flex;

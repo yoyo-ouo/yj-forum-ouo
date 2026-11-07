@@ -598,8 +598,11 @@ export const postApi = {
   remove: (id: string) => request<{ success: boolean }>(`/posts/${id}/delete`, { method: "POST" }),
   report: (id: string, reason: string, detail = "") =>
     request<{ success: boolean }>(`/posts/${id}/report`, { method: "POST", body: JSON.stringify({ reason, detail }) }),
-  comments: (id: string, page = 1, pageSize = 50) =>
-    request<{ comments: Comment[] }>(`/posts/${id}/comments?page=${page}&page_size=${pageSize}`),
+  // 评论列表：游标翻页（首次不带 beforeId 取最新一批；带 beforeId 取更早的一批）
+  comments: (id: string, limit = 50, beforeId?: string) =>
+    request<{ comments: Comment[]; has_more: boolean; next_cursor: string }>(
+      `/posts/${id}/comments?limit=${limit}${beforeId ? `&before_id=${encodeURIComponent(beforeId)}` : ""}`
+    ),
   createComment: (id: string, content: string, parentId?: string, contentFormat?: string, altcha?: string) =>
     request<{ comment: Comment }>(`/posts/${id}/comments`, {
       method: "POST",

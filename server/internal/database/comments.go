@@ -54,25 +54,55 @@ func (d *DB) GetCommentPostAndStatus(ctx context.Context, id string) (string, in
 	return postID, status, err
 }
 
-// GetPostComments 帖子评论列表。
-func (d *DB) GetPostComments(ctx context.Context, postID string, page, pageSize int) ([]models.Comment, error) {
-	if page < 1 {
-		page = 1
+// CommentCursor 评论翻页游标（按 created_at + id 稳定定位，用于「加载更早的评论」）。
+type CommentCursor struct {
+	PostID    string
+	CreatedAt time.Time
+	ID        string
+}
+
+// GetCommentCursor 取某条评论的游标（before_id 定位用）；不存在时 exists=false。
+func (d *DB) GetCommentCursor(ctx context.Context, commentID string) (CommentCursor, bool, error) {
+	var c CommentCursor
+	err := d.QueryRow(ctx, `SELECT post_id, created_at, id FROM comments WHERE id = $1`, commentID).
+		Scan(&c.PostID, &c.CreatedAt, &c.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CommentCursor{}, false, nil
 	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 50
+	if err != nil {
+		return CommentCursor{}, false, err
 	}
-	offset := (page - 1) * pageSize
+	return c, true, nil
+}
+
+// GetPostComments 按「最新在前」的游标分页取评论，返回结果仍按时间升序（兼容既有渲染顺序）。
+//
+//	before == nil → 第一页（最新的一批）
+//	before != nil → 比游标更早的一批（「加载更早的评论」）
+//
+// 用 (created_at, id) 元组比较而不是 OFFSET：边看边有人发评论时不会重复或漏条；
+// 旧实现 ORDER BY created_at ASC LIMIT 50 只能看到最早的 50 条，新评论永远不出现。
+func (d *DB) GetPostComments(ctx context.Context, postID string, limit int, before *CommentCursor) ([]models.Comment, bool, error) {
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+	args := []any{postID}
+	where := "c.post_id = $1 AND c.status = 1"
+	if before != nil {
+		args = append(args, before.CreatedAt, before.ID)
+		where += " AND (c.created_at, c.id) < ($2, $3)"
+	}
+	// 多取一条用于判断是否还有更早的评论
+	args = append(args, limit+1)
 	rows, err := d.Query(ctx, `SELECT c.id, c.post_id, c.user_id, c.content, c.content_format, c.parent_id, c.likes, c.status,
 		c.created_at, u.name, u.avatar,
 		COALESCE(g.name, ''), COALESCE(g.theme_color, ''), COALESCE(g.leader_user_id = c.user_id, false)
 		FROM comments c JOIN users u ON c.user_id = u.id
 		LEFT JOIN guild_members gm ON gm.user_id = c.user_id
 		LEFT JOIN guilds g ON g.id = gm.guild_id
-		WHERE c.post_id = $1 AND c.status = 1 ORDER BY c.created_at ASC LIMIT $2 OFFSET $3`,
-		postID, pageSize, offset)
+		WHERE `+where+` ORDER BY c.created_at DESC, c.id DESC LIMIT $`+itoa(len(args)), args...)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer rows.Close()
 	comments := []models.Comment{}
@@ -81,12 +111,23 @@ func (d *DB) GetPostComments(ctx context.Context, postID string, page, pageSize 
 		var createdAt *time.Time
 		if err := rows.Scan(&c.ID, &c.PostID, &c.UserID, &c.Content, &c.ContentFormat, &c.ParentID, &c.Likes, &c.Status, &createdAt, &c.UserName, &c.UserAvatar,
 			&c.UserGuildName, &c.UserGuildThemeColor, &c.UserIsLeader); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		c.CreatedAt = createdAt
 		comments = append(comments, c)
 	}
-	return comments, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	hasMore := len(comments) > limit
+	if hasMore {
+		comments = comments[:limit]
+	}
+	// 反转为升序：前端沿用「升序 → reverse 展示最新在前」的既有逻辑
+	for i, j := 0, len(comments)-1; i < j; i, j = i+1, j-1 {
+		comments[i], comments[j] = comments[j], comments[i]
+	}
+	return comments, hasMore, nil
 }
 
 // ChangeCommentLikes 评论点赞计数增减（delta 为 +1/-1），返回最新点赞数。

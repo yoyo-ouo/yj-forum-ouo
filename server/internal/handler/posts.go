@@ -228,6 +228,7 @@ func (h *PostsHandler) Create(c *gin.Context) {
 	}
 	h.Cache.Posts.DeletePrefix("posts:list:")
 	h.Cache.Posts.Delete(randomPoolKey)
+	h.invalidateFeedCaches()
 	c.JSON(http.StatusCreated, gin.H{"success": true, "id": postID})
 }
 
@@ -274,9 +275,10 @@ func (h *PostsHandler) ProcessScheduledPublishes(ctx context.Context) {
 		// 到点补发灵力奖励（与立即帖一致，source 幂等避免重复）
 		h.awardPostSpirit(ctx, p.UserID, p.ID)
 	}
-	// 定时帖转为可见：失效帖子列表、搜索与单帖详情缓存
+	// 定时帖转为可见：失效帖子列表、信息流、搜索与单帖详情缓存
 	h.Cache.Posts.DeletePrefix("posts:list:")
 	h.Cache.Posts.Delete(randomPoolKey)
+	h.invalidateFeedCaches()
 	h.Cache.Search.DeletePrefix("search:")
 	for _, p := range pending {
 		h.invalidatePostDetail(p.ID)
@@ -288,6 +290,12 @@ func (h *PostsHandler) ProcessScheduledPublishes(ctx context.Context) {
 func (h *PostsHandler) invalidatePostDetail(postID string) {
 	h.Cache.PostDetail.Delete("post:detail:" + postID)
 	h.Cache.PostDetail.Delete("post:detail:" + postID + ":postonly")
+}
+
+// invalidateFeedCaches 失效会馆/全站信息流缓存（`feed:` 前缀）。
+// 信息流本身 TTL 30s，这里保证发帖/删帖/点赞后立刻能看到变化。
+func (h *PostsHandler) invalidateFeedCaches() {
+	h.Cache.Posts.DeletePrefix("feed:")
 }
 
 // ---- GET /ov2/api/posts/:id ----
@@ -345,10 +353,10 @@ func (h *PostsHandler) Detail(c *gin.Context) {
 		liked = h.DB.HasLikedPost(c.Request.Context(), id, me)
 		favorited = h.DB.HasFavoritedPost(c.Request.Context(), id, me)
 	}
-	// 评论（附带，取前 50）；include_comments=0 时跳过，但字段保留空数组以免客户端契约变化
+	// 评论（附带，取最新 50 条；无更早翻页）；include_comments=0 时跳过，字段保留空数组以免契约变化
 	comments := []models.Comment{}
 	if includeComments {
-		comments, _ = h.DB.GetPostComments(c.Request.Context(), id, 1, 50)
+		comments, _, _ = h.DB.GetPostComments(c.Request.Context(), id, 50, nil)
 		if me != "" {
 			markCommentLikedByMe(h.DB, c.Request.Context(), me, comments)
 		}
@@ -391,6 +399,7 @@ func (h *PostsHandler) Like(c *gin.Context) {
 	h.invalidatePostDetail(id)
 	h.Cache.Posts.DeletePrefix("posts:list:")
 	h.Cache.Posts.Delete(randomPoolKey)
+	h.invalidateFeedCaches()
 	c.JSON(http.StatusOK, gin.H{"success": true, "liked": liked, "likes": likes})
 }
 
@@ -465,6 +474,7 @@ func (h *PostsHandler) Delete(c *gin.Context) {
 	h.invalidatePostDetail(id)
 	h.Cache.Posts.DeletePrefix("posts:list:")
 	h.Cache.Posts.Delete(randomPoolKey)
+	h.invalidateFeedCaches()
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
