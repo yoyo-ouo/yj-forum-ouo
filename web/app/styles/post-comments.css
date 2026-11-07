@@ -199,6 +199,64 @@
     font-size: 13px;
 }
 
+/* 评论骨架：正文先渲染，评论随后到达，避免整页等评论 */
+.comment-loading {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.comment-loading-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.comment-loading-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--color-bg-item-hover);
+    animation: comment-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.comment-loading-lines {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 4px;
+}
+
+.comment-loading-line {
+    height: 12px;
+    border-radius: 6px;
+    background: var(--color-bg-item-hover);
+    animation: comment-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.comment-loading-line.short {
+    width: 40%;
+}
+
+@keyframes comment-skeleton-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.45;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .comment-loading-avatar,
+    .comment-loading-line {
+        animation: none;
+    }
+}
+
 .comment-item {
     display: flex;
     gap: 12px;

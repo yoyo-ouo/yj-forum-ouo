@@ -120,6 +120,7 @@ export default function CommentSection({
   onDelete,
   onLike,
   submitting,
+  loading = false,
   canWrite = true,
 }: {
   comments: Comment[];
@@ -135,6 +136,8 @@ export default function CommentSection({
   onLike: (c: Comment) => void;
   /** 提交中：禁用发送按钮，防双击重复 */
   submitting: boolean;
+  /** 评论是否还在加载（正文已先渲染，评论区显示骨架） */
+  loading?: boolean;
   /** 是否允许写入评论（需服务端已验证的登录态；不能只信 user_id Cookie） */
   canWrite?: boolean;
 }) {
@@ -213,7 +216,20 @@ export default function CommentSection({
         </div>
       )}
       <div className="comment-list" id="comment-list">
-        {comments.length === 0 ? (
+        {loading && comments.length === 0 ? (
+          <div className="comment-loading" aria-busy="true" aria-label="评论加载中">
+            {[0, 1, 2].map((i) => (
+              <div className="comment-loading-row" key={i}>
+                <span className="comment-loading-avatar" />
+                <span className="comment-loading-lines">
+                  <span className="comment-loading-line short" />
+                  <span className="comment-loading-line" />
+                  <span className="comment-loading-line" />
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : comments.length === 0 ? (
           <div className="comment-empty">暂无评论，快来抢沙发~</div>
         ) : (
           mainComments.map((c) => {

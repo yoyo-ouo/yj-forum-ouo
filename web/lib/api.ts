@@ -575,8 +575,10 @@ export const postApi = {
   list: (page = 1, pageSize = 20, category = "") =>
     request<{ posts: Post[]; page: number; page_size: number }>(`/posts?page=${page}&page_size=${pageSize}${category ? `&category=${encodeURIComponent(category)}` : ""}`),
   random: () => request<{ posts: Post[] }>("/posts/random"),
-  detail: (id: string) =>
-    request<{ post: Post; comments: Comment[]; liked: boolean; favorited: boolean }>(`/posts/${id}`),
+  detail: (id: string, includeComments = true) =>
+    request<{ post: Post; comments: Comment[]; liked: boolean; favorited: boolean }>(
+      `/posts/${id}${includeComments ? "" : "?include_comments=0"}`
+    ),
   // 引用选择器默认项（登录；关注/收藏各至多 20 条）
   pickerDefaults: () => request<{ data: PickerDefaults }>("/posts/picker-defaults"),
   // guildUuid 传入时帖子归属该会馆（需为该馆成员），否则发到公共空间；publishedAt 为 RFC3339（可选，未来时间即定时发布）

@@ -39,6 +39,7 @@ export default function PostDetailPage() {
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
+  const [commentsLoading, setCommentsLoading] = useState(true);
   const [showReport, setShowReport] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
   const commentEditorRef = useRef<CommentEditorHandle>(null);
@@ -46,9 +47,9 @@ export default function PostDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const r = await postApi.detail(id);
+      // 正文单独拉（include_comments=0）：评论再多/再慢也不拖正文首屏
+      const r = await postApi.detail(id, false);
       setPost(r.post);
-      setComments(r.comments || []);
       setLiked(r.liked);
       setFavorited(r.favorited);
     } catch (e) {
@@ -58,9 +59,21 @@ export default function PostDetailPage() {
     }
   }, [id]);
 
+  const loadComments = useCallback(async () => {
+    try {
+      const r = await postApi.comments(id, 1, 50);
+      setComments(r.comments || []);
+    } catch {
+      // 评论拉取失败不打断阅读，保持骨架/空态即可
+    } finally {
+      setCommentsLoading(false);
+    }
+  }, [id]);
+
   useEffect(() => {
-    load();
-  }, [load]);
+    void load();
+    void loadComments();
+  }, [load, loadComments]);
 
   // 从个人中心评论卡片跳转：滚动定位到目标评论并高亮
   useEffect(() => {
@@ -136,8 +149,8 @@ export default function PostDetailPage() {
     if (!window.confirm("确定删除这条评论吗？")) return;
     try {
       await postApi.deleteComment(cid);
-      // 删除后重拉：服务端归并/提升口径（父级缺失等）以最新数据为准
-      await load();
+      // 删除后重拉评论：服务端归并/提升口径（父级缺失等）以最新数据为准
+      await loadComments();
     } catch (e: any) {
       toast(e.message, "error");
     }
@@ -263,6 +276,7 @@ export default function PostDetailPage() {
             onChangeReplyText={setCommentText}
             onSubmit={submitComment}
             submitting={submittingComment}
+            loading={commentsLoading}
             canWrite={!loadingUser && (!!user || !!userId)}
             onDelete={deleteComment}
             onLike={doLikeComment}
