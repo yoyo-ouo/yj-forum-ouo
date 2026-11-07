@@ -4,16 +4,11 @@ import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import AnnouncementBanner from "@/components/AnnouncementBanner";
 import PostCard from "@/components/PostCard";
-import PostDraftSection from "@/components/PostDraftSection";
 import { ListLoading, ListEmpty } from "@/components/ui/ListState";
-import { useStore } from "@/lib/store";
-import { postApi, postDraftApi, Post, PostDraftItem } from "@/lib/api";
+import { postApi, Post } from "@/lib/api";
 
 export default function HomePage() {
-  const { userId } = useStore();
   const [posts, setPosts] = useState<Post[]>([]);
-  // 我的草稿（仅登录本人；独立于随机推荐接口）
-  const [drafts, setDrafts] = useState<PostDraftItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -46,25 +41,6 @@ export default function HomePage() {
     return () => window.clearTimeout(t);
   }, [loadRandom]);
 
-  // 登录用户：额外拉取自己的草稿置顶展示（未登录不请求）
-  useEffect(() => {
-    if (!userId) return;
-    let alive = true;
-    postDraftApi
-      .list(5)
-      .then((r) => {
-        if (alive) setDrafts(r.drafts || []);
-      })
-      .catch(() => {
-        if (alive) setDrafts([]);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [userId]);
-
-  const visibleDrafts = userId ? drafts : [];
-
   return (
     <>
       {/* 首页公告：仅首页渲染，位于全局 Header 下方（跨页面布局不挂载） */}
@@ -94,12 +70,6 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-
-        {visibleDrafts.length > 0 && (
-          <section className="home-drafts">
-            <PostDraftSection drafts={visibleDrafts} userId={userId || ""} />
-          </section>
-        )}
 
         <section className="home-feed">
           <div className="home-feed-header">

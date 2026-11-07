@@ -31,20 +31,22 @@ var (
 
 // PostDraftInput 保存草稿的字段（Content 为编辑器 HTML，写库前统一净化）。
 type PostDraftInput struct {
-	Title       string
-	Content     string
-	Category    string
-	GuildID     *int64
-	ScheduledAt *time.Time
+	Title        string
+	Content      string
+	Category     string
+	GuildID      *int64
+	ScheduledAt  *time.Time
+	PublishToken string
 }
 
 // PostDraftPublishInput 发布草稿的最终字段。
 type PostDraftPublishInput struct {
-	Title       string
-	Content     string
-	Category    string
-	GuildID     *int64
-	PublishedAt *time.Time
+	Title        string
+	Content      string
+	Category     string
+	GuildID      *int64
+	PublishedAt  *time.Time
+	PublishToken string
 }
 
 // CreatePostDraft 新建空草稿（仅在有实际内容时由前端调用）。
@@ -71,9 +73,11 @@ func (d *DB) SavePostDraft(ctx context.Context, draftID, userID string, in PostD
 	err := d.Tx(ctx, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx, `UPDATE post_drafts
 			SET title = $3, content = $4, content_format = 'html', category = $5,
-			    guild_id = $6, scheduled_at = $7, updated_at = now()
+			    guild_id = $6, scheduled_at = $7,
+			    publish_token = CASE WHEN $8 <> '' THEN $8 ELSE publish_token END,
+			    updated_at = now()
 			WHERE id = $1 AND user_id = $2
-			RETURNING updated_at`, draftID, userID, in.Title, content, in.Category, in.GuildID, in.ScheduledAt).Scan(&savedAt)
+			RETURNING updated_at`, draftID, userID, in.Title, content, in.Category, in.GuildID, in.ScheduledAt, in.PublishToken).Scan(&savedAt)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrPostDraftNotFound
 		}
@@ -92,7 +96,7 @@ func (d *DB) SavePostDraft(ctx context.Context, draftID, userID string, in PostD
 func (d *DB) GetPostDraft(ctx context.Context, draftID, userID string) (*models.PostDraft, error) {
 	row := d.QueryRow(ctx, `SELECT pd.id, pd.title, pd.content, pd.content_format, pd.category,
 		pd.guild_id, COALESCE(g.uuid::text, ''), COALESCE(g.name, ''), COALESCE(g.theme_color, ''),
-		pd.scheduled_at, pd.created_at, pd.updated_at
+		pd.publish_token, pd.scheduled_at, pd.created_at, pd.updated_at
 		FROM post_drafts pd LEFT JOIN guilds g ON g.id = pd.guild_id
 		WHERE pd.id = $1 AND pd.user_id = $2`, draftID, userID)
 	var out models.PostDraft
@@ -101,7 +105,7 @@ func (d *DB) GetPostDraft(ctx context.Context, draftID, userID string) (*models.
 	var guildUUID, guildName, guildTheme string
 	if err := row.Scan(&out.ID, &out.Title, &out.Content, &out.ContentFormat, &out.Category,
 		&guildID, &guildUUID, &guildName, &guildTheme,
-		&scheduledAt, &createdAt, &updatedAt); err != nil {
+		&out.PublishToken, &scheduledAt, &createdAt, &updatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrPostDraftNotFound
 		}
@@ -211,11 +215,29 @@ func publishKeyPostIDTx(ctx context.Context, tx pgx.Tx, draftID, userID string) 
 	return postID, true, nil
 }
 
+// publishKeyPostIDByTokenTx 事务内按 token 查询（需在 pg_advisory_xact_lock 之后调用）。
+func publishKeyPostIDByTokenTx(ctx context.Context, tx pgx.Tx, userID, token string) (string, bool, error) {
+	if token == "" {
+		return "", false, nil
+	}
+	var postID string
+	err := tx.QueryRow(ctx, `SELECT k.post_id FROM post_publish_keys k
+		JOIN posts p ON p.id = k.post_id AND p.status = 1
+		WHERE k.user_id = $1 AND k.publish_token = $2`, userID, token).Scan(&postID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return postID, true, nil
+}
+
 // PublishPostDraft 发布草稿：事务内写 posts、转挂媒体引用、删除草稿。
 // 草稿行加 FOR UPDATE，避免与在途自动保存竞争导致「发布后又被保存回来」；
 // 同一草稿的重复发布（响应丢失后重试）通过 post_publish_keys 幂等返回原帖。
 func (d *DB) PublishPostDraft(ctx context.Context, draftID, userID string, in PostDraftPublishInput) (string, error) {
-	// 幂等快路径：同一草稿已成功发布过，直接返回原帖（不重复奖励灵力/不产生第二条）。
+	// 幂等快路径：同一 draft_id 已成功发布过；token 跨 draft_id 的情况在事务内处理（需清理恢复草稿）。
 	if existing, ok, err := d.publishKeyPostID(ctx, draftID, userID); err != nil {
 		return "", err
 	} else if ok {
@@ -227,6 +249,26 @@ func (d *DB) PublishPostDraft(ctx context.Context, draftID, userID string, in Po
 	notified := in.PublishedAt == nil // 立即帖创建即视为已通知；定时帖待补偿任务置 TRUE
 	existingPostID := ""
 	err := d.Tx(ctx, func(tx pgx.Tx) error {
+		// token 是跨 draft_id 的幂等身份：先取事务级 advisory lock 串行化同 token 的并发发布，
+		// 再查映射。不同草稿（如 404 恢复后新建的草稿）只要 token 相同就能找回原帖。
+		if in.PublishToken != "" {
+			if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('post_publish:'||$1, 0))`,
+				userID+":"+in.PublishToken); err != nil {
+				return err
+			}
+			if id, ok, kerr := publishKeyPostIDByTokenTx(ctx, tx, userID, in.PublishToken); kerr != nil {
+				return kerr
+			} else if ok {
+				existingPostID = id
+				// 同 token 的「恢复草稿」如果还在（draft_id 已变），一并删除，避免草稿列表留下重复项。
+				// 正式帖已持有图片引用，softDelete 不会误删仍被正式帖使用的图片。
+				if _, err := tx.Exec(ctx, `DELETE FROM post_drafts WHERE id = $1 AND user_id = $2`, draftID, userID); err != nil {
+					return err
+				}
+				return softDeleteUnreferencedMediaTx(ctx, tx, "post_draft", draftID)
+			}
+		}
+
 		var storedDraftID string
 		err := tx.QueryRow(ctx, `SELECT id FROM post_drafts WHERE id = $1 AND user_id = $2 FOR UPDATE`,
 			draftID, userID).Scan(&storedDraftID)
@@ -249,8 +291,8 @@ func (d *DB) PublishPostDraft(ctx context.Context, draftID, userID string, in Po
 			return err
 		}
 		// 幂等键与帖子同事务写入：响应丢失后的重试能找回同一个 post_id。
-		if _, err := tx.Exec(ctx, `INSERT INTO post_publish_keys (draft_id, post_id, user_id) VALUES ($1,$2,$3)`,
-			draftID, postID, userID); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO post_publish_keys (draft_id, post_id, user_id, publish_token) VALUES ($1,$2,$3,$4)`,
+			draftID, postID, userID, in.PublishToken); err != nil {
 			return err
 		}
 		// 先建立正式帖引用，再清理草稿引用：仍被正式帖使用的图片不会被置为已删除。

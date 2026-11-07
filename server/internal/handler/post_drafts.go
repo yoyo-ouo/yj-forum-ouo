@@ -19,11 +19,12 @@ import (
 const maxPostDraftTitleRunes = 100
 
 type postDraftReq struct {
-	Title       string `json:"title"`
-	Content     string `json:"content"`
-	Category    string `json:"category"`
-	GuildUUID   string `json:"guild_uuid"`
-	ScheduledAt string `json:"scheduled_at"`
+	Title        string `json:"title"`
+	Content      string `json:"content"`
+	Category     string `json:"category"`
+	GuildUUID    string `json:"guild_uuid"`
+	ScheduledAt  string `json:"scheduled_at"`
+	PublishToken string `json:"publish_token"`
 }
 
 // normalizeDraftTitle 草稿标题（允许空；非空时去首尾空白且不超过 100 字符）。
@@ -33,6 +34,24 @@ func normalizeDraftTitle(raw string) (string, string) {
 		return "", "标题不能超过100字符"
 	}
 	return title, ""
+}
+
+// normalizePublishToken 发布幂等 token：空值兼容旧客户端；非空只允许字母/数字/-/_，最长 64。
+func normalizePublishToken(raw string) (string, string) {
+	token := strings.TrimSpace(raw)
+	if token == "" {
+		return "", ""
+	}
+	if len(token) > 64 {
+		return "", "发布标识过长"
+	}
+	for _, r := range token {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			continue
+		}
+		return "", "发布标识格式错误"
+	}
+	return token, ""
 }
 
 // draftFail 草稿错误的统一响应（非本人 / 不存在统一 404）。
@@ -131,17 +150,23 @@ func (h *PostsHandler) SaveDraft(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": msg})
 		return
 	}
+	publishToken, msg := normalizePublishToken(req.PublishToken)
+	if msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": msg})
+		return
+	}
 	category, guildID, status, msg := h.resolvePostTarget(c.Request.Context(), uid, req.Category, req.GuildUUID, nil)
 	if status != 0 {
 		c.JSON(status, gin.H{"success": false, "message": msg})
 		return
 	}
 	savedAt, err := h.DB.SavePostDraft(c.Request.Context(), c.Param("id"), uid, database.PostDraftInput{
-		Title:       title,
-		Content:     content,
-		Category:    category,
-		GuildID:     guildID,
-		ScheduledAt: scheduledAt,
+		Title:        title,
+		Content:      content,
+		Category:     category,
+		GuildID:      guildID,
+		ScheduledAt:  scheduledAt,
+		PublishToken: publishToken,
 	})
 	if err != nil {
 		draftFail(c, err)
@@ -179,17 +204,23 @@ func (h *PostsHandler) PublishDraft(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": msg})
 		return
 	}
+	publishToken, msg := normalizePublishToken(req.PublishToken)
+	if msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": msg})
+		return
+	}
 	category, guildID, status, msg := h.resolvePostTarget(c.Request.Context(), uid, req.Category, req.GuildUUID, nil)
 	if status != 0 {
 		c.JSON(status, gin.H{"success": false, "message": msg})
 		return
 	}
 	postID, err := h.DB.PublishPostDraft(c.Request.Context(), c.Param("id"), uid, database.PostDraftPublishInput{
-		Title:       title,
-		Content:     content,
-		Category:    category,
-		GuildID:     guildID,
-		PublishedAt: publishedAt,
+		Title:        title,
+		Content:      content,
+		Category:     category,
+		GuildID:      guildID,
+		PublishedAt:  publishedAt,
+		PublishToken: publishToken,
 	})
 	if err != nil {
 		draftFail(c, err)

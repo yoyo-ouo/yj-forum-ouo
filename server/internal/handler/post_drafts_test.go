@@ -79,3 +79,24 @@ func TestParsePostSchedule(t *testing.T) {
 		t.Fatal(">365d publish schedule should fail")
 	}
 }
+
+func TestNormalizePublishToken(t *testing.T) {
+	if token, msg := normalizePublishToken("  "); token != "" || msg != "" {
+		t.Fatalf("empty token should pass, got %q msg=%q", token, msg)
+	}
+	if token, msg := normalizePublishToken(" 550e8400-e29b-41d4-a716-446655440000 "); token != "550e8400-e29b-41d4-a716-446655440000" || msg != "" {
+		t.Fatalf("uuid token = %q msg=%q", token, msg)
+	}
+	if _, msg := normalizePublishToken(strings.Repeat("a", 65)); msg == "" {
+		t.Fatal("overlong token should fail")
+	}
+	if _, msg := normalizePublishToken("bad token"); msg == "" {
+		t.Fatal("token with space should fail")
+	}
+	if _, msg := normalizePublishToken("bad.token"); msg == "" {
+		t.Fatal("token with dot should fail")
+	}
+	if _, msg := normalizePublishToken("ok_token-123"); msg != "" {
+		t.Fatalf("valid token charset should pass, msg=%q", msg)
+	}
+}

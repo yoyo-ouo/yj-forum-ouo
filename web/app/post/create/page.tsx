@@ -92,6 +92,14 @@ function contentByteLength(html: string): number {
   return html.length * 3;
 }
 
+/** 发布幂等 token：同一编辑器会话保持不变；草稿被别处删除后自动另存也复用它 */
+function makePublishToken(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `pt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+}
+
 /** 未登录路由守卫：等待会话加载完成后跳转登录页（避免未登录进入发帖界面） */
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -269,6 +277,8 @@ function PostCreateEditor({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  // 旧草稿没有 token 时生成一个；首次保存会写回服务端，刷新后继续复用
+  const [publishToken] = useState(() => initialDraft?.publish_token || makePublishToken());
 
   const initialCategory = initialDraft?.category || "";
   // 草稿的定时时间在首次挂载时算一次；草稿编辑器只会在客户端加载后挂载（DraftLoader 先请求），
@@ -325,6 +335,7 @@ function PostCreateEditor({
         title: title.trim(),
         content,
         category,
+        publish_token: publishToken,
         ...(guildUuid ? { guild_uuid: guildUuid } : {}),
         ...(scheduledAt ? { scheduled_at: scheduledAt } : {}),
       };
@@ -449,6 +460,7 @@ function PostCreateEditor({
         title: title.trim(),
         content,
         category: categoryValue,
+        publish_token: publishToken,
         ...(guildUuid ? { guild_uuid: guildUuid } : {}),
         ...(publishedAt ? { scheduled_at: publishedAt } : {}),
       };

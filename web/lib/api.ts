@@ -596,6 +596,8 @@ export interface PostDraftItem {
 export interface PostDraft extends PostDraftItem {
   content: string;
   content_format?: string;
+  /** 编辑器会话级发布幂等 token（旧草稿可能为空） */
+  publish_token?: string;
 }
 
 /** 草稿保存/发布负载（guild_uuid 为空 = 公共空间） */
@@ -605,6 +607,8 @@ export interface PostDraftPayload {
   category: string;
   guild_uuid?: string;
   scheduled_at?: string;
+  /** 发布幂等 token：同一编辑器会话跨草稿 id 恢复时仍能找回已发布的帖子 */
+  publish_token?: string;
 }
 
 // ---- 帖子 ----

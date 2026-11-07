@@ -130,6 +130,8 @@ type PostDraft struct {
 	PostDraftItem
 	Content       string `json:"content"`
 	ContentFormat string `json:"content_format"`
+	// PublishToken 编辑器会话级发布幂等标识；旧草稿可能为空
+	PublishToken string `json:"publish_token"`
 }
 
 // ReplyItem 我收到的回复。
