@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useStore } from "@/lib/store";
 import { miscApi } from "@/lib/api";
 import { apiUrl } from "@/lib/api-base";
@@ -12,7 +13,11 @@ import { useToast } from "./Toast";
 import Modal from "./ui/Modal";
 import { UserAvatar } from "./ui/UserAvatar";
 import ConsoleModal, { type MessageUnread } from "./ConsoleModal";
-import WorldChannelModal, { WorldChannelLauncher } from "./world/WorldChannelModal";
+import { WorldChannelLauncher } from "./world/WorldChannelLauncher";
+
+// 世界频道窗口带 TipTap/ProseMirror（共用评论编辑器），按需加载：
+// 旧写法在 Header 里静态 import，导致每个页面首屏都下载整套富文本编辑器。
+const WorldChannelModal = dynamic(() => import("./world/WorldChannelModal"), { ssr: false });
 
 /** 彩蛋数据含少量 HTML（<br> 换行等）：转为单行纯文本，供胶囊提示展示 */
 function eggPlainText(s: string): string {
@@ -36,6 +41,12 @@ export default function Header() {
   const [showDonate, setShowDonate] = useState(false);
   const [showConsole, setShowConsole] = useState(false);
   const [showWorld, setShowWorld] = useState(false);
+  // 首次打开后才挂载世界频道窗口（首次点击前不下载它的 chunk）
+  const [worldMounted, setWorldMounted] = useState(false);
+  const openWorld = useCallback(() => {
+    setWorldMounted(true);
+    setShowWorld(true);
+  }, []);
   // 消息中心未读数（GET /messages/summary）：仅登录后拉取
   const [unread, setUnread] = useState<MessageUnread>({ likes: 0, comments: 0, system: 0, chat: 0 });
   const menuRef = useRef<HTMLUListElement>(null);
@@ -201,7 +212,7 @@ export default function Header() {
             className="header-btn header-world-toggle"
             type="button"
             aria-label="世界频道"
-            onClick={() => setShowWorld(true)}
+            onClick={openWorld}
           >
             <i className="fa fa-globe"></i>
           </button>
@@ -326,7 +337,7 @@ export default function Header() {
               {unreadTotal > 0 && <span className="mobile-menu-badge">{unreadBadge}</span>}
             </Link>
             <Link className="mobile-menu-item" href="/huiguan" onClick={() => setShowMobileMenu(false)}><i className="fa fa-home"></i> 会馆</Link>
-            <button className="mobile-menu-item" onClick={() => { setShowMobileMenu(false); setShowWorld(true); }}><i className="fa fa-globe"></i> 世界频道</button>
+            <button className="mobile-menu-item" onClick={() => { setShowMobileMenu(false); openWorld(); }}><i className="fa fa-globe"></i> 世界频道</button>
             <div className="mobile-menu-divider"></div>
             {/* 工具与服务 */}
             <div className="mobile-menu-title">工具与服务</div>
@@ -386,9 +397,9 @@ export default function Header() {
       )}
 
       {/* 世界频道：桌面端右上角悬浮入口（组件内 CSS 在 ≤700px 自动隐藏，移动端走顶部栏图标/抽屉） */}
-      <WorldChannelLauncher onOpen={() => setShowWorld(true)} />
-      {/* 世界频道窗口（受控）：桌面拖拽窗口 / 移动端底部全屏 */}
-      <WorldChannelModal open={showWorld} onClose={() => setShowWorld(false)} />
+      <WorldChannelLauncher onOpen={openWorld} />
+      {/* 世界频道窗口（受控）：桌面拖拽窗口 / 移动端底部全屏；首次打开后才挂载 */}
+      {worldMounted && <WorldChannelModal open={showWorld} onClose={() => setShowWorld(false)} />}
 
       {/* 控制台弹窗（桌面端「控制台」按钮） */}
       <ConsoleModal
@@ -396,7 +407,7 @@ export default function Header() {
         onClose={() => setShowConsole(false)}
         onDonate={() => setShowDonate(true)}
         onEasterEgg={showEasterEgg}
-        onOpenWorld={() => setShowWorld(true)}
+        onOpenWorld={openWorld}
         unread={unread}
       />
 
