@@ -135,6 +135,12 @@ func main() {
 				if err := db.CleanExpiredAltchaUsed(ctx); err != nil {
 					log.Printf("[DB] 清理 ALTCHA 记录失败: %v", err)
 				}
+				if err := db.CleanStaleEmptyPostDrafts(ctx, time.Now().Add(-7*24*time.Hour)); err != nil {
+					log.Printf("[DB] 清理空草稿失败: %v", err)
+				}
+				if err := db.CleanOldPostPublishKeys(ctx, time.Now().Add(-30*24*time.Hour)); err != nil {
+					log.Printf("[DB] 清理发布幂等映射失败: %v", err)
+				}
 			case <-mediaTicker.C:
 				// 每轮 GC 单独限时 5 分钟，避免卡住整个后台循环。
 				gcCtx, gcCancel := context.WithTimeout(ctx, 5*time.Minute)

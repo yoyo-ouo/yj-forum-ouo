@@ -506,7 +506,7 @@ export default function RichTextEditor({
         className={`rich-editor-content${stickyToolbar ? "" : " is-bounded"}`}
       />
       <p className="form-editor-tips rich-editor-tips">
-        支持标题（H1-H4）、列表、引用、行内代码/代码块、分割线、链接、图片与引用卡片；点击图片可调整宽度，图片与引用会随正文一并保存。
+        支持标题（H1-H4）、列表、引用、行内代码/代码块、分割线、链接、图片与引用卡片；点击图片可调整宽度，点击引用卡片可调整版式/尺寸/对齐（不会跳转），图片与引用会随正文一并保存。
       </p>
 
       <input

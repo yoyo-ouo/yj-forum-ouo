@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
@@ -132,6 +133,90 @@ type createPostReq struct {
 	PublishedAt string `json:"published_at"`
 }
 
+// normalizePostTitle 标题归一化：去首尾空白，要求 1-100 字符。
+func normalizePostTitle(raw string) (string, string) {
+	title := strings.TrimSpace(raw)
+	if title == "" || utf8.RuneCountInString(title) > 100 {
+		return "", "标题需1-100字符"
+	}
+	return title, ""
+}
+
+// cleanPostContent 正文净化与校验。
+// strict=true（正式发布）额外校验节点上限与非空；strict=false（草稿自动保存）只限制原始长度，
+// 允许空内容——草稿允许用户写到一半，硬性要求会打断自动保存。
+func cleanPostContent(raw string, strict bool) (string, string) {
+	if len(raw) > maxPostContentBytes {
+		return "", "正文过长"
+	}
+	clean := sanitize.SanitizeRichContent(raw)
+	if !strict {
+		return clean, ""
+	}
+	// 节点上限（净化后计数）：防超大 DOM 结构拖垮渲染与存储。
+	if strings.Count(clean, "<img") > 60 || strings.Count(clean, "data-embed=") > 30 {
+		return "", "图片/引用数量过多"
+	}
+	hasRichMedia := strings.Contains(clean, "<img") || strings.Contains(clean, "data-embed")
+	if sanitize.StripTagsAndTrim(clean) == "" && !hasRichMedia {
+		return "", "正文不能为空"
+	}
+	return clean, ""
+}
+
+// parsePostSchedule 解析定时发布时间（RFC3339，转 UTC 存储）。
+// strict=true（正式发布）要求晚于当前时间 1 分钟且不超过 365 天；
+// strict=false（草稿）只校验格式——草稿可能被放置很久，存下过期时间由前端重新选择。
+func parsePostSchedule(raw string, strict bool) (*time.Time, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, ""
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return nil, "定时发布时间格式错误，需 RFC3339"
+	}
+	if strict {
+		now := time.Now()
+		if !t.After(now.Add(time.Minute)) {
+			return nil, "定时发布时间需晚于当前时间 1 分钟"
+		}
+		if t.After(now.Add(365 * 24 * time.Hour)) {
+			return nil, "定时发布时间不能超过 365 天"
+		}
+	}
+	// 时间列与比较基准均为库内 NOW()/CURRENT_TIMESTAMP（UTC），统一转 UTC 存储。
+	utc := t.UTC()
+	return &utc, ""
+}
+
+// resolvePostTarget 解析发布目标（公共空间 / 会馆），返回归一化分类、guildID。
+// 非 0 的 httpStatus 表示失败，message 可直接回给客户端。
+func (h *PostsHandler) resolvePostTarget(ctx context.Context, uid, category, guildUUID string, guildIDIn *int64) (string, *int64, int, string) {
+	var guildID *int64
+	if gu := strings.TrimSpace(guildUUID); gu != "" {
+		// guild_uuid 优先：按稳定标识反查数字 id
+		id, err := h.DB.GetGuildIDByUUID(ctx, gu)
+		if err != nil {
+			return "", nil, http.StatusInternalServerError, "查询失败"
+		}
+		if id == nil {
+			return "", nil, http.StatusNotFound, "会馆不存在"
+		}
+		guildID = id
+	} else if guildIDIn != nil && *guildIDIn > 0 {
+		guildID = guildIDIn
+	}
+	if guildID != nil {
+		// 会馆帖：仅成员可发，分类自会馆配置取值
+		if !h.DB.IsGuildMember(ctx, *guildID, uid) {
+			return "", nil, http.StatusForbidden, "你还不是该会馆成员，无法发帖"
+		}
+		return h.DB.ResolveGuildCategory(ctx, *guildID, strings.TrimSpace(category)), guildID, 0, ""
+	}
+	return normalizeCategory(category), nil, 0, ""
+}
+
 // Create 发帖（可选 guild_uuid/guild_id：需为会馆成员，分类取自该馆配置）。
 func (h *PostsHandler) Create(c *gin.Context) {
 	uid := CurrentUser(c)
@@ -144,79 +229,29 @@ func (h *PostsHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "参数错误"})
 		return
 	}
-	title := strings.TrimSpace(req.Title)
-	if title == "" || len([]rune(title)) > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "标题需1-100字符"})
+	title, msg := normalizePostTitle(req.Title)
+	if msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": msg})
 		return
 	}
-	// 正文服务端校验：原始长度上限 + 净化后非空（纯图片/纯引用帖视为有效内容），避免纯空白内容入库
-	if len(req.Content) > maxPostContentBytes {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "正文过长"})
-		return
-	}
-	sanitizedContent := sanitize.SanitizeRichContent(req.Content)
-	// 内容节点上限（净化后计数）：防超大 DOM 结构拖垮渲染与存储
-	if strings.Count(sanitizedContent, "<img") > 60 || strings.Count(sanitizedContent, "data-embed=") > 30 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "图片/引用数量过多"})
-		return
-	}
-	hasRichMedia := strings.Contains(sanitizedContent, "<img") || strings.Contains(sanitizedContent, "data-embed")
-	if sanitize.StripTagsAndTrim(sanitizedContent) == "" && !hasRichMedia {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "正文不能为空"})
+	// 正文服务端校验：原始长度上限 + 净化后非空（纯图片/纯引用帖视为有效内容）
+	sanitizedContent, msg := cleanPostContent(req.Content, true)
+	if msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": msg})
 		return
 	}
 	// 定时发布（可选）：RFC3339 解析；必须晚于当前时间 1 分钟且不超过 365 天
-	var publishedAt *time.Time
-	if raw := strings.TrimSpace(req.PublishedAt); raw != "" {
-		t, err := time.Parse(time.RFC3339, raw)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "定时发布时间格式错误，需 RFC3339"})
-			return
-		}
-		now := time.Now()
-		if !t.After(now.Add(time.Minute)) {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "定时发布时间需晚于当前时间 1 分钟"})
-			return
-		}
-		if t.After(now.Add(365 * 24 * time.Hour)) {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "定时发布时间不能超过 365 天"})
-			return
-		}
-		// 时间列与比较基准均为库内 NOW()/CURRENT_TIMESTAMP（实测该库时区为 UTC）；
-		// 统一转 UTC 存储，保证 published_at <= NOW() 口径一致
-		utc := t.UTC()
-		publishedAt = &utc
+	publishedAt, msg := parsePostSchedule(req.PublishedAt, true)
+	if msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": msg})
+		return
 	}
-	var (
-		cat     string
-		guildID *int64
-	)
-	if gu := strings.TrimSpace(req.GuildUUID); gu != "" {
-		// guild_uuid 优先：按稳定标识反查数字 id
-		id, err := h.DB.GetGuildIDByUUID(c.Request.Context(), gu)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
-			return
-		}
-		if id == nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "会馆不存在"})
-			return
-		}
-		guildID = id
-	} else if req.GuildID != nil && *req.GuildID > 0 {
-		guildID = req.GuildID
+	cat, guildID, status, msg := h.resolvePostTarget(c.Request.Context(), uid, req.Category, req.GuildUUID, req.GuildID)
+	if status != 0 {
+		c.JSON(status, gin.H{"success": false, "message": msg})
+		return
 	}
-	if guildID != nil {
-		// 会馆帖：仅成员可发，分类自会馆配置取值
-		if !h.DB.IsGuildMember(c.Request.Context(), *guildID, uid) {
-			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "你还不是该会馆成员，无法发帖"})
-			return
-		}
-		cat = h.DB.ResolveGuildCategory(c.Request.Context(), *guildID, strings.TrimSpace(req.Category))
-	} else {
-		cat = normalizeCategory(req.Category)
-	}
-	postID, err := h.DB.SendPost(c.Request.Context(), uid, title, req.Content, cat, guildID, publishedAt)
+	postID, err := h.DB.SendPost(c.Request.Context(), uid, title, sanitizedContent, cat, guildID, publishedAt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "发布失败"})
 		return

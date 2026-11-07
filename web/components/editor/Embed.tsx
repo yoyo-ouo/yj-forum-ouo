@@ -22,7 +22,7 @@ function attrValue(value: unknown, allowed: readonly string[], fallback: string)
 }
 
 /** 编辑器内引用节点预览：加载中骨架 / 已删除占位 / 引用卡片 */
-function EmbedNodeView({ node, selected, deleteNode }: NodeViewProps) {
+function EmbedNodeView({ node, selected, deleteNode, editor, getPos }: NodeViewProps) {
   const spec = normalizeEmbed({
     type: node.attrs.embedType as string,
     id: node.attrs.embedId as string,
@@ -33,18 +33,26 @@ function EmbedNodeView({ node, selected, deleteNode }: NodeViewProps) {
   });
   const { loading, data } = useEmbed(spec?.type, spec?.id);
 
+  /** 点击卡片选中节点（而不是像阅读态那样跳转）：选中后工具条出现样式选项 */
+  const selectSelf = () => {
+    if (selected) return;
+    const pos = typeof getPos === "function" ? getPos() : undefined;
+    if (typeof pos === "number") editor.commands.setNodeSelection(pos);
+  };
+
   return (
     <NodeViewWrapper
       className={`embed-node ${selected ? "embed-node-selected" : ""}`}
       data-embed-node={spec?.type || ""}
       contentEditable={false}
+      onClick={selectSelf}
     >
       {!spec ? (
         <QuoteCardMissing />
       ) : loading ? (
         <QuoteCardSkeleton variant={spec.variant} />
       ) : (
-        <QuoteCard spec={spec} data={data} />
+        <QuoteCard spec={spec} data={data} interactive={false} />
       )}
       {selected && (
         <button type="button" className="embed-node-remove" title="删除引用" onClick={() => deleteNode()}>

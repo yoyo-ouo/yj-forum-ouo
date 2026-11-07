@@ -47,6 +47,10 @@ export interface Post {
   comment_count?: number;
   status?: number;
   created_at?: string;
+  // 最近更新时间（草稿卡片显示「编辑于…」用）
+  updated_at?: string;
+  // 列表项是否为草稿（首页信息流仅本人可见）
+  is_draft?: boolean;
   user_name: string;
   user_avatar: string;
   // 正文格式：'markdown'（旧帖）| 'html'（富文本编辑器产出）
@@ -570,6 +574,39 @@ export const userApi = {
   },
 };
 
+// ---- 帖子草稿 ----
+
+/** 帖子草稿列表项（仅本人可读；不含正文） */
+export interface PostDraftItem {
+  id: string;
+  title: string;
+  summary: string;
+  category: string;
+  created_at?: string;
+  updated_at?: string;
+  /** 草稿里暂存的定时发布时间（RFC3339；未开启时缺省） */
+  scheduled_at?: string;
+  guild_id?: number | null;
+  guild_uuid?: string;
+  guild_name?: string;
+  guild_theme_color?: string;
+}
+
+/** 帖子草稿详情（作者本人） */
+export interface PostDraft extends PostDraftItem {
+  content: string;
+  content_format?: string;
+}
+
+/** 草稿保存/发布负载（guild_uuid 为空 = 公共空间） */
+export interface PostDraftPayload {
+  title: string;
+  content: string;
+  category: string;
+  guild_uuid?: string;
+  scheduled_at?: string;
+}
+
 // ---- 帖子 ----
 export const postApi = {
   list: (page = 1, pageSize = 20, category = "") =>
@@ -615,6 +652,27 @@ export const postApi = {
     }),
   deleteComment: (id: string) => request<{ success: boolean }>(`/comments/${id}`, { method: "DELETE" }),
   likeComment: (id: string) => request<{ liked: boolean; likes: number }>(`/comments/${id}/like`, { method: "POST" }),
+};
+
+// ---- 帖子草稿（全部需登录；服务端按 user_id 隔离，非本人一律 404） ----
+export const postDraftApi = {
+  list: (limit = 20) => request<{ drafts: PostDraftItem[] }>(`/posts/drafts?limit=${limit}`),
+  // keepalive=true 用于页面卸载/隐藏时的最后一次保存（请求可在页面销毁后继续）
+  create: (keepalive = false) => request<{ id: string }>("/posts/drafts", { method: "POST", keepalive }),
+  get: (id: string) => request<{ draft: PostDraft }>(`/posts/drafts/${encodeURIComponent(id)}`),
+  save: (id: string, payload: PostDraftPayload, keepalive = false) =>
+    request<{ saved_at: string }>(`/posts/drafts/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+      keepalive,
+    }),
+  publish: (id: string, payload: PostDraftPayload) =>
+    request<{ id: string }>(`/posts/drafts/${encodeURIComponent(id)}/publish`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  remove: (id: string, signal?: AbortSignal) =>
+    request<{ success: boolean }>(`/posts/drafts/${encodeURIComponent(id)}`, { method: "DELETE", signal }),
 };
 
 // ---- 会馆 ----

@@ -88,3 +88,43 @@
     gap: 10px;
 }
 
+
+/* ===== 首页「我的草稿」分组（仅本人可见） ===== */
+.forum-draft-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 14px;
+    background: rgba(245, 158, 11, 0.06);
+    border: 1px solid rgba(245, 158, 11, 0.18);
+}
+
+.forum-draft-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.forum-draft-section-head > span:first-child {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.forum-draft-section-hint {
+    font-size: 12px;
+    color: var(--color-text-tertiary);
+}
+
+@media (max-width: 640px) {
+    .forum-draft-section-head {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+    }
+}

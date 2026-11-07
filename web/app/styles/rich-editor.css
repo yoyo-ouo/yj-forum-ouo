@@ -305,3 +305,16 @@
     border-radius: 0;
 }
 
+
+/* 编辑器内引用卡片：点击是选中节点（调整样式），不是跳转 */
+.embed-node .quote-card {
+    cursor: pointer;
+}
+
+.embed-node .quote-card:hover {
+    border-color: var(--color-primary);
+}
+
+.embed-node-selected .quote-card {
+    background: var(--color-bg-item-hover);
+}

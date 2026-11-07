@@ -337,3 +337,34 @@
     background: var(--color-bg-icon-hover);
 }
 
+
+/* ===== 草稿卡片（首页信息流 / 个人主页共用） ===== */
+.post-draft-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 9px;
+    border-radius: 10px;
+    background: rgba(245, 158, 11, 0.14);
+    color: #8a5a12;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.post-card-draft {
+    border-style: dashed;
+}
+
+.post-card-draft:hover {
+    border-color: rgba(245, 158, 11, 0.45);
+}
+
+.post-card-draft-hint {
+    color: #8a5a12;
+}
+
+.night-mode .post-draft-tag,
+.night-mode .post-card-draft-hint {
+    color: #f0c27a;
+}

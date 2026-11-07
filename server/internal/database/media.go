@@ -233,17 +233,62 @@ func ExtractMediaIDs(content string) []string {
 	return out
 }
 
-// syncMediaReferencesTx 重建某个内容所有者的媒体引用（同事务）。
+// syncMediaReferencesTx 按差量同步某个内容所有者的媒体引用（同事务）。
+// 与「全删再全插」结果等价，但自动保存只改标题/分类时不会产生任何写放大；
+// 正文增删图片时也只删除/插入变化的那部分引用。
 func syncMediaReferencesTx(ctx context.Context, tx pgx.Tx, ownerType, ownerID, content string) error {
 	if ownerType == "" || ownerID == "" {
 		return nil
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM media_references WHERE owner_type = $1 AND owner_id = $2`, ownerType, ownerID); err != nil {
+	rows, err := tx.Query(ctx, `SELECT media_id FROM media_references WHERE owner_type = $1 AND owner_id = $2`,
+		ownerType, ownerID)
+	if err != nil {
 		return err
 	}
+	existing := make(map[string]struct{}, 8)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		existing[id] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	next := make(map[string]struct{}, 8)
 	for _, id := range ExtractMediaIDs(content) {
+		next[id] = struct{}{}
+	}
+
+	toDelete := make([]string, 0, len(existing))
+	for id := range existing {
+		if _, ok := next[id]; !ok {
+			toDelete = append(toDelete, id)
+		}
+	}
+	if len(toDelete) > 0 {
+		if _, err := tx.Exec(ctx, `DELETE FROM media_references
+			WHERE owner_type = $1 AND owner_id = $2 AND media_id = ANY($3)`,
+			ownerType, ownerID, toDelete); err != nil {
+			return err
+		}
+	}
+
+	toInsert := make([]string, 0, len(next))
+	for id := range next {
+		if _, ok := existing[id]; !ok {
+			toInsert = append(toInsert, id)
+		}
+	}
+	if len(toInsert) > 0 {
 		if _, err := tx.Exec(ctx, `INSERT INTO media_references (media_id, owner_type, owner_id)
-			VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, id, ownerType, ownerID); err != nil {
+			SELECT unnest($3::text[]), $1, $2 ON CONFLICT DO NOTHING`,
+			ownerType, ownerID, toInsert); err != nil {
 			return err
 		}
 	}

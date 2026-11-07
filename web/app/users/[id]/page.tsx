@@ -15,7 +15,7 @@ import HoverTip from "@/components/ui/HoverTip";
 import { useToast } from "@/components/Toast";
 import CharacterSheetSection from "@/components/character/CharacterSheetSection";
 import { UserAvatar } from "@/components/ui/UserAvatar";
-import { userApi, postApi, User, Post, UserBrief, ReplyItem, LikeItem, ApiException, GuildMembership } from "@/lib/api";
+import { userApi, postApi, postDraftApi, User, Post, PostDraftItem, UserBrief, ReplyItem, LikeItem, ApiException, GuildMembership } from "@/lib/api";
 import { ageDisplay, contrastText, isScheduledPost, themeColor } from "@/lib/constants";
 import { useStore } from "@/lib/store";
 
@@ -71,9 +71,13 @@ export default function UserPage() {
   const [profileModalEdit, setProfileModalEdit] = useState(false);
   const [showEmailChange, setShowEmailChange] = useState(false);
   const [activeTab, setActiveTab] = useState<"posts" | "comments" | "likes">("posts");
-  const [postView, setPostView] = useState<"posts" | "favorites">("posts");
+  const [postView, setPostView] = useState<"posts" | "favorites" | "drafts">("posts");
   const [comments, setComments] = useState<ReplyItem[] | null>(null);
   const [favorites, setFavorites] = useState<Post[] | null>(null);
+  // 我的草稿（仅本人；服务端按 user_id 隔离）
+  const [drafts, setDrafts] = useState<PostDraftItem[] | null>(null);
+  const [confirmDraftId, setConfirmDraftId] = useState("");
+  const draftConfirmTimerRef = useRef<number | null>(null);
   // 谁赞了我（仅本人）：cursor 分页
   const [likes, setLikes] = useState<LikeItem[] | null>(null);
   const [likesCursor, setLikesCursor] = useState("");
@@ -108,6 +112,13 @@ export default function UserPage() {
       setIsLeader(!!r.is_leader);
       const p = await userApi.posts(id, 1, 20);
       setPosts(p.posts || []);
+      // 本人主页预取草稿，用于子标签计数；其他人不请求（服务端也会拒绝）
+      if (r.is_self || userId === id) {
+        postDraftApi
+          .list(50)
+          .then((dr) => setDrafts(dr.drafts || []))
+          .catch(() => setDrafts([]));
+      }
     } catch (e) {
       toast(e instanceof ApiException ? e.message : "用户不存在", "error");
     } finally {
@@ -143,8 +154,52 @@ export default function UserPage() {
   }, [id]);
 
   useEffect(() => {
-    if (postView === "favorites" && favorites === null) loadFavorites();
-  }, [postView, favorites, loadFavorites]);
+    if (isSelf && postView === "favorites" && favorites === null) loadFavorites();
+  }, [isSelf, postView, favorites, loadFavorites]);
+
+  const loadDrafts = useCallback(async () => {
+    setDrafts(null);
+    try {
+      const r = await postDraftApi.list(50);
+      setDrafts(r.drafts || []);
+    } catch {
+      setDrafts([]);
+    }
+  }, []);
+
+  // 删除草稿：两次点击确认，避免误删
+  const removeDraft = useCallback(
+    async (draftId: string) => {
+      if (confirmDraftId !== draftId) {
+        setConfirmDraftId(draftId);
+        if (draftConfirmTimerRef.current) window.clearTimeout(draftConfirmTimerRef.current);
+        draftConfirmTimerRef.current = window.setTimeout(() => setConfirmDraftId(""), 4000);
+        return;
+      }
+      if (draftConfirmTimerRef.current) window.clearTimeout(draftConfirmTimerRef.current);
+      setConfirmDraftId("");
+      try {
+        await postDraftApi.remove(draftId);
+        setDrafts((prev) => (prev ? prev.filter((d) => d.id !== draftId) : prev));
+        toast("草稿已删除", "success");
+      } catch (e) {
+        // 已在其他设备删除：从列表移除即可，不用再报错
+        if (e instanceof ApiException && e.status === 404) {
+          setDrafts((prev) => (prev ? prev.filter((d) => d.id !== draftId) : prev));
+          toast("草稿已不存在", "success");
+          return;
+        }
+        toast(e instanceof ApiException ? e.message : "删除失败", "error");
+      }
+    },
+    [confirmDraftId, toast]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (draftConfirmTimerRef.current) window.clearTimeout(draftConfirmTimerRef.current);
+    };
+  }, []);
 
   const loadLikes = useCallback(
     async (cursor: string, append: boolean) => {
@@ -279,6 +334,10 @@ export default function UserPage() {
   const showMutualTab = !isSelf && !!me;
   // 他人主页只展示帖子列表：即使 activeTab 残留为评论/谁赞了我，也不渲染对应内容。
   const visibleTab = isSelf ? activeTab : "posts";
+  // 路由切到他人主页时 postView 可能仍停留在 drafts/favorites；非本人一律按「帖子」渲染。
+  // 用 userId === id 立即判断本人，避免 is_self 异步返回前在他人主页闪现自己的草稿。
+  const isSelfView = userId ? userId === id : isSelf;
+  const effectivePostView = isSelfView ? postView : "posts";
 
   if (loading) return <div className="loading-text" style={{ padding: 40 }}>加载中...</div>;
   if (!profile) return <div className="loading-text" style={{ padding: 40 }}>用户不存在</div>;
@@ -487,9 +546,18 @@ export default function UserPage() {
                   >
                     <i className="fa fa-bookmark"></i> 我的收藏
                   </button>
+                  <button
+                    className={`profile-sub-tab ${postView === "drafts" ? "active" : ""}`}
+                    onClick={() => {
+                      setPostView("drafts");
+                      void loadDrafts();
+                    }}
+                  >
+                    <i className="fa fa-file-o"></i> 草稿{drafts && drafts.length > 0 ? ` (${drafts.length})` : ""}
+                  </button>
                 </div>
               )}
-              {postView === "posts" ? (
+              {effectivePostView === "posts" ? (
                 <div id="user-posts-list" className="user-posts-list">
               {posts.length === 0 ? (
                 <p className="loading-text">还没有发布帖子</p>
@@ -520,6 +588,53 @@ export default function UserPage() {
                   </div>
                 ))
               )}
+              </div>
+            ) : effectivePostView === "drafts" ? (
+              <div className="user-posts-list" id="user-drafts-list">
+                {drafts === null ? (
+                  <p className="loading-text">加载中...</p>
+                ) : drafts.length === 0 ? (
+                  <p className="loading-text">还没有草稿，正文会随编辑自动保存</p>
+                ) : (
+                  drafts.map((d) => (
+                    <div
+                      className="post-item post-item-draft"
+                      key={d.id}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => router.push(`/post/create?draft=${encodeURIComponent(d.id)}`)}
+                    >
+                      <h3 className="post-item-title">{d.title.trim() || "无标题草稿"}</h3>
+                      <p className="post-item-summary">
+                        {(d.summary || "").replace(/<[^>]+>/g, "").substring(0, 200) || "（空草稿）"}
+                      </p>
+                      <div className="post-item-footer">
+                        <div className="post-item-tags">
+                          <span className="post-draft-tag">
+                            <i className="fa fa-file-text-o"></i> 草稿
+                          </span>
+                          <CategoryBadge category={d.category} className="post-item-category" />
+                          <SpaceBadge name={d.guild_name} color={d.guild_theme_color} />
+                        </div>
+                        <div className="post-item-stats">
+                          <span>
+                            <i className="fa fa-clock-o"></i> 编辑于 {fmtDateTime(d.updated_at)}
+                          </span>
+                          <button
+                            type="button"
+                            className={`post-draft-delete-btn ${confirmDraftId === d.id ? "is-confirming" : ""}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void removeDraft(d.id);
+                            }}
+                          >
+                            <i className={`fa ${confirmDraftId === d.id ? "fa-exclamation-triangle" : "fa-trash-o"}`}></i>
+                            {confirmDraftId === d.id ? "确认删除" : "删除"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             ) : (
               <div className="user-posts-list">

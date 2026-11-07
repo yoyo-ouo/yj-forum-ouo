@@ -108,6 +108,30 @@ type PostListItem struct {
 	GuildThemeColor string `json:"guild_theme_color,omitempty"`
 }
 
+// PostDraftItem 帖子草稿列表项（仅作者本人可见；不含正文）。
+// UpdatedAt 是草稿最近保存时间，列表按它倒序。
+type PostDraftItem struct {
+	ID        string     `json:"id"`
+	Title     string     `json:"title"`
+	Summary   string     `json:"summary"`
+	Category  string     `json:"category"`
+	CreatedAt *time.Time `json:"created_at"`
+	UpdatedAt *time.Time `json:"updated_at"`
+	// ScheduledAt 草稿里暂存的定时发布时间（UTC；nil = 未开启定时）
+	ScheduledAt     *time.Time `json:"scheduled_at,omitempty"`
+	GuildID         *int64     `json:"guild_id,omitempty"`
+	GuildUUID       string     `json:"guild_uuid,omitempty"`
+	GuildName       string     `json:"guild_name,omitempty"`
+	GuildThemeColor string     `json:"guild_theme_color,omitempty"`
+}
+
+// PostDraft 帖子草稿详情（作者本人可读；含正文）。
+type PostDraft struct {
+	PostDraftItem
+	Content       string `json:"content"`
+	ContentFormat string `json:"content_format"`
+}
+
 // ReplyItem 我收到的回复。
 type ReplyItem struct {
 	Comment
@@ -510,7 +534,7 @@ type CharacterSheetPayload struct {
 	DescriptionHTML string                `json:"description_html"`
 	AvatarMediaID   string                `json:"avatar_media_id"`
 	ImageMediaIDs   []string              `json:"image_media_ids"`
-	Guild           CharacterGuildRef    `json:"guild"`
+	Guild           CharacterGuildRef     `json:"guild"`
 	Abilities       []CharacterAbility    `json:"abilities"`
 	Quotes          []CharacterQuoteInput `json:"quotes"`
 	QuotesVisible   bool                  `json:"quotes_visible"`
@@ -552,11 +576,11 @@ type CharacterSheet struct {
 	OwnerAvatar string `json:"owner_avatar"`
 	OwnerPrefix string `json:"owner_prefix"`
 
-	Liked          bool                    `json:"liked"`
-	Mine           bool                    `json:"mine"`
-	HasDraft       bool                    `json:"has_draft"`
-	DraftUpdatedAt *time.Time              `json:"draft_updated_at"`
-	Draft          *CharacterSheetPayload  `json:"draft,omitempty"`
+	Liked          bool                   `json:"liked"`
+	Mine           bool                   `json:"mine"`
+	HasDraft       bool                   `json:"has_draft"`
+	DraftUpdatedAt *time.Time             `json:"draft_updated_at"`
+	Draft          *CharacterSheetPayload `json:"draft,omitempty"`
 }
 
 // CharacterEggQuote 彩蛋语录池条目（角色名 + 语录正文）。

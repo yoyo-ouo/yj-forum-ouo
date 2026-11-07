@@ -44,8 +44,14 @@ func RateLimit(key string, maxCount int, window time.Duration) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		ip := c.ClientIP()
-		rk := key + ":" + ip
+		keyID := c.ClientIP()
+		// 已认证的请求按用户分桶（AuthRequired 在 RateLimit 之前时生效），避免 NAT 下互相挤占
+		if uid, ok := c.Get("userID"); ok {
+			if s, ok := uid.(string); ok && s != "" {
+				keyID = "u:" + s
+			}
+		}
+		rk := key + ":" + keyID
 		rateMu.Lock()
 		now := time.Now()
 		ent, ok := rateStore[rk]

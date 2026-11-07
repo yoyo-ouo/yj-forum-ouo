@@ -175,6 +175,13 @@ func registerAPIRoutes(api *gin.RouterGroup, h apiHandlers) {
 	// ---- 帖子 ----
 	api.GET("/posts", postsH.List)
 	api.GET("/posts/random", postsH.Random)
+	// 草稿路由必须在 /posts/:id 之前注册（静态段优先）
+	api.GET("/posts/drafts", postsH.AuthRequired(), postsH.ListDrafts)
+	api.POST("/posts/drafts", postsH.AuthRequired(), middleware.RateLimit("post_draft_create", 30, 10*time.Minute), postsH.CreateDraft)
+	api.GET("/posts/drafts/:id", postsH.AuthRequired(), postsH.GetDraft)
+	api.PUT("/posts/drafts/:id", postsH.AuthRequired(), middleware.RateLimit("post_draft_save", 240, time.Minute), postsH.SaveDraft)
+	api.POST("/posts/drafts/:id/publish", postsH.AuthRequired(), middleware.RateLimit("post_draft_publish", 30, time.Minute), postsH.PublishDraft)
+	api.DELETE("/posts/drafts/:id", postsH.AuthRequired(), postsH.DeleteDraft)
 	api.GET("/posts/picker-defaults", postsH.AuthRequired(), postsH.PickerDefaults)
 	api.GET("/posts/:id", postsH.Detail)
 	api.POST("/posts", postsH.AuthRequired(), postsH.Create)
