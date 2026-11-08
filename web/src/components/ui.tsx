@@ -5,7 +5,7 @@ import { marked } from "marked";
 import { useNav } from "../lib/nav";
 import { useApp } from "../lib/store";
 import { api } from "../lib/api";
-import { avatarUrl, categoryColor, categoryLabel, stripHtml, textLimit, timeAgo } from "../lib/format";
+import { avatarUrl, categoryColor, categoryLabel, contrastText, stripHtml, textLimit, timeAgo } from "../lib/format";
 import type { Post } from "../lib/types";
 
 export function BackIcon() {
@@ -50,12 +50,36 @@ export function TabIcon({ name }: { name: "square" | "world" | "messages" | "me"
   );
 }
 
+export function CategoryBadge({ category, className = "post-card-category" }: { category?: string; className?: string }) {
+  const color = categoryColor(category);
+  return (
+    <span className={className} style={{ background: color, color: contrastText(color) }}>
+      {categoryLabel(category)}
+    </span>
+  );
+}
+
+export function SpaceBadge({ name, color, className = "space-badge" }: { name?: string | null; color?: string | null; className?: string }) {
+  if (name) {
+    const bg = color || "var(--color-primary)";
+    return (
+      <span className={className} style={{ background: bg, color: contrastText(color || "#6A8C89") }} title={`会馆：${name}`}>
+        <i className="fa fa-home" /> {name}
+      </span>
+    );
+  }
+  return (
+    <span className={`${className} space-badge-public`.trim()} title="公共空间" style={{ background: "#3f5854", color: "#fff" }}>
+      <i className="fa fa-globe" /> 公共空间
+    </span>
+  );
+}
+
 export function Avatar({ src, name, size = 36 }: { src?: string | null; name?: string; size?: number }) {
   const url = avatarUrl(src);
-  const initial = (name || "?").trim().slice(0, 1);
   return (
     <span className="avatar" style={{ width: size, height: size, fontSize: Math.max(11, size * 0.38) }}>
-      {url ? <img src={url} alt={name || ""} /> : <span>{initial}</span>}
+      {url ? <img src={url} alt={name || ""} /> : <i className="fa fa-user" aria-hidden="true" />}
     </span>
   );
 }
@@ -204,39 +228,32 @@ export function RichContent({ html, format }: { html?: string | null; format?: s
 
 export function PostCard({ post, onOpen }: { post: Post; onOpen?: () => void }) {
   const { push } = useNav();
-  const summary = post.summary || stripHtml(post.content || "");
+  const rawSummary = post.summary || stripHtml(post.content || "");
+  const summary = rawSummary.slice(0, 100);
+  const author = post.user_name || post.author_name || "论坛用户";
   return (
     <article className="post-card" onClick={() => (onOpen ? onOpen() : push("post", { id: post.id }))}>
-      <div className="post-head">
-        <Avatar src={post.user_avatar || post.author_avatar} name={post.user_name || post.author_name} size={34} />
-        <div className="post-author">
-          <div className="post-name">
-            {post.user_name || post.author_name || "论坛用户"}
-            {post.user_guild_name ? (
-              <span className="pill" style={{ color: post.user_guild_theme_color || "var(--color-primary)" }}>
-                {post.user_guild_name}
-              </span>
-            ) : null}
-          </div>
-          <div className="post-meta">
-            {categoryLabel(post.category)} · {timeAgo(post.published_at || post.created_at)}
-          </div>
+      <div className="post-card-left">
+        <div className="post-card-avatar">
+          <Avatar src={post.user_avatar || post.author_avatar} name={author} size={44} />
         </div>
-        <span className="cat-dot" style={{ background: categoryColor(post.category) }} />
       </div>
-      <h3 className="post-title">{post.title}</h3>
-      {summary ? <p className="post-summary">{textLimit(summary, 180)}</p> : null}
-      {Array.isArray(post.images) && post.images.length > 0 ? (
-        <div className="post-images">
-          {post.images.slice(0, 3).map((src) => (
-            <img key={src} src={avatarUrl(src)} alt="" />
-          ))}
+      <div className="post-card-body">
+        <div className="post-card-header">
+          <CategoryBadge category={post.category} />
+          <SpaceBadge name={post.user_guild_name} color={post.user_guild_theme_color} />
+          <span className="post-card-author">{author}</span>
+          <span className="post-card-time">{timeAgo(post.published_at || post.created_at)}</span>
         </div>
-      ) : null}
-      <div className="post-foot">
-        <span>♡ {post.likes ?? 0}</span>
-        <span>💬 {post.comment_count ?? 0}</span>
-        <span className="post-cat">#{categoryLabel(post.category)}</span>
+        <h3 className="post-card-title">{post.title}</h3>
+        {summary ? (
+          <p className="post-card-summary">{summary}{rawSummary.length >= 100 ? "..." : ""}</p>
+        ) : null}
+        <div className="post-card-footer">
+          <span className="post-card-stats"><i className="fa fa-eye" /> {post.views ?? 0}</span>
+          <span className="post-card-stats"><i className="fa fa-thumbs-up" /> {post.likes ?? 0}</span>
+          <span className="post-card-stats"><i className="fa fa-comment" /> {post.comment_count ?? 0}</span>
+        </div>
       </div>
     </article>
   );

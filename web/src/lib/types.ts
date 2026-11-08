@@ -59,6 +59,8 @@ export interface Post {
   author_avatar?: string;
   user_guild_name?: string;
   user_guild_theme_color?: string;
+  guild_name?: string;
+  guild_theme_color?: string;
   user_is_leader?: boolean;
   liked_by_me?: boolean;
   favorited_by_me?: boolean;
@@ -78,6 +80,8 @@ export interface CommentItem {
   created_at?: string;
   user_name?: string;
   user_avatar?: string;
+  user_guild_name?: string;
+  user_guild_theme_color?: string;
   author_name?: string;
   author_avatar?: string;
 }

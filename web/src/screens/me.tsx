@@ -52,24 +52,30 @@ export function MeScreen() {
 
   return (
     <div className="screen">
-      <TopBar title="我的" actions={<button className="icon-btn" onClick={() => push("settings")}>⚙</button>} />
-      <div className="me-card">
-        <div className="me-top">
-          <Avatar src={user.avatar} name={user.name} size={56} />
-          <div style={{ flex: 1 }}>
-            <div className="me-name">{user.name}</div>
-            <div className="me-sub">{profile.data?.guild?.name || "妖精论坛"} · 灵力 {user.spirit ?? 0}</div>
+      <TopBar title="我的" actions={<button className="icon-btn" onClick={() => push("settings")}><i className="fa fa-cog" /></button>} />
+      <div className="user-profile-page" style={{ marginTop: 12 }}>
+        <div className="user-profile-card">
+          <div className="user-profile-avatar-wrapper">
+            <div className="user-profile-avatar"><Avatar src={user.avatar} name={user.name} size={80} /></div>
           </div>
-          <button className="btn sm ghost" onClick={() => void signIn()}>签到</button>
+          <div className="user-profile-info">
+            <div className="row between" style={{ alignItems: "center", gap: 8 }}>
+              <h2 style={{ margin: 0 }}><span id="user-profile-name">{user.name}</span></h2>
+              <button className="btn sm primary" onClick={() => void signIn()}>签到</button>
+            </div>
+            <div className="user-profile-meta">
+              <span className="user-meta-item"><i className="fa fa-home" /> {profile.data?.guild?.name || "妖精论坛"}</span>
+              <span className="user-meta-item"><i className="fa fa-star-o" /> 灵力 {user.spirit ?? 0}</span>
+            </div>
+            {user.intro ? <div className="user-profile-intro">{user.intro}</div> : null}
+          </div>
+          <div className="user-profile-stats">
+            <div className="stat-item"><span className="stat-number">{stats?.post_count ?? 0}</span><span className="stat-label">帖子</span></div>
+            <div className="stat-item"><span className="stat-number">{stats?.total_likes ?? 0}</span><span className="stat-label">获赞</span></div>
+            <div className="stat-item"><span className="stat-number">{follow?.following_count ?? 0}</span><span className="stat-label">关注</span></div>
+            <div className="stat-item"><span className="stat-number">{follow?.follower_count ?? 0}</span><span className="stat-label">粉丝</span></div>
+          </div>
         </div>
-        <div className="me-grid">
-          <div><b>{stats?.post_count ?? 0}</b><span>帖子</span></div>
-          <div><b>{stats?.total_likes ?? 0}</b><span>获赞</span></div>
-          <div><b>{follow?.following_count ?? 0}</b><span>关注</span></div>
-          <div><b>{follow?.follower_count ?? 0}</b><span>粉丝</span></div>
-        </div>
-      </div>
-
       <div className="me-group">
         <div className="me-group-title">内容</div>
         {cell("我的帖子", String(stats?.post_count ?? ""), () => push("user", { id: user.id }))}
@@ -94,6 +100,7 @@ export function MeScreen() {
         {cell("指南", "", () => push("guides"))}
         {cell("反馈", "", () => push("feedback"))}
         <div className="me-cell" onClick={() => setConfirmLogout(true)}><span style={{ color: "#c22f2f" }}>退出登录</span><span className="chev">›</span></div>
+      </div>
       </div>
       <div className="me-footer">妖精论坛（二创） · 非商业同人项目 · {appInfo?.versionName || "2.0.0"}</div>
 

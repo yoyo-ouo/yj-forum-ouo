@@ -1,0 +1,85 @@
+/* ============ 移动端对论坛 Web 样式的必要适配 ============ */
+.post-card-header {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.post-card-category,
+.space-badge,
+.user-guild-chip,
+.post-draft-tag {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.post-card-author {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.post-card-time {
+  flex-shrink: 0;
+}
+
+/* 原生 button 默认底色/边框会破坏 Web 链接样式 */
+.post-author-name,
+.post-author-avatar,
+.comment-author,
+.comment-avatar {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.post-author-name {
+  color: var(--color-text-primary);
+  display: inline;
+  margin: 0;
+}
+.comment-author {
+  color: var(--color-text-secondary);
+}
+
+/* 评论区在移动端的密度微调 */
+.comment-section {
+  padding: 18px 16px;
+}
+.comment-input-bar .rich-editor {
+  background: var(--color-bg-input);
+}
+
+@media (max-width: 480px) {
+  .forum-container {
+    padding: 0 12px 16px;
+  }
+  .forum-header {
+    padding: 20px 8px 14px;
+  }
+  .forum-title {
+    font-size: 25px;
+  }
+  .post-card {
+    padding: 14px;
+    gap: 10px;
+  }
+  .post-card-title {
+    font-size: 16px;
+  }
+  .post-card-body {
+    min-width: 0;
+  }
+  .post-content {
+    padding: 18px 16px;
+  }
+  .post-title {
+    font-size: 21px;
+  }
+}
+
+.forum-create-btn,
+.profile-tab-create {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}

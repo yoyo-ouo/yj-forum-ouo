@@ -54,3 +54,14 @@ export function stripHtml(html?: string | null): string {
 export function textLimit(text: string, limit: number): string {
   return text.length > limit ? `${text.slice(0, limit)}…` : text;
 }
+
+export function contrastText(color: string): string {
+  const raw = (color || "").replace("#", "").trim();
+  const full = raw.length === 3 ? raw.split("").map((c) => c + c).join("") : raw;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return "#FFFFFF";
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.62 ? "#1A2423" : "#FFFFFF";
+}

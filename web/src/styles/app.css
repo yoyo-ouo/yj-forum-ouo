@@ -403,3 +403,20 @@ img { max-width: 100%; }
   body { background: #0e1514; }
   .app-shell { box-shadow: 0 30px 80px rgba(0,0,0,.35); }
 }
+
+/* 论坛 Web 通用身份 chip（跨页面复用） */
+.user-guild-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 12px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.user-guild-chip i { font-size: 11px; color: inherit !important; }
+
+.header-logo-img { width: 28px; height: 28px; border-radius: 50%; display: block; }
+.header-brand-badge { font-size: 9px; color: var(--color-text-tertiary); background: var(--color-bg-icon); border-radius: 6px; padding: 1px 4px; }
