@@ -1,13 +1,24 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
+import { requestApi, shareContent } from "../lib/native";
 import { useNav } from "../lib/nav";
 import { useApp } from "../lib/store";
-import { Avatar, EmptyState, LoadMore, Loading, PostCard, RichContent, SpaceBadge, TopBar } from "../components/ui";
-import { avatarUrl, contrastText, formatDate, stripHtml, timeAgo } from "../lib/format";
-import type { Post } from "../lib/types";
-// 仅本页需要的移动端适配（原生 button 复位 / 内边距收窄），不改 main.tsx 与共享样式
-import "../styles/guilds-page.css";
+import {
+  AppBar,
+  Avatar,
+  Cell,
+  Confirm,
+  Empty,
+  IconButton,
+  Screen,
+  Segmented,
+  Sheet,
+  Skeletons,
+} from "../components/mobile";
+import { RichContent } from "../components/ui";
+import { Icon } from "../components/icons";
+import { avatarUrl, contrastText, formatDate, timeAgo } from "../lib/format";
 
 /* ======================= 主题色 / 颜色可读性（口径对齐 Web lib/constants） ======================= */
 
@@ -49,31 +60,18 @@ function isLightHex(hex?: string | null, threshold = 0.35): boolean {
   return luminanceOf(hex) > threshold;
 }
 
-/** hero 前景色：亮色会馆用深字，暗色会馆用白字（Web guildForeground） */
+/** 封面文字：亮色会馆用深字，暗色会馆用白字（对齐 Web guildForeground） */
 function guildForeground(hex?: string | null): string {
   return isLightHex(hex) ? "#17323a" : "#ffffff";
 }
 
-/** 卡片底上的主题色文字：亮色主题色压暗，暗色主题色保持原色（Web themeInk） */
+/** 卡片底上的主题色文字：亮色主题色压暗，暗色主题色保持原色（对齐 Web themeInk） */
 function themeInk(color?: string | null): string {
   const value = themeColor(color);
   const rgb = parseHex(value);
   if (!rgb || !isLightHex(value)) return value;
   const mix = (channel: number) => Math.round(channel * 0.45);
   return `rgb(${mix(rgb[0])}, ${mix(rgb[1])}, ${mix(rgb[2])})`;
-}
-
-/** hero 依赖的 CSS 变量（--guild-fg / --guild-shade / --guild-ts，见 huiguan.css） */
-function heroVars(hex: string): React.CSSProperties {
-  const light = isLightHex(hex);
-  return {
-    "--guild-fg": guildForeground(hex),
-    "--guild-fg-soft": light ? "rgba(23, 50, 58, 0.10)" : "rgba(255, 255, 255, 0.18)",
-    "--guild-shade": light
-      ? "linear-gradient(135deg, rgba(255, 255, 255, 0) 32%, rgba(255, 255, 255, 0.42) 100%)"
-      : "linear-gradient(135deg, rgba(0, 0, 0, 0) 32%, rgba(0, 0, 0, 0.28) 100%)",
-    "--guild-ts": light ? "none" : "0 1px 2px rgba(0, 0, 0, 0.28)",
-  } as React.CSSProperties;
 }
 
 /** 媒体中台直出地址：仅 MD 开头的新媒体 ID 可读，旧 GridFS / 空值回退占位 */
@@ -101,309 +99,73 @@ function itemKey(item: any): string {
   return `${item?.type || "post"}-${item?.id}`;
 }
 
-/* ======================= 会馆 Logo（对齐 Web components/ui/GuildLogo） ======================= */
+/** 会馆首字：名称前 1-2 个字符（emoji / 生僻字按码点切） */
+function guildInitials(name?: string | null): string {
+  const chars = Array.from(String(name || "馆").trim());
+  return chars.slice(0, 2).join("") || "馆";
+}
 
-function GuildLogo({
-  logoFileId,
-  name,
-  hasLogo,
-  color,
-  size = 64,
-  className = "guild-logo",
-}: {
-  logoFileId?: string | null;
-  name?: string | null;
-  hasLogo?: boolean;
-  color?: string | null;
-  size?: number;
-  className?: string;
-}) {
-  const c = themeColor(color);
-  const url = hasLogo ? mediaIdUrl(logoFileId) : "";
-  if (url) {
-    return (
-      <div className={`${className} guild-logo-img`} style={{ width: size, height: size }}>
-        <img src={url} alt={name || ""} />
-      </div>
-    );
+/** 加入 / 退出 / 撤回：沿用服务端会馆接口（api.ts 未封装，这里走原生 requestApi） */
+async function postGuildAction(path: string): Promise<any> {
+  const res = await requestApi<any>({
+    method: "POST",
+    path,
+    body: path.endsWith("/join") ? { reason: "" } : undefined,
+  });
+  const data: any = res.data;
+  if (!res.ok || data?.success === false) {
+    throw new Error(data?.message || data?.error || "操作失败");
   }
+  return data;
+}
+
+/* ======================= 会馆 Logo / 徽标 ======================= */
+
+function GuildLogo({ guild, size = 44 }: { guild: any; size?: number }) {
+  const name = guild?.name || "会馆";
+  const color = themeColor(guild?.theme_color);
+  const url = guild?.has_logo ? mediaIdUrl(guild?.logo_file_id) : "";
+  const initials = guildInitials(name);
   return (
-    <div
-      className={className}
+    <span
+      className="gd-logo"
       style={{
         width: size,
         height: size,
-        background: `linear-gradient(135deg, ${c} 0%, ${themeTint(c, "66")} 100%)`,
-        fontSize: Math.round(size * 0.44),
+        background: url ? undefined : `linear-gradient(135deg, ${color} 0%, ${themeTint(color, "cc")} 100%)`,
+        color: contrastText(color),
+        fontSize: Math.round(size * (initials.length > 1 ? 0.32 : 0.4)),
       }}
     >
-      {(name || "馆").slice(0, 1)}
-    </div>
+      {url ? <img src={url} alt={name} loading="lazy" /> : initials}
+    </span>
   );
 }
 
-/* ======================= 文章卡（对齐 Web components/ArticleCard） ======================= */
+/* ======================= 会馆列表卡片 ======================= */
 
-function ArticleCard({ item, showSpace = true }: { item: any; showSpace?: boolean }) {
-  const { push } = useNav();
-  const raw = stripHtml(item?.summary || "");
-  const summary = raw.slice(0, 100);
-  const authorName = item?.author?.name || item?.user_name || "佚名";
-  const guildName = item?.guild_name || item?.user_guild_name || "";
-  const guildTheme = item?.guild_theme_color || item?.user_guild_theme_color || "";
-
+function GuildCard({ guild, onClick }: { guild: any; onClick: () => void }) {
+  const leaderName = guild?.leader?.name ? String(guild.leader.name) : "";
   return (
-    <article
-      className="post-card article-card"
-      onClick={() => {
-        if (item?.id !== undefined && item?.id !== null && item?.id !== "") push("article", { id: item.id });
-      }}
-    >
-      <div className="post-card-left">
-        <div className="post-card-avatar article-card-icon">
-          <i className="fa fa-book" />
-        </div>
-      </div>
-      <div className="post-card-body">
-        <div className="post-card-header">
-          <span className="article-badge">文章</span>
-          {showSpace && guildName ? <SpaceBadge name={guildName} color={guildTheme} /> : null}
-          <span className="post-card-author">{authorName}</span>
-          <span className="post-card-time">{timeAgo(item?.updated_at || item?.created_at)}</span>
-        </div>
-        <h3 className="post-card-title">{item?.title || "未命名文章"}</h3>
-        {summary ? <p className="post-card-summary">{summary}{raw.length >= 100 ? "..." : ""}</p> : null}
-        <div className="post-card-footer">
-          <span className="post-card-stats"><i className="fa fa-eye" /> {item?.views || 0}</span>
-          <span className="post-card-stats article-card-author"><i className="fa fa-pencil" /> 执笔 {authorName}</span>
-          {Number(item?.participants_count) > 0 ? (
-            <span className="post-card-stats"><i className="fa fa-users" /> {item.participants_count}</span>
-          ) : null}
-        </div>
-      </div>
-    </article>
+    <button type="button" className="gd-card" onClick={onClick}>
+      <GuildLogo guild={guild} size={44} />
+      <span className="gd-card-main">
+        <span className="gd-card-name">{guild?.name || "未命名会馆"}</span>
+        <span className="gd-card-meta">
+          {leaderName ? `馆长 ${leaderName}` : "馆长虚位以待"} · {guild?.member_count ?? 0} 位成员
+        </span>
+        <span className="gd-card-intro">{guild?.intro || "这个会馆还没有简介～"}</span>
+      </span>
+      <Icon name="forward" size={18} className="gd-chev" />
+    </button>
   );
 }
 
-/* ======================= 会馆广场：每个会馆一行（顶部栏 + 横向滚动内容区） ======================= */
-
-function GuildFeedRow({ guild }: { guild: any }) {
-  const { push } = useNav();
-  const slug = String(guild?.slug || "");
-  const name = guild?.name || "未命名会馆";
-  const leader = guild?.leader;
-  const theme = themeColor(guild?.theme_color);
-
-  const sectionRef = useRef<HTMLElement | null>(null);
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const pageRef = useRef(1);
-  // 滚动事件高频触发，防止同一页被并发请求多次
-  const loadingMoreRef = useRef(false);
-
-  const [visible, setVisible] = useState(false);
-  const [items, setItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(false);
-
-  const enter = () => {
-    if (slug) push("guild", { slug });
-  };
-
-  const load = useCallback(
-    async (page: number, append: boolean) => {
-      if (!slug) return;
-      if (append) {
-        if (loadingMoreRef.current) return;
-        loadingMoreRef.current = true;
-        setLoadingMore(true);
-      } else {
-        setLoading(true);
-      }
-      setFailed(false);
-      try {
-        const res = await api.guildFeed(slug, page, 10);
-        const incoming: any[] = (res?.items as any[]) || [];
-        setItems((current) => {
-          if (!append) return incoming;
-          const seen = new Set(current.map(itemKey));
-          return [...current, ...incoming.filter((item) => !seen.has(itemKey(item)))];
-        });
-        setHasMore(Boolean(res?.has_more));
-        pageRef.current = page;
-      } catch {
-        setFailed(true);
-        if (!append) {
-          setItems([]);
-          setHasMore(false);
-        }
-      } finally {
-        setLoading(false);
-        setLoadingMore(false);
-        loadingMoreRef.current = false;
-      }
-    },
-    [slug],
-  );
-
-  // 视口懒加载：会馆行进入可视区域（含 300px 预取边距）后才发起请求
-  useEffect(() => {
-    const el = sectionRef.current;
-    if (!el) return;
-    if (typeof IntersectionObserver === "undefined") {
-      setVisible(true);
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "300px 0px" },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!visible) return;
-    const timer = window.setTimeout(() => void load(1, false), 0);
-    return () => window.clearTimeout(timer);
-  }, [visible, load]);
-
-  const syncArrows = useCallback(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    setCanLeft(el.scrollLeft > 4);
-    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
-  }, []);
-
-  useEffect(() => {
-    syncArrows();
-  }, [items, syncArrows]);
-
-  const onScroll = () => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    syncArrows();
-    // 到达右边界附近自动续拉下一页（仅本行）
-    if (hasMore && !loadingMoreRef.current && el.scrollLeft + el.clientWidth >= el.scrollWidth - 80) {
-      void load(pageRef.current + 1, true);
-    }
-  };
-
-  const scrollBy = (direction: -1 | 1) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    // 已在右边界（或内容不足一屏）时，点右箭头直接续拉下一页
-    if (direction === 1 && hasMore && el.scrollLeft + el.clientWidth >= el.scrollWidth - 8) {
-      void load(pageRef.current + 1, true);
-      return;
-    }
-    el.scrollBy({ left: direction * Math.max(280, el.clientWidth * 0.8), behavior: "smooth" });
-  };
-
-  return (
-    <section className="guild-row" ref={sectionRef}>
-      <header className="guild-row-head">
-        <div className="guild-row-identity">
-          <GuildLogo
-            logoFileId={guild?.logo_file_id}
-            name={name}
-            hasLogo={guild?.has_logo}
-            color={guild?.theme_color}
-            size={40}
-            className="guild-logo guild-row-logo"
-          />
-          <div className="guild-row-names">
-            <button type="button" className="guild-row-name" onClick={enter}>{name}</button>
-            <span className="guild-row-leader">
-              馆长：
-              {leader?.id ? (
-                <button type="button" className="guild-row-leader-link" onClick={() => push("user", { id: leader.id })}>
-                  {leader.name}
-                </button>
-              ) : (
-                "虚位以待"
-              )}
-            </span>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="guild-row-enter"
-          style={{ background: theme, color: contrastText(theme) }}
-          onClick={enter}
-        >
-          进入会馆 <i className="fa fa-arrow-right" />
-        </button>
-      </header>
-
-      <div className="guild-row-body">
-        <button type="button" className="guild-row-arrow" aria-label="向左滚动" disabled={!canLeft} onClick={() => scrollBy(-1)}>
-          <i className="fa fa-chevron-left" />
-        </button>
-
-        <div className="guild-row-scroller" ref={scrollerRef} onScroll={onScroll}>
-          {!visible || loading ? (
-            <div className="guild-row-loading"><i className="fa fa-spinner fa-spin" /> 加载中...</div>
-          ) : failed && items.length === 0 ? (
-            <div className="guild-row-error" role="alert">
-              <i className="fa fa-exclamation-circle" /> 内容加载失败
-              <button type="button" className="guild-row-retry" onClick={() => void load(1, false)}>重试</button>
-            </div>
-          ) : items.length === 0 ? (
-            <div className="guild-row-empty">暂无内容</div>
-          ) : (
-            <>
-              {items.map((item) => (
-                <div className="guild-row-card" key={itemKey(item)}>
-                  {item?.type === "article" ? (
-                    <ArticleCard item={item} showSpace={false} />
-                  ) : (
-                    <PostCard post={{ ...item, title: String(item?.title || "") } as Post} />
-                  )}
-                </div>
-              ))}
-              {failed ? (
-                <div className="guild-row-error is-tail" role="alert">
-                  <button type="button" className="guild-row-retry" onClick={() => void load(pageRef.current + 1, true)}>
-                    加载失败，点击重试
-                  </button>
-                </div>
-              ) : null}
-              {loadingMore ? (
-                <div className="guild-row-loading is-tail"><i className="fa fa-spinner fa-spin" /></div>
-              ) : null}
-            </>
-          )}
-        </div>
-
-        <button
-          type="button"
-          className="guild-row-arrow"
-          aria-label="向右滚动"
-          disabled={(!canRight && !hasMore) || !visible}
-          onClick={() => scrollBy(1)}
-        >
-          <i className="fa fa-chevron-right" />
-        </button>
-      </div>
-    </section>
-  );
-}
-
-/* ======================= 会馆广场 ======================= */
+/* ======================= 会馆列表 ======================= */
 
 export function GuildsScreen() {
   const { push } = useNav();
   const showToast = useApp((s) => s.showToast);
-  const [view, setView] = useState<"rows" | "list">("rows");
   const guildsQuery = useQuery({ queryKey: ["guilds"], queryFn: () => api.guilds(), staleTime: 60_000 });
 
   useEffect(() => {
@@ -421,93 +183,98 @@ export function GuildsScreen() {
   };
 
   return (
-    <div className="screen">
-      <TopBar title="会馆" back />
-      <div className="guild-page">
-        <div className="guild-page-header">
-          <h1 className="guild-page-title">会馆广场</h1>
-          <p className="guild-page-subtitle">走进会馆，遇见同好</p>
-          {guilds.length > 0 ? (
-            <button className="guild-view-toggle" type="button" onClick={() => setView(view === "rows" ? "list" : "rows")}>
-              <i className={`fa ${view === "rows" ? "fa-list-ul" : "fa-th-large"}`} />
-              {view === "rows" ? "查看所有会馆" : "返回会馆广场"}
-            </button>
-          ) : null}
-        </div>
-
-        {guildsQuery.isLoading ? <Loading /> : null}
-
-        {!guildsQuery.isLoading && guilds.length === 0 ? (
-          <div className="guild-empty">
-            <i className="fa fa-home" />
-            <p className="guild-empty-title">{guildsQuery.isError ? "会馆列表加载失败" : "还没有会馆"}</p>
-            <p className="guild-empty-desc">
-              {guildsQuery.isError ? "请检查网络后重试，或稍后再来看看～" : "会馆正在筹建中，先去论坛逛逛吧～"}
-            </p>
-            {guildsQuery.isError ? (
-              <button className="guild-empty-link" type="button" onClick={() => void guildsQuery.refetch()}>
-                重新加载 <i className="fa fa-refresh" />
-              </button>
-            ) : (
-              <button className="guild-empty-link" type="button" onClick={() => push("feed")}>
-                前往论坛广场 <i className="fa fa-arrow-right" />
-              </button>
-            )}
-          </div>
-        ) : null}
-
-        {guilds.length > 0 && view === "rows" ? (
-          <div className="guild-rows">
-            {guilds.map((guild, index) => (
-              <GuildFeedRow key={guildKey(guild, index)} guild={guild} />
-            ))}
-          </div>
-        ) : null}
-
-        {guilds.length > 0 && view === "list" ? (
-          <div className="guild-list">
-            {guilds.map((guild, index) => {
-              const theme = themeColor(guild?.theme_color);
-              return (
-                <button type="button" className="guild-list-item" key={guildKey(guild, index)} onClick={() => enter(guild)}>
-                  <GuildLogo
-                    logoFileId={guild?.logo_file_id}
-                    name={guild?.name}
-                    hasLogo={guild?.has_logo}
-                    color={guild?.theme_color}
-                    size={48}
-                    className="guild-logo guild-list-logo"
-                  />
-                  <div className="guild-list-body">
-                    <div className="guild-list-name-row">
-                      <span className="guild-list-name">{guild?.name || "未命名会馆"}</span>
-                      {guild?.id !== undefined && guild?.id !== null ? (
-                        <span className="guild-list-id" style={{ background: theme, color: contrastText(theme) }}>
-                          #{guild.id}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="guild-list-intro">{guild?.intro || "这个会馆还没有简介～"}</p>
-                  </div>
-                  <div className="guild-list-meta">
-                    <span><i className="fa fa-user-o" /> {guild?.leader?.name || "虚位以待"}</span>
-                    <span className="guild-list-meta-link" title="查看成员名单">
-                      <i className="fa fa-users" /> {guild?.member_count ?? 0}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+    <Screen
+      appbar={<AppBar back title="会馆" />}
+      onRefresh={async () => {
+        await guildsQuery.refetch();
+      }}
+    >
+      <div className="gd-head">
+        <span className="gd-head-text">走进会馆，遇见同好</span>
       </div>
-    </div>
+
+      {guildsQuery.isLoading ? <Skeletons count={5} /> : null}
+
+      {!guildsQuery.isLoading && guilds.length === 0 ? (
+        <Empty
+          icon="home"
+          title={guildsQuery.isError ? "会馆列表加载失败" : "还没有会馆"}
+          hint={guildsQuery.isError ? "请检查网络后重试，或稍后再来看看～" : "会馆正在筹建中，先去广场逛逛吧～"}
+          action={
+            <button
+              type="button"
+              className="m-btn m-btn--soft"
+              onClick={() => {
+                if (guildsQuery.isError) void guildsQuery.refetch();
+                else push("feed");
+              }}
+            >
+              {guildsQuery.isError ? "重新加载" : "去广场逛逛"}
+            </button>
+          }
+        />
+      ) : null}
+
+      {guilds.length > 0 ? (
+        <div className="gd-list">
+          {guilds.map((guild, index) => (
+            <GuildCard key={guildKey(guild, index)} guild={guild} onClick={() => enter(guild)} />
+          ))}
+        </div>
+      ) : null}
+    </Screen>
   );
 }
 
-/* ======================= 会馆详情：动态 Tab ======================= */
+/* ======================= 会馆动态行（帖子 / 文章统一紧凑行） ======================= */
+
+function GuildFeedItem({ item, onOpen }: { item: any; onOpen: () => void }) {
+  const isArticle = item?.type === "article";
+  const title = item?.title || (isArticle ? "未命名文章" : "无标题帖子");
+  const author = item?.author?.name || item?.user_name || item?.author_name || "佚名";
+  const when = timeAgo(item?.updated_at || item?.published_at || item?.created_at);
+  const views = Number(item?.views || 0);
+  const likes = Number(item?.likes || 0);
+  const comments = Number(item?.comment_count || 0);
+
+  return (
+    <button type="button" className="gd-item" onClick={onOpen}>
+      <span className="gd-item-main">
+        <span className="gd-item-title">{title}</span>
+        <span className="gd-item-meta">
+          {isArticle ? <span className="m-pill gd-item-kind">文章</span> : null}
+          <span>{author}</span>
+          {when ? (
+            <>
+              <span>·</span>
+              <span>{when}</span>
+            </>
+          ) : null}
+          <span>·</span>
+          <span>{views} 阅读</span>
+          {!isArticle && likes > 0 ? (
+            <>
+              <span>·</span>
+              <span>{likes} 赞</span>
+            </>
+          ) : null}
+          {!isArticle && comments > 0 ? (
+            <>
+              <span>·</span>
+              <span>{comments} 评</span>
+            </>
+          ) : null}
+        </span>
+      </span>
+      <Icon name="forward" size={16} className="gd-chev" />
+    </button>
+  );
+}
+
+/* ======================= 会馆详情：动态 ======================= */
 
 function GuildFeedTab({ slug }: { slug: string }) {
+  const { push } = useNav();
   const showToast = useApp((s) => s.showToast);
   const [items, setItems] = useState<any[]>([]);
   const [page, setPage] = useState(1);
@@ -549,36 +316,43 @@ function GuildFeedTab({ slug }: { slug: string }) {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  if (loading) return <Loading />;
-  if (items.length === 0) return <EmptyState text="会馆里还没有内容" />;
+  if (loading) return <Skeletons count={3} />;
+  if (items.length === 0) return <Empty icon="sparkle" title="会馆里还没有动态" hint="成为第一个在这里发帖的人吧" />;
 
   return (
-    <>
-      <div className="guild-feed-list">
-        {items.map((item) =>
-          item?.type === "article" ? (
-            <ArticleCard key={itemKey(item)} item={item} />
-          ) : (
-            <PostCard key={itemKey(item)} post={{ ...item, title: String(item?.title || "") } as Post} />
-          ),
-        )}
+    <div className="gd-panel">
+      <div className="gd-items">
+        {items.map((item) => (
+          <GuildFeedItem
+            key={itemKey(item)}
+            item={item}
+            onOpen={() => {
+              if (item?.id === undefined || item?.id === null || item?.id === "") return;
+              push(item?.type === "article" ? "article" : "post", { id: item.id });
+            }}
+          />
+        ))}
       </div>
-      <LoadMore loading={loadingMore} hasMore={hasMore} onClick={() => void load(page + 1, true)} />
-    </>
+      {hasMore ? (
+        <button type="button" className="m-more" disabled={loadingMore} onClick={() => void load(page + 1, true)}>
+          {loadingMore ? "加载中…" : "加载更多"}
+        </button>
+      ) : (
+        <div className="m-end">— 到底了 —</div>
+      )}
+    </div>
   );
 }
 
-/* ======================= 会馆详情：成员 Tab ======================= */
+/* ======================= 会馆详情：成员 ======================= */
 
 function GuildMembersTab({
   slug,
-  leader,
   theme,
   ink,
   memberCount,
 }: {
   slug: string;
-  leader: any;
   theme: string;
   ink: string;
   memberCount?: number;
@@ -628,88 +402,62 @@ function GuildMembersTab({
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  // 馆长已在特写卡单独展示，网格中跳过
-  const gridMembers = members.filter((member) => !member?.is_leader);
+  if (loading) return <Skeletons count={2} />;
+  if (members.length === 0) return <Empty icon="user" title="还没有成员" hint="邀请同好一起加入这个会馆吧" />;
 
   return (
-    <>
-      <div className="guild-members-header">
-        <h1 className="guild-members-title">
-          <i className="fa fa-users" /> 会馆成员{memberCount ? ` · 共 ${memberCount} 人` : ""}
-        </h1>
+    <div className="gd-panel">
+      <p className="gd-count">共 {memberCount ?? members.length} 位成员</p>
+      <div className="gd-grid">
+        {members.map((member, index) => {
+          const isCharacter = member?.kind === "character";
+          const isMemberLeader = Boolean(member?.is_leader) || member?.role === "leader";
+          const name = member?.character_name || member?.name || "会馆成员";
+          const targetId = isCharacter ? member?.character_id : member?.id;
+          return (
+            <button
+              type="button"
+              className="gd-member"
+              key={`${member?.kind || "member"}-${member?.id || index}-${index}`}
+              title={isCharacter ? `${name} 的设定角色` : name}
+              onClick={() => {
+                if (targetId) push(isCharacter ? "character-detail" : "user", { id: targetId });
+              }}
+            >
+              <Avatar src={member?.avatar} name={name} size={48} />
+              <span className="gd-member-name">{name}</span>
+              {isMemberLeader ? (
+                <span className="gd-member-tag" style={{ background: themeTint(theme, "2e"), color: ink }}>
+                  馆长
+                </span>
+              ) : isCharacter ? (
+                <span className="gd-member-tag gd-member-tag--char">角色</span>
+              ) : null}
+            </button>
+          );
+        })}
       </div>
-
-      {leader ? (
-        <button
-          type="button"
-          className="guild-members-leader"
-          style={{ borderColor: themeTint(theme, "55") }}
-          onClick={() => {
-            if (leader?.id) push("user", { id: leader.id });
-          }}
-        >
-          <div className="guild-members-leader-avatar">
-            <Avatar src={leader?.avatar} name={leader?.name} size={96} />
-          </div>
-          <div className="guild-members-leader-name-row">
-            <span className="guild-members-leader-name">{leader?.name || "馆长"}</span>
-            {leader?.title ? <span className="guild-leader-title" style={{ color: ink }}>{leader.title}</span> : null}
-            <span className="guild-leader-tag" style={{ background: theme, color: contrastText(theme) }}>
-              <i className="fa fa-crown" /> 馆长
-            </span>
-          </div>
-          <p className="guild-members-leader-intro">{leader?.intro || "这位馆长很低调～"}</p>
+      {hasMore ? (
+        <button type="button" className="m-more" disabled={loadingMore} onClick={() => void load(page + 1, true)}>
+          {loadingMore ? "加载中…" : "加载更多"}
         </button>
-      ) : null}
-
-      {loading ? (
-        <Loading />
-      ) : gridMembers.length === 0 ? (
-        <EmptyState text="还没有成员" />
       ) : (
-        <div className="guild-members-list">
-          <div className="guild-members-grid">
-            {gridMembers.map((member, index) => {
-              const isCharacter = member?.kind === "character";
-              const name = member?.character_name || member?.name || "会馆成员";
-              const targetId = isCharacter ? member?.character_id : member?.id;
-              return (
-                <button
-                  type="button"
-                  className="guild-member-card"
-                  key={`${member?.kind || "member"}-${member?.id || index}`}
-                  title={isCharacter ? `${name} 的设定角色` : name}
-                  onClick={() => {
-                    if (targetId) push(isCharacter ? "character-detail" : "user", { id: targetId });
-                  }}
-                >
-                  {isCharacter ? <span className="guild-member-char-badge">设定角色</span> : null}
-                  <div className="guild-member-avatar">
-                    <Avatar src={member?.avatar} name={name} size={56} />
-                  </div>
-                  <div className="guild-member-name">{name}</div>
-                  <p className="guild-member-intro">
-                    {isCharacter
-                      ? member?.character_title || member?.intro || "这是一个设定角色"
-                      : member?.intro || "这个人很懒，什么都没留下~"}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <div className="m-end">— 到底了 —</div>
       )}
-
-      {!loading ? <LoadMore loading={loadingMore} hasMore={hasMore} onClick={() => void load(page + 1, true)} /> : null}
-    </>
+    </div>
   );
 }
 
-/* ======================= 会馆详情：馆长 Tab ======================= */
+/* ======================= 会馆详情：介绍（会馆介绍 + 馆长信息） ======================= */
 
-function GuildLeaderTab({ slug, guild, theme, ink }: { slug: string; guild: any; theme: string; ink: string }) {
+function GuildInfoTab({ slug, guild, theme }: { slug: string; guild: any; theme: string }) {
   const { push } = useNav();
   const showToast = useApp((s) => s.showToast);
+  const introQuery = useQuery({
+    queryKey: ["guild-intro", slug],
+    queryFn: () => api.guildIntro(slug),
+    enabled: Boolean(slug),
+  });
   const leaderQuery = useQuery({
     queryKey: ["guild-leader", slug],
     queryFn: () => api.guildLeader(slug),
@@ -717,197 +465,117 @@ function GuildLeaderTab({ slug, guild, theme, ink }: { slug: string; guild: any;
   });
 
   useEffect(() => {
-    if (leaderQuery.error) showToast(errorText(leaderQuery.error, "馆长介绍加载失败"), "error");
-  }, [leaderQuery.error, showToast]);
-
-  if (leaderQuery.isLoading) return <Loading />;
-
-  const data = leaderQuery.data;
-  const leader = data?.leader;
-  if (!leader) {
-    return (
-      <EmptyState
-        text={leaderQuery.isError ? "馆长介绍加载失败" : "这个会馆还没有馆长"}
-        action={
-          leaderQuery.isError ? (
-            <button className="btn ghost" onClick={() => void leaderQuery.refetch()}>重新加载</button>
-          ) : undefined
-        }
-      />
-    );
-  }
-
-  const content = data?.content || data?.content_html || "";
-  const guildName = data?.guild?.name || guild?.name || "会馆";
-
-  return (
-    <>
-      <div
-        className="guild-leader-hero"
-        style={{ background: `linear-gradient(135deg, ${theme} 0%, ${themeTint(theme, "cc")} 100%)`, ...heroVars(theme) }}
-      >
-        <div className="guild-hero-shade" />
-        <div className="guild-leader-hero-body">
-          <p className="guild-leader-hero-guild"><i className="fa fa-home" /> {guildName}</p>
-          <div className="guild-leader-hero-avatar">
-            <Avatar src={leader?.avatar} name={leader?.name} size={104} />
-          </div>
-          <div className="guild-leader-hero-name-row">
-            <h1 className="guild-leader-hero-name">{leader?.name || "馆长"}</h1>
-            {leader?.title ? <span className="guild-leader-hero-title">{leader.title}</span> : null}
-            <span className="guild-leader-hero-tag"><i className="fa fa-crown" /> 馆长</span>
-          </div>
-          <p className="guild-leader-hero-intro">{leader?.intro || "这位馆长很低调～"}</p>
-        </div>
-      </div>
-
-      <section className="guild-leader-panel">
-        <h2 className="guild-leader-panel-title" style={{ color: ink }}><i className="fa fa-quote-left" /> 馆长寄语</h2>
-        {data?.leader_bio ? (
-          <blockquote className="guild-leader-quote">{data.leader_bio}</blockquote>
-        ) : (
-          <p className="guild-leader-placeholder">馆长还没有留下寄语～</p>
-        )}
-      </section>
-
-      <section className="guild-leader-panel">
-        <h2 className="guild-leader-panel-title" style={{ color: ink }}><i className="fa fa-star" /> 馆长介绍</h2>
-        {content ? (
-          <div className="guild-leader-content">
-            <RichContent html={content} format="html" />
-          </div>
-        ) : (
-          <p className="guild-leader-placeholder">馆长还没有填写介绍～</p>
-        )}
-      </section>
-
-      {leader?.id ? (
-        <div className="guild-leader-actions">
-          <button
-            type="button"
-            className="guild-leader-profile-btn"
-            style={{ background: theme, color: contrastText(theme) }}
-            onClick={() => push("user", { id: leader.id })}
-          >
-            访问完整个人主页 <i className="fa fa-arrow-right" />
-          </button>
-        </div>
-      ) : null}
-    </>
-  );
-}
-
-/* ======================= 会馆详情：介绍 Tab ======================= */
-
-function GuildIntroTab({ slug, guild, theme, ink }: { slug: string; guild: any; theme: string; ink: string }) {
-  const showToast = useApp((s) => s.showToast);
-  const introQuery = useQuery({
-    queryKey: ["guild-intro", slug],
-    queryFn: () => api.guildIntro(slug),
-    enabled: Boolean(slug),
-  });
-
-  useEffect(() => {
     if (introQuery.error) showToast(errorText(introQuery.error, "会馆介绍加载失败"), "error");
   }, [introQuery.error, showToast]);
 
-  if (introQuery.isLoading) return <Loading />;
+  useEffect(() => {
+    if (leaderQuery.error) showToast(errorText(leaderQuery.error, "馆长介绍加载失败"), "error");
+  }, [leaderQuery.error, showToast]);
 
-  const data = introQuery.data;
-  const info = data?.guild || guild;
-  if (!data && !introQuery.isError) return <EmptyState text="这个会馆还没有介绍" />;
+  if (introQuery.isLoading) return <Skeletons count={2} />;
 
-  const content = data?.content || data?.content_html || "";
-  const coverUrl = mediaIdUrl(info?.cover_file_id);
-  const hasCover = Boolean(coverUrl);
-  const lightTheme = isLightHex(theme);
-  const vars = {
-    "--guild-fg": hasCover ? "#ffffff" : guildForeground(theme),
-    "--guild-fg-soft": hasCover
-      ? "rgba(255, 255, 255, 0.18)"
-      : lightTheme
-        ? "rgba(23, 50, 58, 0.10)"
-        : "rgba(255, 255, 255, 0.18)",
-    "--guild-shade": hasCover
-      ? "linear-gradient(180deg, rgba(8, 20, 26, 0.18) 0%, rgba(8, 20, 26, 0.62) 100%)"
-      : lightTheme
-        ? "linear-gradient(135deg, rgba(255, 255, 255, 0) 32%, rgba(255, 255, 255, 0.42) 100%)"
-        : "linear-gradient(135deg, rgba(0, 0, 0, 0) 32%, rgba(0, 0, 0, 0.28) 100%)",
-    "--guild-ts": hasCover || !lightTheme ? "0 1px 2px rgba(0, 0, 0, 0.28)" : "none",
-  } as React.CSSProperties;
-  const heroStyle: React.CSSProperties = hasCover
-    ? { backgroundImage: `url(${coverUrl})`, backgroundSize: "cover", backgroundPosition: "center", ...vars }
-    : { background: `linear-gradient(135deg, ${theme} 0%, ${themeTint(theme, "cc")} 100%)`, ...vars };
+  const info = introQuery.data?.guild || guild;
+  const content = introQuery.data?.content || introQuery.data?.content_html || "";
+  const leaderData = leaderQuery.data;
+  const leader = leaderData?.leader;
+  const leaderBio = leaderData?.leader_bio || guild?.leader_bio || "";
+  const leaderContent = leaderData?.content || leaderData?.content_html || "";
+  const categoryCount = info?.category_count ?? (Array.isArray(guild?.categories) ? guild.categories.length : 0);
 
   return (
-    <>
-      <div className="guild-intro-hero" style={heroStyle}>
-        <div className="guild-hero-shade" />
-        <div className="guild-intro-hero-body">
-          <p className="guild-intro-hero-guild"><i className="fa fa-home" /> 会馆介绍</p>
-          <span
-            className="guild-intro-badge"
-            style={{ background: hasCover ? "rgba(255, 255, 255, 0.18)" : "var(--guild-fg-soft)" }}
-          >
-            <i className="fa fa-building-o" />
-          </span>
-          <h1 className="guild-intro-hero-name">{info?.name || "会馆"}</h1>
-          <p className="guild-intro-hero-intro">{info?.intro || "这个会馆还没有简介～"}</p>
+    <div className="gd-panel">
+      <div className="gd-meta">
+        <div className="gd-meta-item">
+          <span className="gd-meta-k">成立时间</span>
+          <span className="gd-meta-v">{info?.created_at ? formatDay(info.created_at) : "—"}</span>
+        </div>
+        <div className="gd-meta-item">
+          <span className="gd-meta-k">成员</span>
+          <span className="gd-meta-v">{info?.member_count ?? guild?.member_count ?? 0}</span>
+        </div>
+        <div className="gd-meta-item">
+          <span className="gd-meta-k">分类</span>
+          <span className="gd-meta-v">{categoryCount}</span>
         </div>
       </div>
 
-      <div className="guild-intro-meta-card">
-        <div className="guild-intro-meta-item">
-          <i className="fa fa-clock-o" />
-          <span className="guild-intro-meta-label">成立时间</span>
-          <span className="guild-intro-meta-value">{info?.created_at ? formatDay(info.created_at) : "—"}</span>
-        </div>
-        <div className="guild-intro-meta-item">
-          <i className="fa fa-users" />
-          <span className="guild-intro-meta-label">成员</span>
-          <span className="guild-intro-meta-value">{info?.member_count ?? 0} 人</span>
-        </div>
-        <div className="guild-intro-meta-item">
-          <i className="fa fa-tags" />
-          <span className="guild-intro-meta-label">分类</span>
-          <span className="guild-intro-meta-value">
-            {info?.category_count ?? (Array.isArray(guild?.categories) ? guild.categories.length : 0)} 个
-          </span>
-        </div>
-      </div>
-
-      <section className="guild-intro-panel">
-        <h2 className="guild-intro-panel-title" style={{ color: ink }}><i className="fa fa-star" /> 会馆介绍</h2>
+      <section className="gd-card-block">
+        <h2 className="gd-sec-title">会馆介绍</h2>
         {content ? (
-          <div className="guild-intro-content">
+          <div className="gd-rich">
             <RichContent html={content} format="html" />
           </div>
         ) : (
-          <p className="guild-intro-placeholder">
+          <p className="gd-placeholder">
             {introQuery.isError ? "会馆介绍暂时无法加载" : "这个会馆还没有填写介绍～"}
           </p>
         )}
       </section>
-    </>
+
+      {leaderQuery.isLoading ? <Skeletons count={1} /> : null}
+
+      {leader ? (
+        <section className="gd-card-block">
+          <h2 className="gd-sec-title">馆长 · {leader?.name || "虚位以待"}</h2>
+          <div className="gd-leader-row">
+            <Avatar src={leader?.avatar} name={leader?.name} size={44} />
+            <div className="gd-leader-info">
+              <span className="gd-leader-name">{leader?.name || "馆长"}</span>
+              <span className="gd-leader-intro">{leader?.intro || "这位馆长很低调～"}</span>
+            </div>
+          </div>
+          {leaderBio ? <blockquote className="gd-quote">{leaderBio}</blockquote> : null}
+          {leaderContent ? (
+            <div className="gd-rich gd-rich--leader">
+              <RichContent html={leaderContent} format="html" />
+            </div>
+          ) : null}
+          {leader?.id ? (
+            <button
+              type="button"
+              className="gd-link"
+              style={{ color: themeInk(theme) }}
+              onClick={() => push("user", { id: leader.id })}
+            >
+              访问馆长主页 <Icon name="forward" size={13} />
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
+      {!leaderQuery.isLoading && !leader ? <p className="gd-placeholder">这个会馆还没有馆长</p> : null}
+    </div>
   );
 }
 
 /* ======================= 会馆详情 ======================= */
 
-type GuildTab = "feed" | "members" | "leader" | "intro";
+type GuildTab = "feed" | "members" | "intro";
 
-const GUILD_TABS: [GuildTab, string][] = [
-  ["feed", "动态"],
-  ["members", "成员"],
-  ["leader", "馆长"],
-  ["intro", "介绍"],
+const GUILD_TABS: { key: GuildTab; label: string }[] = [
+  { key: "feed", label: "动态" },
+  { key: "members", label: "成员" },
+  { key: "intro", label: "介绍" },
 ];
 
+function coverStyle(theme: string): React.CSSProperties {
+  return {
+    background: `linear-gradient(135deg, ${theme} 0%, ${themeTint(theme, "b3")} 52%, ${themeTint(theme, "00")} 100%)`,
+    "--gd-fg": guildForeground(theme),
+    "--gd-ts": isLightHex(theme) ? "none" : "0 1px 3px rgba(0, 0, 0, 0.28)",
+  } as React.CSSProperties;
+}
+
 export function GuildDetailScreen({ slug }: { slug?: string }) {
-  const guildSlug = String(slug || "");
+  const { push } = useNav();
+  const me = useApp((s) => s.user);
   const showToast = useApp((s) => s.showToast);
+  const guildSlug = String(slug || "");
   const [tab, setTab] = useState<GuildTab>("feed");
-  const [bioOpen, setBioOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const guildQuery = useQuery({
     queryKey: ["guild", guildSlug],
@@ -924,185 +592,202 @@ export function GuildDetailScreen({ slug }: { slug?: string }) {
   const guildName = guild?.name || "会馆";
   const theme = themeColor(guild?.theme_color);
   const ink = themeInk(theme);
+  const leader = guild?.leader;
+  const isMember = Boolean(myState?.is_member);
+  const isLeader = Boolean(myState?.is_leader);
+  const isPending = Boolean(myState?.has_pending_request);
+  const latestRequest = myState?.latest_request || null;
+  const rejected = latestRequest?.status === 2 || latestRequest?.status === 3;
+  const otherGuild = myState?.current_guild && myState.current_guild.id !== guild?.id ? myState.current_guild : null;
 
-  // 加入/退出只展示状态：不新增 API，点击时提示到网页版操作
-  const joinHint = () => showToast("加入 / 退出会馆请在网页版操作", "info");
+  const act = async (kind: "join" | "leave" | "cancel") => {
+    const path = `/guilds/${encodeURIComponent(guildSlug)}/${kind === "join" ? "join" : kind === "leave" ? "leave" : "join/cancel"}`;
+    setBusy(true);
+    try {
+      const data = await postGuildAction(path);
+      showToast(data?.message || (kind === "join" ? "申请已提交" : kind === "leave" ? "已退出会馆" : "申请已撤回"));
+      setLeaveOpen(false);
+      setPendingOpen(false);
+      await guildQuery.refetch();
+    } catch (error) {
+      showToast(errorText(error, "操作失败"), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const shareGuild = async () => {
+    try {
+      await shareContent({
+        text: `${guildName} · 妖精论坛会馆`,
+        url: `https://www.yjlt.top/huiguan/${encodeURIComponent(guildSlug)}`,
+      });
+    } catch {
+      showToast("分享未完成", "info");
+    }
+  };
 
   if (!guildSlug) {
     return (
-      <div className="screen">
-        <TopBar title="会馆" back />
-        <EmptyState text="会馆不存在或已被解散" />
-      </div>
+      <Screen appbar={<AppBar back title="会馆" />}>
+        <Empty icon="home" title="会馆不存在或已被解散" />
+      </Screen>
     );
   }
 
   if (guildQuery.isLoading) {
     return (
-      <div className="screen">
-        <TopBar title="会馆" back />
-        <Loading />
-      </div>
+      <Screen appbar={<AppBar back title="会馆" />}>
+        <Skeletons count={3} />
+      </Screen>
     );
   }
 
   if (!guild) {
     return (
-      <div className="screen">
-        <TopBar title="会馆" back />
-        <EmptyState
-          text={guildQuery.isError ? "会馆加载失败" : "会馆不存在或已被解散"}
+      <Screen appbar={<AppBar back title="会馆" />}>
+        <Empty
+          icon="home"
+          title={guildQuery.isError ? "会馆加载失败" : "会馆不存在或已被解散"}
           action={
             guildQuery.isError ? (
-              <button className="btn ghost" onClick={() => void guildQuery.refetch()}>重新加载</button>
+              <button type="button" className="m-btn m-btn--soft" onClick={() => void guildQuery.refetch()}>
+                重新加载
+              </button>
             ) : undefined
           }
         />
-      </div>
+      </Screen>
     );
   }
 
-  const isMember = Boolean(myState?.is_member);
-  const isLeader = Boolean(myState?.is_leader);
-  const isPending = Boolean(myState?.has_pending_request);
-  const latestRequest = myState?.latest_request || null;
-  // 已通过的旧申请不再显示「查看申请进度」，允许重新申请
-  const activeRequest = latestRequest && latestRequest.status !== 1 ? latestRequest : null;
-  const currentOtherGuild = myState?.current_guild && myState.current_guild.id !== guild?.id ? myState.current_guild : null;
-  const leader = guild?.leader;
-  const leaderBio = guild?.leader_bio || leader?.bio || leader?.intro || "";
+  const joinLabel = !me
+    ? "登录后加入"
+    : isMember
+      ? isLeader
+        ? "我是馆长"
+        : "退出会馆"
+      : isPending
+        ? "申请审核中"
+        : rejected
+          ? "重新申请"
+          : "申请加入";
+  const joinPrimary = !me || (!isMember && !isPending);
+  const joinDisabled = busy || isPending || isLeader || Boolean(otherGuild);
+
+  const onJoinClick = () => {
+    if (!me) {
+      showToast("请先登录后再申请加入", "info");
+      push("auth");
+      return;
+    }
+    if (otherGuild) {
+      showToast(`你已加入「${otherGuild.name}」，请先退出`, "info");
+      return;
+    }
+    if (isMember) {
+      if (isLeader) {
+        showToast("馆长需先卸任才能退出会馆", "info");
+        return;
+      }
+      setLeaveOpen(true);
+      return;
+    }
+    if (isPending) {
+      setPendingOpen(true);
+      return;
+    }
+    void act("join");
+  };
 
   return (
-    <div className="screen">
-      <TopBar title={guildName} back />
-      <div
-        className="guild-page guild-detail-page"
-        style={{ background: `linear-gradient(180deg, ${themeTint(theme, "26")} 0%, transparent 340px)` }}
-      >
-        {/* 信息卡 */}
-        <div className="guild-detail-hero" style={{ background: theme, ...heroVars(theme) }}>
-          <div className="guild-hero-shade" />
-          <GuildLogo
-            logoFileId={guild?.logo_file_id}
-            name={guildName}
-            hasLogo={guild?.has_logo}
-            color={guild?.theme_color}
-            size={88}
-            className="guild-logo guild-hero-logo"
-          />
-          <div className="guild-hero-body">
-            <div className="guild-hero-name-row">
-              <h1 className="guild-hero-name">{guildName}</h1>
-              {guild?.id !== undefined && guild?.id !== null ? (
-                <span className="guild-hero-id">#{guild.id}</span>
-              ) : null}
-            </div>
-            <p className="guild-hero-intro">{guild?.intro || "这个会馆还没有简介～"}</p>
-            <div className="guild-hero-meta">
-              <button type="button" className="guild-hero-meta-link" onClick={() => setTab("members")}>
-                <i className="fa fa-users" /> {guild?.member_count ?? 0} 人
-              </button>
-              <button type="button" className="guild-hero-meta-link" onClick={() => setTab("intro")}>
-                <i className="fa fa-book" /> 会馆介绍
-              </button>
-              <span><i className="fa fa-clock-o" /> 创建于 {guild?.created_at ? formatDay(guild.created_at) : "—"}</span>
-            </div>
-          </div>
-
-          {/* 加入区：已加入其他会馆时整块隐藏（与 Web 一致） */}
-          {!currentOtherGuild ? (
-            <div className="guild-join-area">
-              {!myState ? (
-                <button type="button" className="guild-join-btn" onClick={joinHint}>
-                  <i className="fa fa-sign-in" /> 登录后加入
-                </button>
-              ) : isMember ? (
-                <>
-                  <span className="guild-joined-badge"><i className="fa fa-check" /> {isLeader ? "馆长" : "已加入"}</span>
-                  {isLeader ? null : (
-                    <button type="button" className="guild-leave-btn" onClick={joinHint}>退出会馆</button>
-                  )}
-                </>
-              ) : isPending || activeRequest ? (
-                <>
-                  <button type="button" className="guild-join-btn pending" onClick={joinHint}>
-                    <i className="fa fa-hourglass-half" /> 查看申请进度
-                  </button>
-                  <span className="guild-request-inline-status">
-                    {isPending ? "审核中" : activeRequest?.status === 2 ? "未通过" : "已撤回"}
-                  </span>
-                </>
-              ) : (
-                <button type="button" className="guild-join-btn" onClick={joinHint}>
-                  <i className="fa fa-plus" /> 申请加入
-                </button>
-              )}
-            </div>
-          ) : null}
+    <Screen
+      appbar={<AppBar back title={guildName} actions={<IconButton icon="more" label="更多" onClick={() => setMoreOpen(true)} />} />}
+    >
+      <div className="gd-cover" style={coverStyle(theme)}>
+        <div className="gd-cover-body">
+          <h1 className="gd-cover-name">{guildName}</h1>
+          <p className="gd-cover-meta">
+            馆长 {leader?.name || "虚位以待"} · {guild?.member_count ?? 0} 位成员
+          </p>
         </div>
+      </div>
 
-        {/* 馆长条 */}
-        {leader ? (
-          <div className={`guild-leader-bar${bioOpen ? " open" : ""}`}>
-            <button type="button" className="guild-leader-main" onClick={() => setBioOpen(!bioOpen)}>
-              <div className="guild-leader-avatar">
-                <Avatar src={leader?.avatar} name={leader?.name} size={44} />
-              </div>
-              <div className="guild-leader-text">
-                <div className="guild-leader-name">
-                  {leader?.name || "馆长"}
-                  {leader?.title ? <span className="guild-leader-title" style={{ color: ink }}>{leader.title}</span> : null}
-                  <span className="guild-leader-tag" style={{ background: theme, color: contrastText(theme) }}>
-                    <i className="fa fa-crown" /> 馆长
-                  </span>
-                </div>
-                <p className="guild-leader-intro">{leader?.intro || "这位馆长很低调～"}</p>
-              </div>
-              <i className={`fa ${bioOpen ? "fa-chevron-up" : "fa-chevron-down"} guild-leader-toggle`} />
-            </button>
-            {bioOpen ? (
-              <div className="guild-leader-zone">
-                <div className="guild-leader-zone-title" style={{ color: ink }}>
-                  <i className="fa fa-star" /> 馆长专区
-                </div>
-                <p className="guild-leader-bio">{leaderBio || "馆长还没有留下寄语～"}</p>
-                <button type="button" className="guild-leader-link" style={{ color: ink }} onClick={() => setTab("leader")}>
-                  查看馆长介绍页 <i className="fa fa-arrow-right" />
-                </button>
-              </div>
-            ) : null}
+      <p className="gd-brief">{guild?.intro || "这个会馆还没有简介～"}</p>
+
+      <div className="gd-join">
+        {isLeader ? (
+          <div className="gd-leader">
+            <Icon name="shield" size={17} />
+            <span>你是本会馆的馆长</span>
           </div>
         ) : (
-          <div className="guild-leader-bar guild-leader-empty">
-            <i className="fa fa-user-o" /> 馆长虚位以待
-          </div>
+          <button
+            type="button"
+            className={`m-btn m-btn--block ${joinPrimary ? "m-btn--primary" : "m-btn--soft"} ${isMember && !isLeader ? "m-btn--danger" : ""}`.trim()}
+            disabled={joinDisabled}
+            onClick={onJoinClick}
+          >
+            {busy ? "处理中…" : joinLabel}
+          </button>
         )}
-
-        {/* 四个 Tab（Web 详情页分类行的样式） */}
-        <div className="guild-feed-bar">
-          <div className="guild-feed-cats">
-            {GUILD_TABS.map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                className={`guild-cat-chip${tab === key ? " active" : ""}`}
-                style={tab === key ? { background: theme, color: contrastText(theme) } : undefined}
-                onClick={() => setTab(key)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {tab === "feed" ? <GuildFeedTab slug={guildSlug} /> : null}
-        {tab === "members" ? (
-          <GuildMembersTab slug={guildSlug} leader={leader} theme={theme} ink={ink} memberCount={guild?.member_count} />
+        {isPending ? (
+          <button type="button" className="gd-link gd-link--center" onClick={() => setPendingOpen(true)}>
+            申请审核中，查看详情与撤回
+          </button>
         ) : null}
-        {tab === "leader" ? <GuildLeaderTab slug={guildSlug} guild={guild} theme={theme} ink={ink} /> : null}
-        {tab === "intro" ? <GuildIntroTab slug={guildSlug} guild={guild} theme={theme} ink={ink} /> : null}
+        {otherGuild ? <p className="gd-join-note">你已加入「{otherGuild.name}」，退出后才能加入本会馆</p> : null}
+        {isMember && !isLeader ? <p className="gd-join-note">你是本会馆成员</p> : null}
       </div>
-    </div>
+
+      <div className="gd-seg">
+        <Segmented<GuildTab> items={GUILD_TABS} value={tab} onChange={setTab} />
+      </div>
+
+      {tab === "feed" ? <GuildFeedTab slug={guildSlug} /> : null}
+      {tab === "members" ? (
+        <GuildMembersTab slug={guildSlug} theme={theme} ink={ink} memberCount={guild?.member_count} />
+      ) : null}
+      {tab === "intro" ? <GuildInfoTab slug={guildSlug} guild={guild} theme={theme} /> : null}
+
+      <Sheet open={moreOpen} title="会馆操作" onClose={() => setMoreOpen(false)}>
+        <div className="m-list gd-sheet-list">
+          <Cell icon="share" label="分享会馆" chevron={false} onClick={() => { setMoreOpen(false); void shareGuild(); }} />
+          <Cell
+            icon="user"
+            label={`查看成员（${guild?.member_count ?? 0}）`}
+            onClick={() => { setTab("members"); setMoreOpen(false); }}
+          />
+          <Cell icon="info" label="会馆介绍" onClick={() => { setTab("intro"); setMoreOpen(false); }} />
+          <Cell icon="refresh" label="刷新" chevron={false} onClick={() => { setMoreOpen(false); void guildQuery.refetch(); }} />
+        </div>
+      </Sheet>
+
+      <Sheet
+        open={pendingOpen}
+        title="入馆申请"
+        onClose={() => setPendingOpen(false)}
+        footer={
+          <button type="button" className="m-btn m-btn--ghost" disabled={busy} onClick={() => void act("cancel")}>
+            撤回申请
+          </button>
+        }
+      >
+        <p className="gd-sheet-text">申请已提交，等待馆长审核。</p>
+        {latestRequest?.reason ? <p className="gd-sheet-sub">申请理由：{latestRequest.reason}</p> : null}
+        {latestRequest?.created_at ? <p className="gd-sheet-sub">提交时间：{formatDate(latestRequest.created_at)}</p> : null}
+      </Sheet>
+
+      <Confirm
+        open={leaveOpen}
+        title="退出会馆"
+        confirmText="退出"
+        onConfirm={() => void act("leave")}
+        onCancel={() => setLeaveOpen(false)}
+      >
+        退出后将失去会馆成员身份，确定要退出「{guildName}」吗？
+      </Confirm>
+    </Screen>
   );
 }
 
@@ -1124,36 +809,36 @@ export function ArticleScreen({ id }: { id?: string | number }) {
 
   if (!articleId) {
     return (
-      <div className="screen">
-        <TopBar title="文章" back />
-        <EmptyState text="文章不存在" />
-      </div>
+      <Screen appbar={<AppBar back title="文章" />}>
+        <Empty icon="info" title="文章不存在" />
+      </Screen>
     );
   }
 
   if (articleQuery.isLoading) {
     return (
-      <div className="screen">
-        <TopBar title="文章" back />
-        <Loading />
-      </div>
+      <Screen appbar={<AppBar back title="文章" />}>
+        <Skeletons count={3} />
+      </Screen>
     );
   }
 
   const article: any = articleQuery.data?.article;
   if (!article) {
     return (
-      <div className="screen">
-        <TopBar title="文章" back />
-        <EmptyState
-          text={articleQuery.isError ? "文章加载失败" : "文章不存在"}
+      <Screen appbar={<AppBar back title="文章" />}>
+        <Empty
+          icon="info"
+          title={articleQuery.isError ? "文章加载失败" : "文章不存在"}
           action={
             articleQuery.isError ? (
-              <button className="btn ghost" onClick={() => void articleQuery.refetch()}>重新加载</button>
+              <button type="button" className="m-btn m-btn--soft" onClick={() => void articleQuery.refetch()}>
+                重新加载
+              </button>
             ) : undefined
           }
         />
-      </div>
+      </Screen>
     );
   }
 
@@ -1173,81 +858,101 @@ export function ArticleScreen({ id }: { id?: string | number }) {
   const createdText = formatDate(article?.created_at);
   const updatedText = formatDate(article?.updated_at);
 
+  const shareArticle = async () => {
+    try {
+      await shareContent({
+        text: article?.title || "妖精论坛文章",
+        url: `https://www.yjlt.top/article/${encodeURIComponent(articleId)}`,
+      });
+    } catch {
+      showToast("分享未完成", "info");
+    }
+  };
+
   return (
-    <div className="screen">
-      <TopBar title="文章" back />
-      <div className="article-page">
-        <div className="article-main">
-          <h1 className="article-title">{article?.title || "未命名文章"}</h1>
+    <Screen
+      appbar={<AppBar back title="文章" actions={<IconButton icon="share" label="分享" onClick={() => void shareArticle()} />} />}
+    >
+      <article className="gd-ar">
+        <h1 className="gd-ar-title">{article?.title || "未命名文章"}</h1>
 
-          <div className="article-meta">
-            {article?.guild_name ? (
-              <button
-                type="button"
-                className="article-guild-tag"
-                style={{ background: theme, color: contrastText(theme) }}
-                onClick={() => {
-                  if (article?.guild_slug) push("guild", { slug: article.guild_slug });
-                }}
-              >
-                <i className="fa fa-home" /> {article.guild_name}
-              </button>
-            ) : null}
-
-            {author?.id ? (
-              <button
-                type="button"
-                className="article-meta-item article-meta-author"
-                onClick={() => push("user", { id: author.id })}
-              >
-                <i className="fa fa-pencil" /> {authorName}
-              </button>
-            ) : (
-              <span className="article-meta-item"><i className="fa fa-pencil" /> {authorName}</span>
-            )}
-
-            {participants.length > 0 ? (
-              <span className="article-meta-participants">
-                <i className="fa fa-users" /> 参与：
-                {participants.map((participant: any, index: number) => (
-                  <button
-                    type="button"
-                    className="article-participant"
-                    key={`${participant?.user_id || index}`}
-                    title={participant?.user_name || ""}
-                    onClick={() => {
-                      if (participant?.user_id) push("user", { id: participant.user_id });
-                    }}
-                  >
-                    <Avatar src={participant?.avatar} name={participant?.user_name} size={22} />
-                    <span className="article-participant-name">{participant?.user_name || "参与者"}</span>
-                  </button>
-                ))}
-              </span>
-            ) : null}
-
-            {createdText ? (
-              <span className="article-meta-item"><i className="fa fa-clock-o" /> 创建 {createdText}</span>
-            ) : null}
-            {updatedText ? (
-              <span className="article-meta-item"><i className="fa fa-refresh" /> 更新 {updatedText}</span>
-            ) : null}
-            <span className="article-meta-item"><i className="fa fa-eye" /> {article?.views || 0}</span>
-          </div>
-
-          {cover ? <img className="article-cover" src={avatarUrl(cover)} alt="" /> : null}
-
-          <div className="article-content">
-            {content ? (
-              <div className="post-body-html">
-                <RichContent html={content} format={contentFormat} />
-              </div>
-            ) : (
-              <p className="muted small">这篇文章还没有正文。</p>
-            )}
-          </div>
+        <div className="gd-ar-author">
+          <Avatar src={author?.avatar || article?.user_avatar} name={authorName} size={28} />
+          {author?.id ? (
+            <button type="button" className="gd-ar-author-name" onClick={() => push("user", { id: author.id })}>
+              {authorName}
+            </button>
+          ) : (
+            <span className="gd-ar-author-name">{authorName}</span>
+          )}
+          {article?.guild_name ? (
+            <button
+              type="button"
+              className="gd-ar-guild"
+              style={{ background: themeTint(theme, "24"), color: themeInk(theme) }}
+              onClick={() => {
+                if (article?.guild_slug) push("guild", { slug: article.guild_slug });
+              }}
+            >
+              {article.guild_name}
+            </button>
+          ) : null}
         </div>
-      </div>
-    </div>
+
+        <div className="gd-ar-meta">
+          {createdText ? <span>创建 {createdText}</span> : null}
+          {updatedText ? <span>更新 {updatedText}</span> : null}
+          {participants.length > 0 ? <span>{participants.length} 人参与</span> : null}
+        </div>
+
+        {cover ? <img className="gd-ar-cover" src={avatarUrl(cover)} alt="" loading="lazy" /> : null}
+
+        <div className="gd-ar-body">
+          {content ? (
+            <RichContent html={content} format={contentFormat} />
+          ) : (
+            <p className="gd-placeholder">这篇文章还没有正文。</p>
+          )}
+        </div>
+
+        {participants.length > 0 ? (
+          <div className="gd-ar-people">
+            <span className="gd-sec-title">参与者</span>
+            <div className="gd-ar-people-row">
+              {participants.map((participant: any, index: number) => (
+                <button
+                  type="button"
+                  className="gd-ar-person"
+                  key={`${participant?.user_id || index}`}
+                  title={participant?.user_name || ""}
+                  onClick={() => {
+                    if (participant?.user_id) push("user", { id: participant.user_id });
+                  }}
+                >
+                  <Avatar src={participant?.avatar} name={participant?.user_name} size={22} />
+                  <span>{participant?.user_name || "参与者"}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="gd-ar-stats">
+          <span>
+            <Icon name="eye" size={13} /> {article?.views || 0} 阅读
+          </span>
+          {Number(article?.likes) > 0 ? (
+            <span>
+              <Icon name="like" size={13} /> {article.likes}
+            </span>
+          ) : null}
+          {Number(article?.comment_count) > 0 ? (
+            <span>
+              <Icon name="comment" size={13} /> {article.comment_count}
+            </span>
+          ) : null}
+        </div>
+      </article>
+    </Screen>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { registerBackHandler } from "../lib/back";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
@@ -142,11 +142,48 @@ export function LoadMore({ loading, hasMore, onClick }: { loading?: boolean; has
   );
 }
 
-export function RichContent({ html, format }: { html?: string | null; format?: string | null }) {
+const PURIFY_CONFIG = {
+  ALLOWED_TAGS: [
+    "p", "br", "strong", "b", "em", "i", "u", "s", "del", "code", "pre", "blockquote",
+    "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "a", "img", "figure", "figcaption",
+    "table", "thead", "tbody", "tr", "th", "td", "hr", "span", "div",
+  ],
+  ALLOWED_ATTR: ["href", "src", "alt", "title", "target", "rel", "class", "colspan", "rowspan", "data-embed", "data-id", "data-internal"],
+  ALLOW_DATA_ATTR: true,
+  FORBID_TAGS: ["style", "form", "input", "button", "select", "textarea", "dialog", "template", "iframe", "object", "embed", "link", "meta", "script"],
+  FORBID_ATTR: ["style"],
+};
+
+let hooksInstalled = false;
+function installPurifyHooks() {
+  if (hooksInstalled) return;
+  hooksInstalled = true;
+  DOMPurify.addHook("afterSanitizeAttributes", (node: any) => {
+    if (node.tagName === "A") {
+      const href = String(node.getAttribute("href") || "");
+      if (href.startsWith("/")) {
+        node.setAttribute("data-internal", "1");
+        node.removeAttribute("target");
+      } else if (href) {
+        node.setAttribute("target", "_blank");
+        node.setAttribute("rel", "noopener noreferrer nofollow");
+      }
+    }
+    if (node.tagName === "IMG") {
+      node.setAttribute("loading", "lazy");
+      node.setAttribute("referrerpolicy", "no-referrer");
+    }
+  });
+}
+
+export const RichContent = React.memo(function RichContent({ html, format }: { html?: string | null; format?: string | null }) {
   const ref = useRef<HTMLDivElement>(null);
   const { push } = useNav();
-  const raw = format === "markdown" ? (marked.parse(html || "") as string) : html || "";
-  const clean = DOMPurify.sanitize(raw, { ADD_ATTR: ["target", "rel"] });
+  const clean = useMemo(() => {
+    const raw = format === "markdown" ? (marked.parse(html || "") as string) : html || "";
+    installPurifyHooks();
+    return DOMPurify.sanitize(raw, PURIFY_CONFIG as any);
+  }, [html, format]);
 
   useEffect(() => {
     const root = ref.current;
@@ -211,6 +248,21 @@ export function RichContent({ html, format }: { html?: string | null; format?: s
   }, [clean]);
 
   const onClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const internal = (event.target as HTMLElement).closest("a[data-internal]") as HTMLAnchorElement | null;
+    if (internal) {
+      const href = internal.getAttribute("href") || "";
+      const match = href.match(/^\/(post|users?|article|character|huiguan)\/([^/?#]+)/);
+      if (match) {
+        event.preventDefault();
+        const [, kind, id] = match;
+        if (kind === "post") push("post", { id });
+        else if (kind === "users" || kind === "user") push("user", { id });
+        else if (kind === "article") push("article", { id });
+        else if (kind === "character") push("character-detail", { id });
+        else if (kind === "huiguan") push("guild", { slug: id });
+        return;
+      }
+    }
     const node = (event.target as HTMLElement).closest("[data-embed]") as HTMLElement | null;
     if (!node) return;
     const type = node.dataset.embed;
@@ -224,7 +276,7 @@ export function RichContent({ html, format }: { html?: string | null; format?: s
   };
 
   return <div ref={ref} className="rich-content" onClick={onClick} dangerouslySetInnerHTML={{ __html: clean }} />;
-}
+});
 
 export function PostCard({ post, onOpen }: { post: Post; onOpen?: () => void }) {
   const { push } = useNav();

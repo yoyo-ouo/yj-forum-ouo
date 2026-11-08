@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { api } from "./api";
-import { getAppInfo, getStartupState, saveSettings, setStatusBar } from "./native";
+import { getAppInfo, getStartupState, saveSettings, setStatusBar, clearSession } from "./native";
 import type { AppInfo, StartupState, Theme, UpdateManifest, User } from "./types";
 
 export const PRIVACY_VERSION = "2.2";
@@ -57,13 +57,14 @@ export const useApp = create<AppState>((set, get) => ({
   toast: null,
 
   async boot() {
-    const [appInfo, startup, user] = await Promise.all([
+    // 先只读本地状态：未同意隐私政策前不得发起任何网络请求
+    const [appInfo, startup] = await Promise.all([
       getAppInfo().catch(() => null),
       getStartupState().catch(() => null),
-      api.me().catch(() => null),
     ]);
-    const theme = (startup?.theme as Theme) || "auto";
     const consented = startup?.privacyAgreedVersion === PRIVACY_VERSION;
+    const user = consented ? await api.me().catch(() => null) : null;
+    const theme = (startup?.theme as Theme) || "auto";
     set({
       booted: true,
       appInfo,
@@ -75,6 +76,16 @@ export const useApp = create<AppState>((set, get) => ({
     });
     applyTheme(theme);
     if (user) void api.messagesSummary().then((summary) => set({ unread: summary })).catch(() => undefined);
+  },
+
+  async consent() {
+    set({ consented: true });
+    await saveSettings({ privacyAgreedVersion: PRIVACY_VERSION });
+    const user = await api.me().catch(() => null);
+    if (user) {
+      set({ user });
+      void api.messagesSummary().then((summary) => set({ unread: summary })).catch(() => undefined);
+    }
   },
 
   async refreshUser() {
@@ -96,11 +107,6 @@ export const useApp = create<AppState>((set, get) => ({
     void saveSettings({ yearMode });
   },
 
-  async consent() {
-    set({ consented: true });
-    await saveSettings({ privacyAgreedVersion: PRIVACY_VERSION });
-  },
-
   showToast(message, kind = "info") {
     set({ toast: { message, kind } });
     window.setTimeout(() => {
@@ -114,6 +120,8 @@ export const useApp = create<AppState>((set, get) => ({
 
   async logout() {
     await api.logout().catch(() => undefined);
+    // 同步清掉原生 Cookie 与 ALTCHA 凭证，避免登出后授予仍被复用
+    await clearSession().catch(() => undefined);
     set({ user: null, unread: { likes: 0, comments: 0, system: 0, chat: 0 } });
   },
 }));

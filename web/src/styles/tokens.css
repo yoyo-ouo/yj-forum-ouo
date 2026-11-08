@@ -2,10 +2,10 @@
 :root{
     --color-text-primary: #1A2423;
     --color-text-secondary: #2E4659;
-    --color-text-tertiary: #96A9A7;
+    --color-text-tertiary: #5A7573;
     --color-text-light: #E8EEED;
     --color-text-muted: #D8E6E4;
-    --color-text-accent: #579491;
+    --color-text-accent: #3F7472;
     --color-text-accent-light: #B4D2D8;
     --color-text-accent-muted: #84A8B9;
 
@@ -49,14 +49,14 @@
     --color-shadow-primary: rgba(106, 140, 137, 0.25);
     --color-shadow-secondary: rgba(87, 148, 145, 0.25);
 
-    --color-primary: #6A8C89;
-    --color-secondary: #579491;
+    --color-primary: #557C79;
+    --color-secondary: #457875;
 }
 
 .night-mode {
     --color-text-primary: #E8EEED;
     --color-text-secondary: #D8E6E4;
-    --color-text-tertiary: #84A8B9;
+    --color-text-tertiary: #B4CCD3;
     --color-text-light: #B4D2D8;
     --color-text-muted: #B4D2D8;
     --color-text-accent: #B4D2D8;

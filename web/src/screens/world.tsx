@@ -1,16 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { sse } from "../lib/native";
 import { useNav } from "../lib/nav";
 import { useApp } from "../lib/store";
-import { Avatar, RichContent, TopBar } from "../components/ui";
+import { AppBar, Avatar, Empty, Screen, Skeletons } from "../components/mobile";
+import { Icon } from "../components/icons";
+import { RichContent } from "../components/ui";
 import { timeAgo } from "../lib/format";
-import "../styles/world-messages-page.css";
 
 /**
- * 世界频道（tab 根页）。消息结构 / 输入条沿用论坛 Web 的 WorldChannelModal：
- * `.world-msg` 左右布局、`.world-msg-meta` 元信息、`.world-msg-bubble` + `.world-msg-content` 气泡，
- * 底部 `.world-input-bar`；首屏 50 条、向上翻页 200 条、SSE 增量去重 + 断线补拉、2 秒发言冷却。
+ * 世界频道（底部 Tab 一级页）。
+ * 移动端重做：消息按「5 分钟内同作者」合并成组，组首才显示头像/昵称/时间；
+ * 输入区固定在 TabBar 上方（Screen footer），textarea 38–96 自适应，仅超长时提示字数。
+ * 业务侧保留：SSE 订阅/取消、首屏 50 条 + 向上翻页 200 条、乐观发送、去重、
+ * 2 秒限流、贴底跟随滚动、后台回前台补拉。
  */
 
 /** 首屏条数（对齐 Web WORLD_PAGE_SIZE） */
@@ -19,8 +22,12 @@ const PAGE_SIZE = 50;
 const HISTORY_SIZE = 200;
 /** 后端单条上限（纯文本 2000 字） */
 const MAX_CHARS = 2000;
+/** 超过这个字数才显示计数，避免常驻噪音 */
+const COUNTER_FROM = 1400;
 /** 与服务端 2 秒限流对齐的本地冷却 */
 const SEND_COOLDOWN_MS = 2000;
+/** 同作者在该时间窗内的连续发言合并为一组 */
+const GROUP_WINDOW_MS = 5 * 60 * 1000;
 
 /** 世界频道消息：后端字段为 sender_*，同时兼容旧契约的 user_* 命名。 */
 interface WorldMessageItem {
@@ -40,21 +47,28 @@ interface WorldMessageItem {
   is_admin?: boolean;
 }
 
+/** 乐观发送的本地消息（尚未拿到服务端 id） */
+interface PendingMessage {
+  tempId: string;
+  content: string;
+  createdAt: string;
+}
+
 type SseListener = Awaited<ReturnType<typeof sse.addListener>>;
 
-/** SSE 连接状态：实时 / 重连中（自动降级）/ 连接中 */
-type LiveState = "connecting" | "live" | "polling";
+/** 弱提示用的连接状态：不暴露任何运维词汇 */
+type LiveState = "connecting" | "live" | "offline";
 
-const LIVE_LABEL: Record<LiveState, string> = {
+const LIVE_TEXT: Record<LiveState, string> = {
   connecting: "连接中",
-  live: "实时",
-  polling: "轮询",
+  live: "在线",
+  offline: "已断开",
 };
 
 const LIVE_TITLE: Record<LiveState, string> = {
-  connecting: "正在连接实时推送",
-  live: "SSE 实时推送",
-  polling: "实时连接中断，正在自动重连",
+  connecting: "正在连接世界频道",
+  live: "世界频道已连接",
+  offline: "世界频道暂时断开，正在自动重试",
 };
 
 function messageId(item?: WorldMessageItem | null): number {
@@ -111,15 +125,17 @@ function parseWorldPayload(payload: any): WorldMessageItem | null {
   return candidate as WorldMessageItem;
 }
 
-/** 单条消息：头像 + 元信息 + 气泡；本人 `.me` 靠右（与 Web WorldMessageItem 一致）。 */
+/** 单条消息：组首才显示头像与昵称；本人靠右、主色气泡。 */
 function WorldMessageRow({
   item,
   mine,
+  head,
   parentName,
   onOpenUser,
 }: {
   item: WorldMessageItem;
   mine: boolean;
+  head: boolean;
   parentName?: string;
   onOpenUser: (id: string) => void;
 }) {
@@ -127,80 +143,64 @@ function WorldMessageRow({
   const uid = senderId(item);
   const avatar = senderAvatar(item);
   return (
-    <article className={`world-msg${mine ? " me" : ""}`} data-message-id={item.id}>
-      {uid ? (
-        <button
-          type="button"
-          className="world-msg-avatar"
-          aria-label={`${name} 的个人中心`}
-          onClick={() => onOpenUser(uid)}
-        >
-          <Avatar src={avatar} name={name} size={36} />
-        </button>
+    <div
+      className={`wd-row ${mine ? "wd-row--mine" : "wd-row--them"} ${head ? "wd-row--head" : "wd-row--cont"}`}
+      data-message-id={item.id}
+    >
+      {head ? (
+        uid ? (
+          <button type="button" className="wd-avatar" aria-label={`${name} 的个人主页`} onClick={() => onOpenUser(uid)}>
+            <Avatar src={avatar} name={name} size={32} />
+          </button>
+        ) : (
+          <span className="wd-avatar">
+            <Avatar src={avatar} name={name} size={32} />
+          </span>
+        )
       ) : (
-        <span className="world-msg-avatar">
-          <Avatar src={avatar} name={name} size={36} />
-        </span>
+        <span className="wd-gutter" aria-hidden="true" />
       )}
-      <div className="world-msg-main">
-        <div className="world-msg-meta">
-          {uid ? (
-            <button type="button" className="world-msg-name" onClick={() => onOpenUser(uid)}>
-              {name}
-            </button>
-          ) : (
-            <span className="world-msg-name">{name}</span>
-          )}
-          {item.is_admin ? (
-            <span className="world-admin-chip" title="论坛管理团队">
-              <i className="fa fa-shield" aria-hidden="true" />
-              管理团队
-            </span>
-          ) : null}
-          {item.guild_name ? (
-            <span
-              className="user-guild-chip"
-              title={`会馆：${item.guild_name}`}
-              style={{ background: "var(--color-bg-icon)", color: "var(--color-text-secondary)" }}
-            >
-              <i className="fa fa-home" aria-hidden="true" />
-              {item.guild_name}
-            </span>
-          ) : null}
-          {item.created_at ? (
-            <time className="world-msg-time" dateTime={item.created_at}>
-              {timeAgo(item.created_at)}
-            </time>
-          ) : null}
-        </div>
-        {parentName ? (
-          <div className="world-msg-reply">
-            <i className="fa fa-reply" aria-hidden="true" /> 回复 {parentName}
+
+      <div className="wd-col">
+        {head ? (
+          <div className="wd-meta">
+            {!mine ? (
+              uid ? (
+                <button type="button" className="wd-name" onClick={() => onOpenUser(uid)}>
+                  {name}
+                </button>
+              ) : (
+                <span className="wd-name">{name}</span>
+              )
+            ) : null}
+            {!mine && item.is_admin ? (
+              <span className="wd-chip" title="论坛管理团队">
+                <Icon name="shield" size={10} />
+                管理
+              </span>
+            ) : null}
+            {!mine && item.guild_name ? (
+              <span className="wd-chip" title={`会馆：${item.guild_name}`}>
+                <Icon name="home" size={10} />
+                {item.guild_name}
+              </span>
+            ) : null}
+            {item.created_at ? (
+              <time className="wd-time" dateTime={item.created_at}>
+                {timeAgo(item.created_at)}
+              </time>
+            ) : null}
           </div>
         ) : null}
-        <div className="world-msg-bubble">
-          <div className="world-msg-content">
+
+        {parentName ? <div className="wd-reply">回复 {parentName}</div> : null}
+
+        <div className={`wd-bubble${mine ? " wd-bubble--mine" : ""}`}>
+          <div className="wd-txt">
             <RichContent html={item.content} format={item.content_format} />
           </div>
         </div>
       </div>
-    </article>
-  );
-}
-
-/** 首屏骨架（对齐 Web WorldMessagesSkeleton）。 */
-function WorldMessagesSkeleton() {
-  return (
-    <div className="world-skeleton-list" aria-label="正在加载世界频道消息">
-      {[0, 1, 2].map((index) => (
-        <div className="world-skeleton" key={index}>
-          <span className="world-skeleton-avatar" />
-          <span className="world-skeleton-lines">
-            <i />
-            <i />
-          </span>
-        </div>
-      ))}
     </div>
   );
 }
@@ -211,6 +211,7 @@ export function WorldScreen() {
   const { push } = useNav();
 
   const [messages, setMessages] = useState<WorldMessageItem[]>([]);
+  const [pending, setPending] = useState<PendingMessage[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -227,6 +228,9 @@ export function WorldScreen() {
   const sendingRef = useRef(false);
   const cooldownRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const myId = user?.id ? String(user.id) : "";
 
   const setList = useCallback((next: WorldMessageItem[]) => {
     messagesRef.current = next;
@@ -342,7 +346,7 @@ export function WorldScreen() {
       if (!active) return;
       if (payload?.channel && payload.channel !== "world") return;
       if (payload?.state) {
-        setLive("polling");
+        setLive("offline");
         return;
       }
       const type = String(payload?.event || "message");
@@ -360,7 +364,7 @@ export function WorldScreen() {
     const onState = (payload: any) => {
       if (!active) return;
       if (payload?.channel && payload.channel !== "world") return;
-      setLive(payload?.state === "connected" ? "live" : "polling");
+      setLive(payload?.state === "connected" ? "live" : "offline");
     };
     void sse
       .addListener("sse", onEvent)
@@ -396,6 +400,15 @@ export function WorldScreen() {
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [refreshAfter]);
 
+  // 输入框自适应高度：38（一行）到 96（约四行）。
+  useLayoutEffect(() => {
+    const node = inputRef.current;
+    if (!node) return;
+    node.style.height = "auto";
+    const next = Math.min(96, Math.max(38, node.scrollHeight));
+    node.style.height = `${next}px`;
+  }, [draft]);
+
   const handleScroll = () => {
     const node = scrollRef.current;
     if (!node) return;
@@ -421,13 +434,22 @@ export function WorldScreen() {
     }
     sendingRef.current = true;
     setSending(true);
+    const tempId = `tmp-${now}`;
+    const html = plainTextToHtml(text);
+    // 乐观发送：先以本地消息占位，失败再回滚。
+    setPending((list) => [...list, { tempId, content: html, createdAt: new Date().toISOString() }]);
+    setDraft("");
+    nearBottomRef.current = true;
+    requestAnimationFrame(() => scrollToBottom("smooth"));
     try {
-      await api.sendWorld(plainTextToHtml(text));
-      setDraft("");
+      await api.sendWorld(html);
       cooldownRef.current = Date.now() + SEND_COOLDOWN_MS;
       await refreshAfter();
+      setPending((list) => list.filter((item) => item.tempId !== tempId));
       requestAnimationFrame(() => scrollToBottom("smooth"));
     } catch (err) {
+      setPending((list) => list.filter((item) => item.tempId !== tempId));
+      setDraft((current) => (current ? current : text));
       if (err instanceof ApiError && err.status === 429) {
         cooldownRef.current = Date.now() + SEND_COOLDOWN_MS;
         showToast("发言太快，稍后再试", "error");
@@ -446,125 +468,156 @@ export function WorldScreen() {
     return map;
   }, [messages]);
 
-  const myId = user?.id ? String(user.id) : "";
+  /** 5 分钟内同一作者合并为一组，组首才渲染头像/昵称/时间。 */
+  const rows = useMemo(() => {
+    return messages.map((item, index) => {
+      const previous = index > 0 ? messages[index - 1] : null;
+      const stamp = Date.parse(item.created_at || "") || 0;
+      const previousStamp = Date.parse(previous?.created_at || "") || 0;
+      const sameAuthor =
+        Boolean(previous) &&
+        senderId(previous as WorldMessageItem) === senderId(item) &&
+        (senderName(previous as WorldMessageItem) || "匿名") === (senderName(item) || "匿名");
+      const withinWindow = stamp > 0 && previousStamp > 0 && Math.abs(stamp - previousStamp) <= GROUP_WINDOW_MS;
+      const head = !previous || !sameAuthor || !withinWindow || Boolean(item.parent_id);
+      return {
+        item,
+        mine: Boolean(myId) && senderId(item) === myId,
+        head,
+        parentName: item.parent_id ? parentNames.get(Number(item.parent_id)) : undefined,
+      };
+    });
+  }, [messages, myId, parentNames]);
+
   const openUser = (id: string) => push("user", { id });
+  const counterVisible = draft.length > COUNTER_FROM;
 
   return (
-    <div className="world-page">
-      <TopBar
-        title="世界频道"
-        actions={
-          <span
-            className={`world-live ${live === "live" ? "live" : live === "polling" ? "polling" : ""}`}
-            title={LIVE_TITLE[live]}
-          >
-            <i className="fa fa-circle" aria-hidden="true" />
-            {LIVE_LABEL[live]}
-          </span>
-        }
-      />
-
-      <div className="world-message-wrap">
-        <div className="world-messages" ref={scrollRef} onScroll={handleScroll} aria-live="polite">
-          {loading && messages.length === 0 ? (
-            <WorldMessagesSkeleton />
-          ) : error && messages.length === 0 ? (
-            <div className="world-state world-state-error">
-              <i className="fa fa-exclamation-circle" aria-hidden="true" />
-              <span>{error}</span>
-              <button type="button" className="world-state-btn" onClick={() => void loadInitial()}>
-                重新加载
-              </button>
+    <Screen
+      className="wd-screen"
+      bodyClassName="wd-body"
+      appbar={
+        <AppBar
+          title="世界频道"
+          actions={
+            <span className={`wd-live wd-live--${live}`} title={LIVE_TITLE[live]} role="status">
+              <i className="wd-live-dot" aria-hidden="true" />
+              <span className="wd-live-txt">{LIVE_TEXT[live]}</span>
+            </span>
+          }
+        />
+      }
+      footer={
+        <div className="wd-composer">
+          {counterVisible ? (
+            <div className="wd-counter" aria-live="polite">
+              {draft.length} / {MAX_CHARS}
             </div>
-          ) : messages.length === 0 ? (
-            <div className="world-state">
-              <i className="fa fa-comments-o" aria-hidden="true" />
-              <span>世界频道还很安静，来说第一句话吧。</span>
-            </div>
-          ) : (
-            <>
-              {hasMore ? (
-                <button type="button" className="world-load-older" disabled={loadingOlder} onClick={() => void loadOlder()}>
-                  {loadingOlder ? (
-                    <>
-                      <i className="fa fa-spinner fa-spin" aria-hidden="true" /> 加载中…
-                    </>
-                  ) : (
-                    <>
-                      <i className="fa fa-arrow-up" aria-hidden="true" /> 加载更早消息
-                    </>
-                  )}
-                </button>
-              ) : (
-                <div className="world-start">已加载全部消息</div>
-              )}
-              {messages.map((item) => (
-                <WorldMessageRow
-                  key={String(item.id)}
-                  item={item}
-                  mine={Boolean(myId) && senderId(item) === myId}
-                  parentName={item.parent_id ? parentNames.get(Number(item.parent_id)) : undefined}
-                  onOpenUser={openUser}
-                />
-              ))}
-            </>
-          )}
+          ) : null}
+          <div className="wd-inputrow">
+            <textarea
+              ref={inputRef}
+              className="wd-input"
+              value={draft}
+              rows={1}
+              maxLength={MAX_CHARS}
+              aria-label="世界频道输入框"
+              placeholder={user ? "说点什么…" : "登录后即可参与世界频道"}
+              onChange={(event) => setDraft(event.target.value)}
+            />
+            <button
+              type="button"
+              className="wd-send"
+              aria-label="发送"
+              disabled={sending || !draft.trim()}
+              onClick={() => void send()}
+            >
+              <Icon name="send" size={19} />
+            </button>
+          </div>
         </div>
-        {pendingNew > 0 ? (
-          <button type="button" className="world-new-messages" onClick={() => scrollToBottom("smooth")}>
-            <i className="fa fa-arrow-down" aria-hidden="true" />
-            {pendingNew} 条新消息
-          </button>
-        ) : null}
-      </div>
-
+      }
+    >
       {error && messages.length > 0 ? (
-        <div className="world-error-inline">
-          <i className="fa fa-exclamation-circle" aria-hidden="true" />
-          <span>{error}</span>
+        <div className="wd-errorbar" role="status">
+          <span className="wd-errorbar-txt">{error}</span>
           <button type="button" onClick={() => void loadInitial()}>
             重试
           </button>
         </div>
       ) : null}
 
-      <div className="world-input-bar">
-        <div className="world-input-hint">
-          <span className="world-input-channel">
-            <i className="fa fa-globe" aria-hidden="true" /> 世界频道
-          </span>
-          <span>
-            {MAX_CHARS} 字 · 2 秒内限发一条
-            {!user ? (
-              <>
-                {" · "}
-                <button type="button" onClick={() => push("auth")}>
-                  登录
+      <div className="wd-threadwrap">
+        <div
+          className={`wd-thread${messages.length === 0 ? " wd-thread--top" : ""}`}
+          ref={scrollRef}
+          onScroll={handleScroll}
+          aria-live="polite"
+        >
+          {loading && messages.length === 0 ? (
+            <Skeletons count={4} />
+          ) : error && messages.length === 0 ? (
+            <Empty
+              icon="info"
+              title="世界频道加载失败"
+              hint={error}
+              action={
+                <button type="button" className="m-btn m-btn--primary m-btn--sm" onClick={() => void loadInitial()}>
+                  重新加载
                 </button>
-                后发言
-              </>
-            ) : null}
-          </span>
+              }
+            />
+          ) : messages.length === 0 ? (
+            <Empty icon="globe" title="世界频道还很安静" hint="来说第一句话吧" />
+          ) : (
+            <>
+              {hasMore ? (
+                <button type="button" className="wd-older" disabled={loadingOlder} onClick={() => void loadOlder()}>
+                  {loadingOlder ? "加载中…" : "加载更早消息"}
+                </button>
+              ) : (
+                <div className="wd-end">— 已加载全部 —</div>
+              )}
+
+              {rows.map((row) => (
+                <WorldMessageRow
+                  key={String(row.item.id)}
+                  item={row.item}
+                  mine={row.mine}
+                  head={row.head}
+                  parentName={row.parentName}
+                  onOpenUser={openUser}
+                />
+              ))}
+
+              {pending.map((item) => (
+                <div key={item.tempId} className="wd-row wd-row--mine wd-row--head wd-row--pending">
+                  <span className="wd-avatar">
+                    <Avatar src={user?.avatar} name={user?.name} size={32} />
+                  </span>
+                  <div className="wd-col">
+                    <div className="wd-meta">
+                      <span className="wd-time">发送中…</span>
+                    </div>
+                    <div className="wd-bubble wd-bubble--mine">
+                      <div className="wd-txt">
+                        <RichContent html={item.content} format="html" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
-        <div className="world-compose">
-          <textarea
-            value={draft}
-            rows={2}
-            maxLength={MAX_CHARS}
-            aria-label="世界频道输入框"
-            placeholder={user ? "在世界频道说点什么…" : "登录后即可参与世界频道…"}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-          <button
-            type="button"
-            className="btn primary world-compose-send"
-            disabled={sending || !draft.trim()}
-            onClick={() => void send()}
-          >
-            {sending ? "发送中…" : "发送"}
+
+        {pendingNew > 0 ? (
+          <button type="button" className="wd-jump" onClick={() => scrollToBottom("smooth")}>
+            <Icon name="down" size={13} />
+            {pendingNew} 条新消息
           </button>
-        </div>
+        ) : null}
       </div>
-    </div>
+    </Screen>
   );
 }

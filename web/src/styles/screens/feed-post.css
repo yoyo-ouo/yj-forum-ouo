@@ -1,0 +1,626 @@
+/* ============================================================
+   广场（feed-*）与帖子详情（pd-*）移动端样式
+   仅使用 tokens.css / m.css 的变量取色，明暗主题自动成立
+   ============================================================ */
+
+/* ================= 广场 · 顶栏品牌 ================= */
+.feed-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.feed-brand img {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+.feed-brand > span {
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: .01em;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ================= 广场 · 公告细条（≤36px） ================= */
+.feed-notice {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  margin: 8px 14px 0;
+  padding: 0 4px 0 11px;
+  border-radius: 10px;
+  background: var(--color-bg-icon);
+  color: var(--color-text-accent);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.feed-notice-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.feed-notice-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.feed-notice-arrow { flex: 0 0 auto; opacity: .55; }
+.feed-notice-x {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+.feed-notice-x:active { background: var(--m-press); }
+
+/* ================= 广场 · 筛选区 ================= */
+.feed-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px 0 9px;
+}
+.feed-seg { margin: 0 14px; }
+.feed-seg-name {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.feed-chips {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 0 14px;
+  scrollbar-width: none;
+}
+.feed-chips::-webkit-scrollbar { display: none; }
+.feed-chip {
+  flex: 0 0 auto;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--m-card-bg);
+  color: var(--color-text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .16s var(--m-ease), color .16s var(--m-ease);
+}
+.feed-chip.on {
+  background: var(--color-primary);
+  color: #f5fbfa; /* 同 .m-chip.on 的文字色 */
+  font-weight: 600;
+}
+
+/* ================= 广场 · 信息流卡片 ================= */
+.feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px;
+}
+.feed-card {
+  display: block;
+  width: 100%;
+  padding: 13px 14px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--m-card-bg);
+  box-shadow: var(--m-shadow-card);
+  text-align: left;
+  cursor: pointer;
+  transition: background .16s var(--m-ease), transform .12s var(--m-ease);
+}
+.feed-card:active {
+  background: color-mix(in srgb, var(--m-card-bg) 88%, var(--color-primary));
+  transform: scale(.99);
+}
+.feed-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.feed-card-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.feed-card-who {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.feed-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.feed-guild {
+  flex: 0 0 auto;
+  max-width: 104px;
+  height: 17px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--color-bg-icon);
+  color: var(--color-text-accent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 17px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.feed-card-time {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+.feed-card-title {
+  margin: 10px 0 0;
+  font-size: 15.5px;
+  font-weight: 650;
+  line-height: 1.42;
+  letter-spacing: .005em;
+  color: var(--color-text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.feed-card-summary {
+  margin: 5px 0 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--color-text-tertiary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.feed-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.feed-cat {
+  flex: 0 0 auto;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.feed-stats {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.feed-stats > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.feed-stats svg { opacity: .8; }
+
+/* ================= 广场 · 状态 / 哨兵 ================= */
+.feed-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 14px;
+  padding: 22px 16px;
+  border-radius: var(--m-radius-md);
+  background: var(--m-card-bg);
+  color: var(--color-text-tertiary);
+  font-size: var(--m-font-sm);
+  text-align: center;
+}
+.feed-sentinel { height: 1px; }
+
+/* ================= 广场 · 会馆选择 Sheet ================= */
+.feed-guild-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.feed-guild-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.feed-guild-row:active { background: var(--m-press); }
+.feed-guild-row.on { background: var(--color-bg-icon); }
+.feed-guild-swatch {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--color-primary);
+  color: #f7fdfc; /* 同 .m-btn--primary 的文字色 */
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+}
+.feed-guild-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.feed-guild-name {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.feed-guild-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--color-text-tertiary);
+}
+.feed-guild-chev { flex: 0 0 auto; color: var(--color-text-tertiary); opacity: .8; }
+.feed-guild-check { flex: 0 0 auto; color: var(--color-primary); }
+
+/* ================= 帖子详情 · 正文 ================= */
+.pd-article { padding: 14px 16px 0; }
+.pd-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pd-cat,
+.pd-guild {
+  height: 19px;
+  padding: 0 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 19px;
+  white-space: nowrap;
+}
+.pd-guild {
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--color-bg-icon);
+  color: var(--color-text-accent);
+}
+.pd-title {
+  margin: 10px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.38;
+  letter-spacing: -.01em;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+.pd-author {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 13px;
+}
+.pd-author-ava {
+  flex: 0 0 auto;
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.pd-author-main { flex: 1 1 auto; min-width: 0; }
+.pd-author-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.pd-author-name {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pd-author-meta {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.pd-user-guild {
+  flex: 0 0 auto;
+  max-width: 112px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--color-bg-icon);
+  color: var(--color-text-accent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pd-user-guild--sm {
+  max-width: 88px;
+  height: 17px;
+  padding: 0 5px;
+  font-size: 9.5px;
+  line-height: 17px;
+}
+.pd-divider {
+  height: 1px;
+  margin: 14px 0;
+  background: var(--m-hairline);
+}
+
+/* 正文富文本（.m-rich 已在 m.css 提供基础排版，这里按详情页口径收紧） */
+.pd-rich { padding-bottom: 4px; }
+.pd-rich .rich-content {
+  font-size: var(--m-font-md);
+  line-height: 1.85;
+  color: var(--color-text-secondary);
+}
+.pd-rich .rich-content p { margin: 0 0 12px; }
+.pd-rich .rich-content > :first-child { margin-top: 0; }
+.pd-rich .rich-content > :last-child { margin-bottom: 0; }
+.pd-rich .rich-content img { border-radius: 12px; margin: 12px 0; }
+.pd-rich .rich-content a { color: var(--color-secondary); }
+
+/* ================= 帖子详情 · 评论区 ================= */
+.pd-comments {
+  margin-top: 18px;
+  padding: 16px 16px 26px;
+  border-top: 1px solid var(--m-hairline);
+}
+.pd-comments-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: .01em;
+  color: var(--color-text-primary);
+}
+.pd-load-older {
+  display: block;
+  width: 100%;
+  height: 36px;
+  margin: 8px 0 4px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--color-bg-icon);
+  color: var(--color-text-accent);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.pd-load-older:disabled { opacity: .6; }
+.pd-comments-empty {
+  padding: 22px 0 8px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--color-text-tertiary);
+}
+.pd-comment-list { display: flex; flex-direction: column; }
+.pd-comment {
+  display: flex;
+  gap: 9px;
+  padding: 12px 0;
+}
+.pd-comment-ava {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.pd-comment-main { flex: 1 1 auto; min-width: 0; }
+.pd-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.pd-comment-name {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pd-comment-time {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+.pd-comment-content { margin-top: 4px; }
+.pd-comment-content--reply {
+  padding-left: 10px;
+  border-left: 2px solid var(--color-border);
+}
+.pd-reply-line {
+  margin-bottom: 3px;
+  font-size: 11.5px;
+  color: var(--color-text-tertiary);
+}
+.pd-reply-line b {
+  font-weight: 600;
+  color: var(--color-text-accent);
+}
+.pd-comment-text {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+.pd-comment-text .rich-content { font-size: 14px; line-height: 1.7; }
+.pd-comment-text .rich-content p { margin: 0 0 6px; }
+.pd-comment-text .rich-content > :last-child { margin-bottom: 0; }
+.pd-comment-foot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 6px;
+}
+.pd-cmt-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 2px; /* 放大点击热区，视觉上仍贴文字 */
+  margin: -4px -2px;
+  border: 0;
+  background: none;
+  color: var(--color-text-tertiary);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.pd-cmt-act.on { color: #e0565c; } /* 与 .m-action.on.m-like 同色 */
+.pd-cmt-del { margin-left: auto; }
+.pd-cmt-del:active { color: var(--color-text-secondary); }
+
+/* ================= 帖子详情 · 底栏 ================= */
+.pd-actionbar { gap: 2px; }
+.pd-actionbar .m-comment-cta {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+.pd-actionbar .m-action {
+  min-width: 42px;
+  padding: 0 5px;
+}
+.pd-actionbar .m-action span {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ================= 帖子详情 · 评论 Sheet ================= */
+.pd-reply-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  height: 26px;
+  margin-bottom: 10px;
+  padding: 0 3px 0 10px;
+  border-radius: 999px;
+  background: var(--color-bg-icon);
+  color: var(--color-text-accent);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.pd-reply-chip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pd-reply-chip button {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.pd-reply-chip button:active { background: var(--m-press); }
+
+/* ================= 帖子详情 · 更多操作 Sheet ================= */
+.pd-menu { display: flex; flex-direction: column; gap: 2px; }
+.pd-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--m-font-md);
+  text-align: left;
+  cursor: pointer;
+}
+.pd-menu-row:active { background: var(--m-press); }
+.pd-menu-row--danger { color: #c4383f; } /* 与 .m-cell--danger 同色 */

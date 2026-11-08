@@ -6,6 +6,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
 import { pickImage, uploadImage } from "../lib/native";
 import { useApp } from "../lib/store";
+import { Icon, type IconName } from "./icons";
 
 export function RichEditor({
   value,
@@ -13,14 +14,20 @@ export function RichEditor({
   placeholder = "写点什么…",
   scene = "post_image",
   minHeight = 180,
+  toolbar = "full",
+  autoFocus = false,
 }: {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
   scene?: string;
   minHeight?: number;
+  /** compact：常用工具一行（评论）；full：完整工具两行（发帖） */
+  toolbar?: "compact" | "full";
+  autoFocus?: boolean;
 }) {
   const showToast = useApp((s) => s.showToast);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkValue, setLinkValue] = useState("");
@@ -36,6 +43,7 @@ export function RichEditor({
       Placeholder.configure({ placeholder }),
     ],
     content: value || "",
+    autofocus: autoFocus,
     onUpdate: ({ editor: instance }) => onChange(instance.getHTML()),
   });
 
@@ -53,11 +61,11 @@ export function RichEditor({
     }
   }, [editor, scene, showToast]);
 
-  if (!editor) return <div className="editor-loading">编辑器加载中…</div>;
+  if (!editor) return <div className="m-editor-loading">编辑器加载中…</div>;
 
-  const button = (label: string, active: boolean, onClick: () => void, title?: string) => (
-    <button type="button" title={title} className={`editor-tool ${active ? "on" : ""}`} onClick={onClick}>
-      {label}
+  const tool = (icon: IconName, active: boolean, onClick: () => void, label: string) => (
+    <button type="button" key={label} aria-label={label} aria-pressed={active} title={label} className={`m-editor-tool ${active ? "on" : ""}`} onClick={onClick}>
+      <Icon name={icon} size={19} />
     </button>
   );
 
@@ -78,27 +86,38 @@ export function RichEditor({
   const emojis = ["😀", "😂", "🥹", "😭", "😍", "🥳", "🌙", "✨", "🌿", "🍂", "❤️", "👍", "🎉", "🐾", "📖", "✉️"];
 
   return (
-    <div className="rich-editor">
-      <div className="editor-toolbar">
-        {button("H2", editor.isActive("heading", { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), "二级标题")}
-        {button("H3", editor.isActive("heading", { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), "三级标题")}
-        {button("B", editor.isActive("bold"), () => editor.chain().focus().toggleBold().run(), "加粗")}
-        {button("I", editor.isActive("italic"), () => editor.chain().focus().toggleItalic().run(), "斜体")}
-        {button("U", editor.isActive("underline"), () => editor.chain().focus().toggleUnderline().run(), "下划线")}
-        {button("≡", editor.isActive("bulletList"), () => editor.chain().focus().toggleBulletList().run(), "无序列表")}
-        {button("1.", editor.isActive("orderedList"), () => editor.chain().focus().toggleOrderedList().run(), "有序列表")}
-        {button("❝", editor.isActive("blockquote"), () => editor.chain().focus().toggleBlockquote().run(), "引用")}
-        {button("</>", editor.isActive("codeBlock"), () => editor.chain().focus().toggleCodeBlock().run(), "代码块")}
-        {button("`", editor.isActive("code"), () => editor.chain().focus().toggleCode().run(), "行内代码")}
-        {button("🔗", editor.isActive("link"), openLink, "插入链接")}
-        {button("⛓", false, () => editor.chain().focus().unsetLink().run(), "移除链接")}
-        {button("▧", false, () => void insertImage(), "插入图片")}
-        {button("—", false, () => editor.chain().focus().setHorizontalRule().run(), "分割线")}
-        {button("Tx", false, () => editor.chain().focus().unsetAllMarks().clearNodes().run(), "清除格式")}
-        {button("☺", emojiOpen, () => setEmojiOpen((open) => !open), "表情")}
+    <div className="m-editor">
+      <div className="m-editor-tools">
+        {tool("image", false, () => void insertImage(), "插入图片")}
+        {tool("bold", editor.isActive("bold"), () => editor.chain().focus().toggleBold().run(), "加粗")}
+        {tool("italic", editor.isActive("italic"), () => editor.chain().focus().toggleItalic().run(), "斜体")}
+        {tool("underline", editor.isActive("underline"), () => editor.chain().focus().toggleUnderline().run(), "下划线")}
+        {tool("list", editor.isActive("bulletList"), () => editor.chain().focus().toggleBulletList().run(), "列表")}
+        {toolbar === "full" ? tool("quote", editor.isActive("blockquote"), () => editor.chain().focus().toggleBlockquote().run(), "引用") : null}
+        {toolbar === "full" ? tool("link", editor.isActive("link"), openLink, "链接") : null}
+        <button
+          type="button"
+          className={`m-editor-tool m-editor-more ${moreOpen ? "on" : ""}`.trim()}
+          aria-label="更多格式"
+          onClick={() => setMoreOpen((open) => !open)}
+        >
+          <Icon name="more" size={19} />
+        </button>
       </div>
+      {moreOpen ? (
+        <div className="m-editor-tools m-editor-tools--more">
+          {tool("bold", editor.isActive("heading", { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), "大标题")}
+          {tool("ordered", editor.isActive("orderedList"), () => editor.chain().focus().toggleOrderedList().run(), "有序列表")}
+          {tool("code", editor.isActive("codeBlock"), () => editor.chain().focus().toggleCodeBlock().run(), "代码块")}
+          {tool("link", editor.isActive("link"), openLink, "链接")}
+          {tool("smile", emojiOpen, () => setEmojiOpen((open) => !open), "表情")}
+          <button type="button" className="m-editor-tool m-editor-text" onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}>
+            清除格式
+          </button>
+        </div>
+      ) : null}
       {linkOpen ? (
-        <div className="link-pop">
+        <div className="m-editor-pop">
           <input
             value={linkValue}
             autoFocus
@@ -111,7 +130,7 @@ export function RichEditor({
         </div>
       ) : null}
       {emojiOpen ? (
-        <div className="emoji-pop">
+        <div className="m-editor-picker">
           {emojis.map((emoji) => (
             <button
               type="button"
@@ -126,7 +145,7 @@ export function RichEditor({
           ))}
         </div>
       ) : null}
-      <div className="editor-body" style={{ minHeight }}>
+      <div className="m-editor-body" style={{ minHeight }}>
         <EditorContent editor={editor} />
       </div>
     </div>

@@ -4,12 +4,23 @@ import { api, ApiError } from "../lib/api";
 import { requestApi } from "../lib/native";
 import { useNav } from "../lib/nav";
 import { useApp } from "../lib/store";
-import { EmptyState, Loading, RichContent, Sheet, TopBar } from "../components/ui";
-import { formatDate, stripHtml, textLimit, timeAgo } from "../lib/format";
+import { AppBar, Cell, Empty, IconButton, Screen, Sheet, Skeletons } from "../components/mobile";
+import { Icon } from "../components/icons";
+import { RichContent } from "../components/ui";
+import { formatDate, stripHtml, timeAgo } from "../lib/format";
 import { astronomicalToInfinite, infiniteToAstronomical } from "../lib/year";
 import type { GregorianEra, InfiniteEra } from "../lib/year";
-// 仅本页需要的移动端适配（内边距收窄 / 容器复位），不改 main.tsx 与共享样式
-import "../styles/misc-page.css";
+
+/* 杂项页：指南 / 反馈 / 更新日志 / 年制换算（msc-*） */
+
+/** RFC3339 → YYYY-MM-DD（无效值原样展示） */
+function formatDay(value?: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
 
 /* ======================
  * 指南
@@ -31,6 +42,31 @@ interface TreeNode {
   children: TreeNode[];
 }
 
+/**
+ * 兼容两种返回：后端扁平结构（parent_id）与嵌套 children。
+ * 统一摊平成 GuideNode[]，再交给 buildTree。
+ */
+function normalizeGuideNodes(raw: any[], parentId?: string | null): GuideNode[] {
+  const result: GuideNode[] = [];
+  (Array.isArray(raw) ? raw : []).forEach((node) => {
+    if (!node || node.id === undefined || node.id === null) return;
+    const id = String(node.id);
+    const children = Array.isArray(node.children) ? node.children : [];
+    result.push({
+      id,
+      parent_id: node.parent_id ?? parentId ?? null,
+      title: node.title,
+      kind: node.kind || (children.length > 0 ? "folder" : "doc"),
+      sort: node.sort,
+      updated_at: node.updated_at || node.created_at,
+      content: node.content,
+      content_format: node.content_format,
+    });
+    result.push(...normalizeGuideNodes(children, id));
+  });
+  return result;
+}
+
 /** 把接口返回的扁平节点组装为多叉树（parent 缺失时当作根节点） */
 function buildTree(nodes: GuideNode[]): TreeNode[] {
   const map = new Map<string, TreeNode>();
@@ -47,10 +83,10 @@ function buildTree(nodes: GuideNode[]): TreeNode[] {
 }
 
 /**
- * 目录树：逐层渲染 Web 的 .guide-tree / .guide-tree-item 结构，
- * folder 用 caret 图标展开收起，doc 点击进入正文（App 用独立详情页，替代 Web 右侧正文列）。
+ * 目录树：folder 可展开收起（保留原有树形导航），doc 点击进入正文。
+ * 层级用 data-depth 传给样式表，避免行内 padding。
  */
-function GuideTree({
+function GuideRows({
   rows,
   depth = 0,
   collapsed,
@@ -64,43 +100,45 @@ function GuideTree({
   onOpen: (id: string) => void;
 }) {
   return (
-    <ul className="guide-tree">
+    <>
       {rows.map(({ node, children }) => {
         const id = String(node.id);
         const isFolder = node.kind === "folder";
         const open = !collapsed.has(id);
         return (
-          <li key={id} className="guide-tree-item">
-            {isFolder ? (
-              <button
-                type="button"
-                className="guide-tree-folder"
-                style={{ paddingLeft: 10 + depth * 16 }}
-                onClick={() => onToggle(id)}
-                aria-expanded={open}
-              >
-                <i className={`fa ${open ? "fa-caret-down" : "fa-caret-right"} guide-tree-caret`} aria-hidden="true" />
-                <i className="fa fa-folder-o guide-tree-icon" aria-hidden="true" />
-                <span className="guide-tree-text">{node.title || "未命名"}</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="guide-tree-doc"
-                style={{ paddingLeft: 10 + depth * 16 + 18 }}
-                onClick={() => onOpen(id)}
-              >
-                <i className="fa fa-file-text-o guide-tree-icon" aria-hidden="true" />
-                <span className="guide-tree-text">{node.title || "未命名"}</span>
-              </button>
-            )}
+          <React.Fragment key={id}>
+            <div className={`msc-guide-row${isFolder ? " is-folder" : ""}`} data-depth={Math.min(depth, 3)}>
+              {isFolder ? (
+                <Cell
+                  icon="list"
+                  label={node.title || "未命名目录"}
+                  sub={`目录 · ${children.length} 条`}
+                  chevron={false}
+                  onClick={() => onToggle(id)}
+                  right={<Icon name={open ? "down" : "forward"} size={18} className="msc-guide-caret" />}
+                />
+              ) : (
+                <Cell
+                  icon="bookmark"
+                  label={node.title || "未命名指南"}
+                  sub={node.updated_at ? `更新于 ${formatDay(node.updated_at)}` : "指南文档"}
+                  onClick={() => onOpen(id)}
+                />
+              )}
+            </div>
             {children.length > 0 && (isFolder ? open : true) ? (
-              <GuideTree rows={children} depth={depth + 1} collapsed={collapsed} onToggle={onToggle} onOpen={onOpen} />
+              <GuideRows
+                rows={children}
+                depth={depth + 1}
+                collapsed={collapsed}
+                onToggle={onToggle}
+                onOpen={onOpen}
+              />
             ) : null}
-          </li>
+          </React.Fragment>
         );
       })}
-    </ul>
+    </>
   );
 }
 
@@ -108,8 +146,12 @@ export function GuideScreen() {
   const { push } = useNav();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const tree = useQuery({ queryKey: ["guides"], queryFn: () => api.guides(), staleTime: 5 * 60_000 });
-  const nodes: GuideNode[] = useMemo(() => tree.data?.data?.nodes || tree.data?.nodes || [], [tree.data]);
+  const nodes: GuideNode[] = useMemo(
+    () => normalizeGuideNodes(tree.data?.data?.nodes || tree.data?.nodes || []),
+    [tree.data],
+  );
   const rows = useMemo(() => buildTree(nodes), [nodes]);
+  const docCount = nodes.filter((node) => node.kind !== "folder").length;
 
   const toggle = (id: string) =>
     setCollapsed((current) => {
@@ -120,35 +162,34 @@ export function GuideScreen() {
     });
 
   return (
-    <div className="screen">
-      <TopBar title="论坛指南" back />
-      <div className="forum-container guide-page">
-        <div className="forum-header">
-          <h1 className="forum-title">论坛指南</h1>
-          <p className="forum-subtitle">使用说明与玩法介绍</p>
-        </div>
-
-        <aside className="guide-sidebar" aria-label="指南目录">
-          {tree.isLoading ? (
-            <Loading />
-          ) : tree.error ? (
-            <EmptyState
-              text={tree.error instanceof Error ? tree.error.message : "加载失败"}
-              action={<button className="btn ghost" onClick={() => void tree.refetch()}>重试</button>}
-            />
-          ) : nodes.length === 0 ? (
-            <EmptyState text="暂无指南内容" />
-          ) : (
-            <GuideTree
-              rows={rows}
-              collapsed={collapsed}
-              onToggle={toggle}
-              onOpen={(id) => push("guide", { id })}
-            />
-          )}
-        </aside>
-      </div>
-    </div>
+    <Screen appbar={<AppBar back title="使用指南" />} onRefresh={async () => { await tree.refetch(); }}>
+      {tree.isLoading ? (
+        <Skeletons count={5} />
+      ) : tree.error ? (
+        <Empty
+          icon="info"
+          title="指南加载失败"
+          hint={tree.error instanceof Error ? tree.error.message : "请稍后再试"}
+          action={
+            <button type="button" className="m-btn" onClick={() => void tree.refetch()}>
+              重试
+            </button>
+          }
+        />
+      ) : nodes.length === 0 ? (
+        <Empty icon="compass" title="暂无指南内容" hint="管理员还没有发布使用指南。" />
+      ) : (
+        <>
+          <div className="msc-guide-head">
+            <span className="msc-guide-count">{docCount} 篇指南</span>
+          </div>
+          <div className="msc-list">
+            <GuideRows rows={rows} collapsed={collapsed} onToggle={toggle} onOpen={(id) => push("guide", { id })} />
+          </div>
+          <div className="m-end">— 到底了 —</div>
+        </>
+      )}
+    </Screen>
   );
 }
 
@@ -160,37 +201,47 @@ export function GuideDetailScreen({ id }: { id?: string | number }) {
     enabled: Boolean(guideId),
   });
 
-  if (detail.isLoading) return <div className="screen"><TopBar title="指南" back /><Loading /></div>;
-
   const node: GuideNode | undefined = detail.data?.data?.node || detail.data?.node;
+
+  if (detail.isLoading) {
+    return (
+      <Screen appbar={<AppBar back title="指南" />}>
+        <Skeletons count={2} />
+      </Screen>
+    );
+  }
+
   if (!node) {
     return (
-      <div className="screen">
-        <TopBar title="指南" back />
-        <EmptyState text={detail.error instanceof Error ? detail.error.message : "指南不存在"} />
-      </div>
+      <Screen appbar={<AppBar back title="指南" />}>
+        <Empty
+          icon="info"
+          title="指南不存在"
+          hint={detail.error instanceof Error ? detail.error.message : "这篇指南可能已被删除。"}
+          action={
+            <button type="button" className="m-btn" onClick={() => void detail.refetch()}>
+              重试
+            </button>
+          }
+        />
+      </Screen>
     );
   }
 
   return (
-    <div className="screen">
-      <TopBar title={node.title || "指南"} back />
-      <div className="forum-container guide-page">
-        <main className="guide-content">
-          <article className="guide-doc">
-            <h2 className="guide-doc-title">{node.title || "指南"}</h2>
-            {node.updated_at ? <div className="guide-doc-meta">更新于 {formatDate(node.updated_at)}</div> : null}
-            {node.content ? (
-              <div className="guide-doc-body">
-                <RichContent html={node.content} format={node.content_format || "html"} />
-              </div>
-            ) : (
-              <p className="small muted">这篇指南还没有正文。</p>
-            )}
-          </article>
-        </main>
-      </div>
-    </div>
+    <Screen appbar={<AppBar back title={node.title || "指南"} />}>
+      <article className="msc-doc">
+        <h1 className="msc-doc-title">{node.title || "指南"}</h1>
+        {node.updated_at ? <div className="msc-doc-meta">更新于 {formatDay(node.updated_at)}</div> : null}
+        {node.content ? (
+          <div className="m-rich msc-doc-body">
+            <RichContent html={node.content} format={node.content_format || "html"} />
+          </div>
+        ) : (
+          <p className="msc-doc-empty">这篇指南还没有正文。</p>
+        )}
+      </article>
+    </Screen>
   );
 }
 
@@ -198,25 +249,21 @@ export function GuideDetailScreen({ id }: { id?: string | number }) {
  * 反馈（Bug 报告）
  * ==================== */
 
-const FEEDBACK_STATUS: Record<number, { label: string; color: string }> = {
-  0: { label: "未处理", color: "#e6803d" },
-  1: { label: "处理中", color: "#3b82f6" },
-  2: { label: "已处理", color: "#22a06b" },
-  3: { label: "关闭", color: "#8a97a3" },
+const FEEDBACK_STATUS: Record<number, { label: string; tone: string }> = {
+  0: { label: "待处理", tone: "open" },
+  1: { label: "处理中", tone: "doing" },
+  2: { label: "已处理", tone: "done" },
+  3: { label: "已关闭", tone: "closed" },
 };
 
-function feedbackStatus(status: unknown): { label: string; color: string } {
-  return FEEDBACK_STATUS[Number(status)] || { label: "未知", color: "#8a97a3" };
+function feedbackStatus(status: unknown): { label: string; tone: string } {
+  return FEEDBACK_STATUS[Number(status)] || { label: "未知", tone: "closed" };
 }
 
-/** 状态 pill：浅底深字，与 Web 的 .feedback-status-pill 一致（十六进制 + 透明度后缀） */
+/** 状态徽标：浅底深字，四态各有色调 */
 function FeedbackStatusPill({ status }: { status?: number | null }) {
   const meta = feedbackStatus(status);
-  return (
-    <span className="feedback-status-pill" style={{ background: `${meta.color}1f`, color: meta.color }}>
-      {meta.label}
-    </span>
-  );
+  return <span className={`msc-fb-status is-${meta.tone}`}>{meta.label}</span>;
 }
 
 interface BugReportItem {
@@ -346,7 +393,8 @@ export function FeedbackScreen() {
   const countOf = (status: number) => (stats.data || []).find((item) => Number(item.status) === status)?.count ?? 0;
   const statsTotal = (stats.data || []).reduce((sum, item) => sum + Number(item.count || 0), 0);
   // 「全部」计数：优先用四态统计，统计未返回时回退列表接口的 total
-  const allCount = (stats.data || []).length > 0 ? statsTotal : total;
+  const hasStats = (stats.data || []).length > 0;
+  const allCount = hasStats ? statsTotal : total;
 
   const openSubmit = () => {
     setError("");
@@ -391,161 +439,164 @@ export function FeedbackScreen() {
   ];
 
   return (
-    <div className="screen">
-      <TopBar title="反馈中心" back />
-      <div className="forum-container feedback-page">
-        <div className="forum-header">
-          <h1 className="forum-title">反馈中心</h1>
-          <p className="forum-subtitle">公开查看反馈与处理进度</p>
-        </div>
-
-        {/* 四态统计：大数字 + 小字标签，可点击筛选 */}
-        <div className="feedback-stats-section">
-          <div className="feedback-stats-title">反馈处理情况</div>
-          <div className="feedback-stats">
-            {([0, 1, 2, 3] as const).map((status) => (
-              <button
-                key={status}
-                type="button"
-                className={`feedback-stat ${statusFilter === status ? "active" : ""}`}
-                onClick={() => setStatusFilter(statusFilter === status ? null : status)}
-              >
-                <span className="feedback-stat-num">{countOf(status)}</span>
-                <span className="feedback-stat-label">{FEEDBACK_STATUS[status].label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* 状态筛选 chips + 提交反馈入口 */}
-        <div className="feedback-toolbar">
-          <div className="feedback-chips">
-            {chips.map((chip) => (
-              <button
-                key={chip.key === null ? "all" : chip.key}
-                type="button"
-                className={`feedback-chip ${statusFilter === chip.key ? "active" : ""}`}
-                onClick={() => setStatusFilter(chip.key)}
-              >
-                {chip.label} <span className="feedback-chip-count">{chip.count}</span>
-              </button>
-            ))}
-          </div>
-          <button type="button" className="forum-create-btn" onClick={openSubmit}>
-            <i className="fa fa-bug" aria-hidden="true" /> 提交反馈
+    <Screen
+      appbar={
+        <AppBar
+          back
+          title="意见反馈"
+          actions={<IconButton icon="plus" label="新建反馈" onClick={openSubmit} />}
+        />
+      }
+      onRefresh={async () => {
+        await loadList(statusFilter, 1, false);
+      }}
+    >
+      <div className="m-chips msc-fb-chips">
+        {chips.map((chip) => (
+          <button
+            key={chip.key === null ? "all" : chip.key}
+            type="button"
+            className={`m-chip ${statusFilter === chip.key ? "on" : ""}`.trim()}
+            onClick={() => setStatusFilter(chip.key)}
+          >
+            {chip.label}
+            {chip.key === null || hasStats ? <span className="msc-chip-count">{chip.count}</span> : null}
           </button>
-        </div>
-
-        {loading ? (
-          <Loading />
-        ) : listError ? (
-          <EmptyState
-            text={listError}
-            action={<button className="btn ghost" onClick={() => void loadList(statusFilter, 1, false)}>重试</button>}
-          />
-        ) : items.length === 0 ? (
-          <EmptyState text="暂无反馈" />
-        ) : (
-          <div className="feedback-waterfall">
-            {items.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="feedback-card"
-                onClick={() => push("feedback-detail", { id: item.id })}
-              >
-                <span className="feedback-card-top">
-                  <FeedbackStatusPill status={item.status} />
-                  <span className="feedback-card-anon">匿名</span>
-                </span>
-                <span className="feedback-card-title">{item.title || "无标题反馈"}</span>
-                {item.detail ? <span className="feedback-card-summary">{item.detail}</span> : null}
-                <span className="feedback-card-time">{timeAgo(item.created_at)}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {!loading && !listError && hasMore ? (
-          <div className="forum-load-more">
-            <button
-              type="button"
-              disabled={loadingMore}
-              onClick={() => void loadList(statusFilter, Math.ceil(items.length / FEEDBACK_PAGE_SIZE) + 1, true)}
-            >
-              {loadingMore ? "加载中..." : "加载更多"}
-            </button>
-          </div>
-        ) : null}
+        ))}
       </div>
 
-      <Sheet open={open} title="提交反馈" onClose={() => setOpen(false)}>
+      {loading ? (
+        <Skeletons count={3} />
+      ) : listError ? (
+        <Empty
+          icon="info"
+          title="反馈加载失败"
+          hint={listError}
+          action={
+            <button type="button" className="m-btn" onClick={() => void loadList(statusFilter, 1, false)}>
+              重试
+            </button>
+          }
+        />
+      ) : items.length === 0 ? (
+        <Empty
+          icon="comment"
+          title="还没有反馈"
+          hint="遇到问题或想提建议？写下第一条反馈吧。"
+          action={
+            <button type="button" className="m-btn m-btn--primary" onClick={openSubmit}>
+              提交反馈
+            </button>
+          }
+        />
+      ) : (
+        <div className="msc-fb-list">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="msc-fb-card"
+              aria-label={`查看反馈 ${item.title || "无标题反馈"}`}
+              onClick={() => push("feedback-detail", { id: item.id })}
+            >
+              <span className="msc-fb-top">
+                <span className="msc-fb-kind">问题反馈</span>
+                <FeedbackStatusPill status={item.status} />
+                <span className="msc-fb-time">{timeAgo(item.created_at) || formatDay(item.created_at)}</span>
+              </span>
+              <span className="msc-fb-title">{item.title || "无标题反馈"}</span>
+              {item.detail ? <span className="msc-fb-summary m-clamp2">{item.detail}</span> : null}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!loading && !listError && hasMore ? (
+        <button
+          type="button"
+          className="m-more"
+          disabled={loadingMore}
+          onClick={() => void loadList(statusFilter, Math.ceil(items.length / FEEDBACK_PAGE_SIZE) + 1, true)}
+        >
+          {loadingMore ? "加载中…" : "加载更多"}
+        </button>
+      ) : !loading && !listError && items.length > 0 ? (
+        <div className="m-end">— 到底了 —</div>
+      ) : null}
+
+      <Sheet
+        open={open}
+        title="提交反馈"
+        onClose={() => setOpen(false)}
+        footer={
+          <button type="button" className="m-btn m-btn--primary m-btn--block" disabled={busy} onClick={() => void submit()}>
+            {busy ? "提交中…" : "提交反馈"}
+          </button>
+        }
+      >
         <form
-          className="feedback-form"
+          className="msc-form"
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
           }}
         >
-          <label className="feedback-form-label" htmlFor="feedback-title">
-            标题 <span className="feedback-required">*</span>
+          <label className="m-field" htmlFor="msc-fb-title">
+            <span className="m-label">标题 *</span>
+            <input
+              id="msc-fb-title"
+              className="m-input"
+              placeholder="一句话描述问题或建议"
+              maxLength={200}
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+            />
           </label>
-          <input
-            id="feedback-title"
-            className="feedback-form-input"
-            placeholder="一句话描述问题或建议"
-            maxLength={200}
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-          />
 
-          <label className="feedback-form-label" htmlFor="feedback-detail">
-            详细描述 <span className="feedback-required">*</span>
+          <label className="m-field" htmlFor="msc-fb-detail">
+            <span className="m-label">详细描述 *</span>
+            <textarea
+              id="msc-fb-detail"
+              className="m-textarea"
+              placeholder="请尽量描述清楚：你期望的结果与实际发生的情况"
+              rows={6}
+              maxLength={5000}
+              value={detail}
+              onChange={(event) => setDetail(event.target.value)}
+            />
           </label>
-          <textarea
-            id="feedback-detail"
-            className="feedback-form-input feedback-form-textarea"
-            placeholder="请尽量描述清楚：你期望的结果与实际发生的情况"
-            rows={6}
-            maxLength={5000}
-            value={detail}
-            onChange={(event) => setDetail(event.target.value)}
-          />
 
-          <label className="feedback-form-label" htmlFor="feedback-steps">
-            复现步骤 <span className="feedback-form-optional">（选填）</span>
+          <label className="m-field" htmlFor="msc-fb-steps">
+            <span className="m-label">复现步骤（选填）</span>
+            <textarea
+              id="msc-fb-steps"
+              className="m-textarea"
+              placeholder="例如：1. 打开首页；2. 点击……；3. 出现……"
+              rows={4}
+              maxLength={3000}
+              value={steps}
+              onChange={(event) => setSteps(event.target.value)}
+            />
           </label>
-          <textarea
-            id="feedback-steps"
-            className="feedback-form-input feedback-form-textarea"
-            placeholder="例如：1. 打开首页；2. 点击……；3. 出现……"
-            rows={4}
-            maxLength={3000}
-            value={steps}
-            onChange={(event) => setSteps(event.target.value)}
-          />
 
-          <label className="feedback-form-label" htmlFor="feedback-contact">
-            联系方式 <span className="feedback-form-optional">（选填，仅管理员可见）</span>
+          <label className="m-field" htmlFor="msc-fb-contact">
+            <span className="m-label">联系方式（选填，仅管理员可见）</span>
+            <input
+              id="msc-fb-contact"
+              className="m-input"
+              placeholder="邮箱 / QQ 等，便于必要时与你联系"
+              maxLength={200}
+              value={contact}
+              onChange={(event) => setContact(event.target.value)}
+            />
           </label>
-          <input
-            id="feedback-contact"
-            className="feedback-form-input"
-            placeholder="邮箱 / QQ 等，便于必要时与你联系"
-            maxLength={200}
-            value={contact}
-            onChange={(event) => setContact(event.target.value)}
-          />
 
-          {error ? <div className="form-error" style={{ marginTop: 12 }}>{error}</div> : null}
+          {error ? <div className="msc-form-error" role="alert">{error}</div> : null}
 
-          <button className="feedback-submit-btn" type="submit" disabled={busy}>
-            {busy ? "提交中..." : "提交反馈"}
-          </button>
-          <div className="form-hint" style={{ marginTop: 10 }}>反馈内容会公开显示，但不会展示你的用户名与联系方式。</div>
+          <p className="msc-form-hint">反馈内容会公开显示，但不会展示你的用户名与联系方式。</p>
         </form>
       </Sheet>
-    </div>
+    </Screen>
   );
 }
 
@@ -557,71 +608,88 @@ export function FeedbackDetailScreen({ id }: { id?: string | number }) {
     enabled: Boolean(reportId),
   });
 
-  if (detail.isLoading) return <div className="screen"><TopBar title="反馈详情" back /><Loading /></div>;
-
   const report: BugReport | undefined = detail.data?.data?.report || detail.data?.report;
   const logs: BugReportLogItem[] = detail.data?.data?.logs || detail.data?.logs || [];
+
+  if (detail.isLoading) {
+    return (
+      <Screen appbar={<AppBar back title="反馈详情" />}>
+        <Skeletons count={2} />
+      </Screen>
+    );
+  }
+
   if (!report) {
     return (
-      <div className="screen">
-        <TopBar title="反馈详情" back />
-        <EmptyState text={detail.error instanceof Error ? detail.error.message : "反馈不存在"} />
-      </div>
+      <Screen appbar={<AppBar back title="反馈详情" />}>
+        <Empty
+          icon="info"
+          title="反馈不存在"
+          hint={detail.error instanceof Error ? detail.error.message : "这条反馈可能已被删除。"}
+          action={
+            <button type="button" className="m-btn" onClick={() => void detail.refetch()}>
+              重试
+            </button>
+          }
+        />
+      </Screen>
     );
   }
 
   return (
-    <div className="screen">
-      <TopBar title="反馈详情" back />
-      <div className="forum-container feedback-page">
-        <div className="feedback-detail">
-          <h3 className="feedback-detail-title">{report.title || "无标题反馈"}</h3>
-          <div className="feedback-detail-meta">
-            <FeedbackStatusPill status={report.status} />
-            <span className="feedback-detail-time">{formatDate(report.created_at)}</span>
-          </div>
+    <Screen appbar={<AppBar back title="反馈详情" />}>
+      <article className="msc-doc">
+        <div className="msc-fb-top">
+          <span className="msc-fb-kind">问题反馈</span>
+          <FeedbackStatusPill status={report.status} />
+          <span className="msc-fb-time">{formatDay(report.created_at)}</span>
+        </div>
+        <h1 className="msc-doc-title">{report.title || "无标题反馈"}</h1>
 
-          <div className="feedback-detail-body">{report.detail || "—"}</div>
+        <section className="msc-block">
+          <h2 className="msc-block-title">详细描述</h2>
+          <p className="msc-body-text">{report.detail || "—"}</p>
+        </section>
 
-          {report.steps ? (
-            <>
-              <div className="feedback-detail-subtitle">复现步骤</div>
-              <div className="feedback-detail-body feedback-detail-steps">{report.steps}</div>
-            </>
-          ) : null}
+        {report.steps ? (
+          <section className="msc-block">
+            <h2 className="msc-block-title">复现步骤</h2>
+            <p className="msc-body-text msc-body-text--pre">{report.steps}</p>
+          </section>
+        ) : null}
 
-          <div className="feedback-detail-subtitle">处理流程</div>
-          <div className="feedback-timeline">
-            {/* 首节点：提交反馈（未处理） */}
-            <div className="feedback-timeline-item">
-              <span className="feedback-timeline-dot" style={{ background: FEEDBACK_STATUS[0].color }} />
-              <div className="feedback-timeline-content">
-                <div className="feedback-timeline-head">
-                  <span className="feedback-timeline-status">提交反馈</span>
-                  <span className="feedback-timeline-time">{formatDate(report.created_at)}</span>
+        <section className="msc-block">
+          <h2 className="msc-block-title">处理进度</h2>
+          <ol className="msc-timeline">
+            <li className="msc-timeline-item">
+              <span className="msc-timeline-dot is-open" aria-hidden="true" />
+              <div className="msc-timeline-body">
+                <div className="msc-timeline-head">
+                  <span className="msc-timeline-status">提交反馈</span>
+                  <span className="msc-timeline-time">{formatDate(report.created_at)}</span>
                 </div>
-                <div className="feedback-timeline-note">反馈已提交，等待处理（未处理）</div>
+                <p className="msc-timeline-note">反馈已提交，等待处理</p>
               </div>
-            </div>
+            </li>
             {logs.map((log, index) => {
               const meta = feedbackStatus(log.to_status);
               return (
-                <div className="feedback-timeline-item" key={`${log.to_status}-${index}`}>
-                  <span className="feedback-timeline-dot" style={{ background: meta.color }} />
-                  <div className="feedback-timeline-content">
-                    <div className="feedback-timeline-head">
-                      <span className="feedback-timeline-status" style={{ color: meta.color }}>{meta.label}</span>
-                      <span className="feedback-timeline-time">{formatDate(log.created_at)}</span>
+                <li className="msc-timeline-item" key={`${log.to_status}-${index}`}>
+                  <span className={`msc-timeline-dot is-${meta.tone}`} aria-hidden="true" />
+                  <div className="msc-timeline-body">
+                    <div className="msc-timeline-head">
+                      <span className={`msc-timeline-status is-${meta.tone}`}>{meta.label}</span>
+                      <span className="msc-timeline-time">{formatDate(log.created_at)}</span>
                     </div>
-                    {log.note ? <div className="feedback-timeline-note">{log.note}</div> : null}
+                    {log.note ? <p className="msc-timeline-note">{log.note}</p> : null}
                   </div>
-                </div>
+                </li>
               );
             })}
-          </div>
-        </div>
-      </div>
-    </div>
+          </ol>
+        </section>
+      </article>
+    </Screen>
   );
 }
 
@@ -634,7 +702,10 @@ interface ChangelogItem {
   version?: string;
   title?: string;
   content_html?: string;
+  /** 兼容部分接口把正文放在 content 的情况 */
+  content?: string;
   published_at?: string | null;
+  created_at?: string | null;
 }
 
 /** v 前缀归一（避免后端 version 已带 v 时出现 vv） */
@@ -644,103 +715,119 @@ function versionLabel(version?: string | null): string {
   return /^v/i.test(value) ? value : `v${value}`;
 }
 
-/** 版本号徽标：分隔点单独放大（Web .changelog-version / .changelog-version-dot） */
-function VersionBadge({ version }: { version?: string | null }) {
-  const parts = versionLabel(version).split(".");
-  return (
-    <span className="changelog-version">
-      {parts.map((part, index) => (
-        <span key={`${part}-${index}`}>
-          {index > 0 ? <span className="changelog-version-dot">.</span> : null}
-          {part}
-        </span>
-      ))}
-    </span>
-  );
+/** 富文本 → 条目文本：优先取 <li>，没有列表时按块级标签切行 */
+function htmlToLines(html?: string | null): string[] {
+  const raw = String(html || "");
+  if (!raw.trim()) return [];
+  const items = Array.from(raw.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi))
+    .map((hit) => stripHtml(hit[1]))
+    .filter(Boolean);
+  if (items.length > 0) return items;
+  return raw
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|h[1-6]|blockquote|tr)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
 }
 
-/** RFC3339 → YYYY-MM-DD（无效值原样展示，口径同 Web changelog 页） */
-function formatDay(value?: string | null): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
+const CHANGELOG_PREVIEW = 6;
 
 export function ChangelogScreen() {
   const list = useQuery({ queryKey: ["changelogs"], queryFn: () => api.changelogs(1, 30) });
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const items: ChangelogItem[] = list.data?.items || list.data?.data?.items || [];
+  const items: ChangelogItem[] = useMemo(
+    () => list.data?.items || list.data?.data?.items || [],
+    [list.data],
+  );
+
+  /** 当前版本 = 最新一条（按发布时间取最大，缺失时用首条） */
+  const currentKey = useMemo(() => {
+    let bestKey = "";
+    let bestTime = Number.NEGATIVE_INFINITY;
+    items.forEach((item, index) => {
+      const key = String(item.id ?? item.version ?? index);
+      const stamp = item.published_at || item.created_at;
+      const time = stamp ? new Date(stamp).getTime() : Number.NaN;
+      if (Number.isFinite(time) && time > bestTime) {
+        bestTime = time;
+        bestKey = key;
+      }
+    });
+    if (bestKey) return bestKey;
+    return items.length > 0 ? String(items[0].id ?? items[0].version ?? 0) : "";
+  }, [items]);
 
   return (
-    <div className="screen">
-      <TopBar title="更新日志" back />
-      <div className="changelog-page">
-        <div className="changelog-header">
-          <h1 className="changelog-heading">
-            <i className="fa fa-history" aria-hidden="true" /> 更新日志
-          </h1>
-          <p className="changelog-subtitle">记录妖精论坛的每一次更新：功能上新、体验优化与问题修复。</p>
-        </div>
-
-        {list.isLoading ? (
-          <div className="changelog-status" role="status">
-            <i className="fa fa-spinner fa-spin" aria-hidden="true" /> 加载中...
-          </div>
-        ) : list.error ? (
-          <div className="changelog-status changelog-error" role="alert">
-            <p>
-              <i className="fa fa-exclamation-triangle" aria-hidden="true" />{" "}
-              {list.error instanceof Error ? list.error.message : "更新日志加载失败，请稍后再试"}
-            </p>
-            <button type="button" className="changelog-retry-btn" onClick={() => void list.refetch()}>重试</button>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="changelog-status changelog-empty">
-            <i className="fa fa-file-text-o" aria-hidden="true" /> 暂无更新日志
-          </div>
-        ) : (
-          <div className="changelog-list">
+    <Screen appbar={<AppBar back title="更新日志" />} onRefresh={async () => { await list.refetch(); }}>
+      {list.isLoading ? (
+        <Skeletons count={3} />
+      ) : list.error ? (
+        <Empty
+          icon="info"
+          title="更新日志加载失败"
+          hint={list.error instanceof Error ? list.error.message : "请稍后再试"}
+          action={
+            <button type="button" className="m-btn" onClick={() => void list.refetch()}>
+              重试
+            </button>
+          }
+        />
+      ) : items.length === 0 ? (
+        <Empty icon="clock" title="暂无更新日志" hint="版本更新后会在这里记录。" />
+      ) : (
+        <>
+          <div className="msc-ver-list">
             {items.map((item, index) => {
               const key = String(item.id ?? item.version ?? index);
-              // 最新一条默认展开，其余收起（点标题展开全文）
-              const open = expanded[key] ?? index === 0;
+              const lines = htmlToLines(item.content_html || item.content);
+              const isCurrent = key === currentKey;
+              const open = Boolean(expanded[key]);
+              const visible = open ? lines : lines.slice(0, CHANGELOG_PREVIEW);
               return (
-                <article className="changelog-item" key={key}>
-                  <button
-                    type="button"
-                    className="changelog-item-head"
-                    aria-expanded={open}
-                    onClick={() => setExpanded((current) => ({ ...current, [key]: !open }))}
-                  >
-                    <VersionBadge version={item.version} />
-                    <span className="changelog-title">{item.title || "更新"}</span>
-                    <time className="changelog-date" dateTime={item.published_at || undefined}>
-                      <i className="fa fa-clock-o" aria-hidden="true" /> {formatDay(item.published_at)}
+                <article className={`msc-ver-card${isCurrent ? " is-current" : ""}`.trim()} key={key}>
+                  <header className="msc-ver-head">
+                    <span className="msc-ver-name">{versionLabel(item.version)}</span>
+                    {isCurrent ? <span className="msc-ver-now">当前</span> : null}
+                    <time className="msc-ver-date" dateTime={item.published_at || item.created_at || undefined}>
+                      {formatDay(item.published_at || item.created_at)}
                     </time>
-                    <span className="changelog-toggle">
-                      {open ? "收起" : "展开"} <i className={`fa ${open ? "fa-angle-up" : "fa-angle-down"}`} aria-hidden="true" />
-                    </span>
-                  </button>
-                  {open ? (
-                    item.content_html ? (
-                      <div className="changelog-content">
-                        <RichContent html={item.content_html} format="html" />
-                      </div>
-                    ) : (
-                      <p className="changelog-content-empty">暂无详细内容</p>
-                    )
-                  ) : item.content_html ? (
-                    <p className="changelog-preview">{textLimit(stripHtml(item.content_html), 120)}</p>
+                  </header>
+                  {item.title ? <p className="msc-ver-title">{item.title}</p> : null}
+                  {visible.length > 0 ? (
+                    <ul className="msc-ver-lines">
+                      {visible.map((line, lineIndex) => (
+                        <li key={`${line}-${lineIndex}`}>{line}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="msc-ver-empty">暂无详细内容</p>
+                  )}
+                  {lines.length > CHANGELOG_PREVIEW ? (
+                    <button
+                      type="button"
+                      className="msc-ver-toggle"
+                      onClick={() => setExpanded((current) => ({ ...current, [key]: !open }))}
+                    >
+                      {open ? "收起" : `展开全部 ${lines.length} 条`}
+                      <Icon name={open ? "up" : "down"} size={14} />
+                    </button>
                   ) : null}
                 </article>
               );
             })}
           </div>
-        )}
-      </div>
-    </div>
+          <div className="m-end">— 到底了 —</div>
+        </>
+      )}
+    </Screen>
   );
 }
 
@@ -759,9 +846,18 @@ interface YearForm {
   day: string;
 }
 
+interface YearSide {
+  era: string;
+  year: number;
+  month: number;
+  day: number;
+}
+
 interface YearConversionResult {
   type: YearResultType;
   message: string;
+  source?: YearSide;
+  target?: YearSide;
 }
 
 interface TodayParts {
@@ -773,17 +869,17 @@ interface TodayParts {
 /** 换算方向元信息（口径同 Web lib/year-conversion 的 DIRECTION_META） */
 const YEAR_DIRECTIONS: Record<
   YearDirection,
-  { label: string; icon: string; source: "infinite" | "gregorian"; desc: string }
+  { label: string; short: string; source: "infinite" | "gregorian"; desc: string }
 > = {
   "infinite-to-gregorian": {
     label: "无限历 → 公元历",
-    icon: "fa-long-arrow-right",
+    short: "无限历 → 公元历",
     source: "infinite",
     desc: "公元 1604 年之前为「无限前」，请切换纪年并填写正数年份。",
   },
   "gregorian-to-infinite": {
     label: "公元历 → 无限历",
-    icon: "fa-long-arrow-left",
+    short: "公元历 → 无限历",
     source: "gregorian",
     desc: "公元前请选择「公元前」并填写正数年份；公元纪年没有 0 年。",
   },
@@ -908,27 +1004,63 @@ function convertYear(
       ? formatGregorianLabel(astronomical, useYuanNian)
       : formatInfiniteLabel(infinite.year, infinite.before, useYuanNian);
 
+  const source: YearSide =
+    input.calendar === "infinite"
+      ? { era: input.era === "before" ? "无限前" : "无限", year, month, day }
+      : { era: input.era === "bce" ? "公元前" : "公元", year, month, day };
+  const target: YearSide =
+    input.calendar === "infinite"
+      ? {
+          era: astronomical >= 1 ? "公元" : "公元前",
+          year: astronomical >= 1 ? astronomical : 1 - astronomical,
+          month,
+          day,
+        }
+      : { era: infinite.before ? "无限前" : "无限", year: infinite.year, month, day };
+
   return {
     type: "success",
     message: `${sourceLabel} ${month} 月 ${day} 日 = ${targetLabel} ${month} 月 ${day} 日`,
+    source,
+    target,
   };
 }
 
-/** 结果面板（Web .yc-result / .yc-result-*） */
-function YearResultPanel({ result }: { result: YearConversionResult | null }) {
+/** 结果卡片：成功显示大数字双向对照，失败/提示显示原因 */
+function YearResultCard({ result }: { result: YearConversionResult | null }) {
   if (!result) {
     return (
-      <div className="yc-result yc-result-idle">
-        <i className="fa fa-info-circle" aria-hidden="true" />
-        <p>填写年、月、日后点击「换算」查看结果</p>
+      <div className="msc-yc-result is-idle">
+        <Icon name="info" size={17} />
+        <p className="msc-yc-msg">填写年、月、日后自动显示换算结果</p>
       </div>
     );
   }
-  const icon = result.type === "success" ? "fa-check-circle" : result.type === "warning" ? "fa-exclamation-triangle" : "fa-times-circle";
+  if (result.type !== "success" || !result.source || !result.target) {
+    return (
+      <div className={`msc-yc-result is-${result.type}`} role={result.type === "error" ? "alert" : "status"}>
+        <p className="msc-yc-msg">{result.message}</p>
+      </div>
+    );
+  }
   return (
-    <div className={`yc-result yc-result-${result.type}`} role={result.type === "error" ? "alert" : "status"}>
-      <i className={`fa ${icon}`} aria-hidden="true" />
-      <p>{result.message}</p>
+    <div className="msc-yc-result is-success" role="status">
+      <div className="msc-yc-pair">
+        <div className="msc-yc-side">
+          <span className="msc-yc-era">{result.source.era}</span>
+          <b className="msc-yc-num">{result.source.year}</b>
+          <span className="msc-yc-unit">年</span>
+        </div>
+        <Icon name="forward" size={20} className="msc-yc-arrow" />
+        <div className="msc-yc-side">
+          <span className="msc-yc-era">{result.target.era}</span>
+          <b className="msc-yc-num">{result.target.year}</b>
+          <span className="msc-yc-unit">年</span>
+        </div>
+      </div>
+      <p className="msc-yc-msg">
+        {result.source.month} 月 {result.source.day} 日 · 年号换算不改月日
+      </p>
     </div>
   );
 }
@@ -938,7 +1070,6 @@ export function YearConverterScreen() {
   const [direction, setDirection] = useState<YearDirection>("infinite-to-gregorian");
   const [form, setForm] = useState<YearForm>({ era: "after", year: "", month: "", day: "" });
   const [useYuanNian, setUseYuanNian] = useState(true);
-  const [result, setResult] = useState<YearConversionResult | null>(null);
 
   useEffect(() => {
     // 时钟属于外部系统：挂载后再读，避开首帧时区差异
@@ -953,145 +1084,136 @@ export function YearConverterScreen() {
     if (next === direction) return;
     setDirection(next);
     setForm({ era: next === "infinite-to-gregorian" ? "after" : "ce", year: "", month: "", day: "" });
-    setResult(null);
   };
 
   const update = (patch: Partial<YearForm>) => setForm((prev) => ({ ...prev, ...patch }));
 
+  const filled = form.year.trim() !== "" && form.month.trim() !== "" && form.day.trim() !== "";
+  const result = useMemo(
+    () =>
+      filled
+        ? convertYear(
+            { calendar: meta.source, era: form.era, year: form.year, month: form.month, day: form.day },
+            useYuanNian,
+          )
+        : null,
+    [filled, form, meta.source, useYuanNian],
+  );
+
   return (
-    <div className="screen">
-      <TopBar title="年制换算" back />
-      <div className="year-converter-page">
-        <div className="yc-header">
-          <h1 className="yc-heading">
-            <i className="fa fa-calendar" aria-hidden="true" /> 无限年换算
-          </h1>
-          <p className="yc-subtitle">
-            统一入口：选择方向后一次完成「无限历 ⇄ 公元历」换算。基准：无限元年 = 公元 1604 年。
-          </p>
-          {today && todayInfinite ? (
-            <div className="yc-today">
-              <i className="fa fa-clock-o" aria-hidden="true" />
-              <span>
-                今天是 {formatGregorianLabel(today.year, useYuanNian)} {today.month} 月 {today.day} 日
-              </span>
-              <span className="yc-today-sep" aria-hidden="true">·</span>
-              <span>
-                {formatInfiniteLabel(todayInfinite.year, todayInfinite.before, useYuanNian)} {today.month} 月 {today.day} 日
-              </span>
-            </div>
-          ) : null}
+    <Screen appbar={<AppBar back title="年制换算" />}>
+      <div className="msc-yc">
+        <div className="msc-yc-today">
+          <Icon name="clock" size={14} />
+          <span>
+            {today
+              ? `今天 ${formatGregorianLabel(today.year, useYuanNian)} ${today.month} 月 ${today.day} 日`
+              : "正在读取今天的日期…"}
+            {today && todayInfinite
+              ? ` · ${formatInfiniteLabel(todayInfinite.year, todayInfinite.before, useYuanNian)} ${today.month} 月 ${today.day} 日`
+              : ""}
+          </span>
         </div>
 
-        <div className="yc-direction" role="tablist" aria-label="换算方向">
+        <div className="m-seg msc-yc-dir" role="tablist" aria-label="换算方向">
           {(Object.keys(YEAR_DIRECTIONS) as YearDirection[]).map((key) => (
             <button
               key={key}
               type="button"
               role="tab"
               aria-selected={direction === key}
-              className={`yc-direction-btn${direction === key ? " active" : ""}`}
+              className={`m-seg-btn ${direction === key ? "on" : ""}`.trim()}
               onClick={() => switchDirection(key)}
             >
-              <i className={`fa ${YEAR_DIRECTIONS[key].icon}`} aria-hidden="true" />
-              {YEAR_DIRECTIONS[key].label}
+              {YEAR_DIRECTIONS[key].short}
             </button>
           ))}
         </div>
 
-        <section className="yc-card" aria-labelledby="yc-convert-title">
-          <h2 className="yc-card-title" id="yc-convert-title">
-            <i className="fa fa-exchange" aria-hidden="true" /> {meta.label}
-          </h2>
-          <p className="yc-card-desc">{meta.desc}</p>
-          <form
-            className="yc-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setResult(
-                convertYear(
-                  { calendar: meta.source, era: form.era, year: form.year, month: form.month, day: form.day },
-                  useYuanNian,
-                ),
-              );
-            }}
-          >
-            <div className="yc-field-row">
-              <label className="yc-field">
-                <span>纪年</span>
-                <select value={form.era} onChange={(event) => update({ era: event.target.value as YearEra })}>
-                  {isInfiniteSource ? (
-                    <>
-                      <option value="after">无限</option>
-                      <option value="before">无限前</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="ce">公元</option>
-                      <option value="bce">公元前</option>
-                    </>
-                  )}
-                </select>
-              </label>
-              <label className="yc-field yc-field-grow">
-                <span>年</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={form.year}
-                  onChange={(event) => update({ year: event.target.value })}
-                  placeholder={isInfiniteSource ? "如 423 或 元年" : "如 2026 或 元年"}
-                />
-              </label>
-            </div>
-            <div className="yc-field-row">
-              <label className="yc-field">
-                <span>月</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={form.month}
-                  onChange={(event) => update({ month: event.target.value })}
-                  placeholder="1-12"
-                />
-              </label>
-              <label className="yc-field">
-                <span>日</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={form.day}
-                  onChange={(event) => update({ day: event.target.value })}
-                  placeholder="1-31"
-                />
-              </label>
-            </div>
-            <label className="yc-yuan-toggle">
-              <input type="checkbox" checked={useYuanNian} onChange={(event) => setUseYuanNian(event.target.checked)} />
-              <span>第 1 年显示为「元年」（如无限元年 / 公元元年）</span>
+        <section className="msc-yc-card">
+          <p className="msc-yc-desc">{meta.desc}</p>
+
+          <div className="msc-yc-row">
+            <label className="msc-yc-field msc-yc-field--era">
+              <span className="m-label">纪年</span>
+              <select className="m-input" value={form.era} onChange={(event) => update({ era: event.target.value as YearEra })}>
+                {isInfiniteSource ? (
+                  <>
+                    <option value="after">无限</option>
+                    <option value="before">无限前</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="ce">公元</option>
+                    <option value="bce">公元前</option>
+                  </>
+                )}
+              </select>
             </label>
-            <button type="submit" className="yc-submit-btn">
-              <i className="fa fa-exchange" aria-hidden="true" /> 换算
-            </button>
-          </form>
-          <YearResultPanel result={result} />
-          <p className="yc-formula">无限 N 年 = 公元 (1603 + N) 年；公元 1603 年及以前 = 无限前 (1604 - 公元年) 年。</p>
+            <label className="msc-yc-field msc-yc-field--year">
+              <span className="m-label">年</span>
+              <input
+                className="m-input msc-yc-year"
+                type="text"
+                inputMode="numeric"
+                value={form.year}
+                onChange={(event) => update({ year: event.target.value })}
+                placeholder={isInfiniteSource ? "423 或 元年" : "2026 或 元年"}
+                aria-label="年份"
+              />
+            </label>
+          </div>
+
+          <div className="msc-yc-row">
+            <label className="msc-yc-field">
+              <span className="m-label">月</span>
+              <input
+                className="m-input"
+                type="text"
+                inputMode="numeric"
+                value={form.month}
+                onChange={(event) => update({ month: event.target.value })}
+                placeholder="1-12"
+                aria-label="月份"
+              />
+            </label>
+            <label className="msc-yc-field">
+              <span className="m-label">日</span>
+              <input
+                className="m-input"
+                type="text"
+                inputMode="numeric"
+                value={form.day}
+                onChange={(event) => update({ day: event.target.value })}
+                placeholder="1-31"
+                aria-label="日期"
+              />
+            </label>
+          </div>
+
+          <label className="msc-yc-yuan">
+            <input type="checkbox" checked={useYuanNian} onChange={(event) => setUseYuanNian(event.target.checked)} />
+            <span>第 1 年显示为「元年」（如无限元年 / 公元元年）</span>
+          </label>
         </section>
 
-        <section className="yc-rules" aria-labelledby="yc-rules-title">
-          <h2 className="yc-rules-title" id="yc-rules-title">
-            <i className="fa fa-book" aria-hidden="true" /> 换算规则
-          </h2>
-          <ul className="yc-rules-list">
+        <YearResultCard result={result} />
+
+        <p className="msc-yc-formula">
+          无限 N 年 = 公元 (1603 + N) 年；公元 1603 年及以前 = 无限前 (1604 − 公元年) 年。
+        </p>
+
+        <section className="msc-block">
+          <h2 className="msc-block-title">换算规则</h2>
+          <ul className="msc-rule-list">
             <li>无限元年 = 公元 1604 年；无限 N 年 = 公元 (1603 + N) 年。</li>
             <li>公元 1603 年及以前记为「无限前」：无限前 1 年 = 公元 1603 年。</li>
             <li>两套纪年都不存在 0 年：无限前 1 年之后直接是无限元年；公元前 1 年之后直接是公元 1 年。</li>
-            <li>第 1 年可显示为「元年」，也可直接在上方年份框输入「元年」。</li>
+            <li>第 1 年可显示为「元年」，也可直接在年份框输入「元年」。</li>
             <li>2 月 29 日只在闰年存在；目标年份不是闰年时会给出提示，不输出无效日期。</li>
-            <li>年、月、日之外不改变月日，仅在换算年份时同步提示该日期在目标年是否有效。</li>
           </ul>
         </section>
       </div>
-    </div>
+    </Screen>
   );
 }

@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { NavProvider, useNav, type TabKey } from "./lib/nav";
+import { NavProvider, useNav } from "./lib/nav";
 import { useApp, PRIVACY_VERSION } from "./lib/store";
 import { bus } from "./lib/bus";
 import { handleBack, registerBackHandler } from "./lib/back";
 import { checkUpdate, onSessionExpired, onUpdateProgress, sse } from "./lib/native";
-import { ToastHost, TabIcon } from "./components/ui";
+import { ToastHost, TabBar } from "./components/mobile";
+import { Icon } from "./components/icons";
 import type { UpdateManifest } from "./lib/types";
 
 import { FeedScreen } from "./screens/feed";
@@ -52,51 +53,30 @@ function ScreenHost() {
   }
 }
 
-function TabBar() {
-  const { tab, switchTab, push } = useNav();
-  const unread = useApp((s) => s.unread);
-  const total = unread.likes + unread.comments + unread.system + unread.chat;
-  const item = (key: TabKey, label: string) => (
-    <button className={`tabbar-item ${tab === key ? "on" : ""}`} onClick={() => switchTab(key)}>
-      <TabIcon name={key} />
-      <span>{label}</span>
-      {key === "messages" && total > 0 ? <i className="tabbar-badge">{total > 99 ? "99+" : total}</i> : null}
-    </button>
-  );
-  return (
-    <nav className="tabbar">
-      {item("square", "广场")}
-      {item("world", "世界")}
-      <button className="tabbar-compose" aria-label="发帖" onClick={() => push("compose")}>+</button>
-      {item("messages", "消息")}
-      {item("me", "我的")}
-    </nav>
-  );
-}
-
 function UpdatePrompt({ manifest, onClose, onOpen }: { manifest: UpdateManifest; onClose: () => void; onOpen: () => void }) {
   useEffect(() => registerBackHandler(() => { onClose(); return true; }), [onClose]);
   const release = manifest.release;
   if (!release) return null;
   return (
-    <div className="sheet-mask" onClick={onClose}>
-      <div className="sheet" onClick={(event) => event.stopPropagation()} style={{ maxHeight: "70dvh" }}>
-        <div className="sheet-head">
-          <strong>发现新版本 {release.version}</strong>
-          <button className="icon-btn" onClick={onClose} aria-label="关闭">×</button>
+    <div className="m-mask" onClick={onClose}>
+      <div className="m-sheet" onClick={(event) => event.stopPropagation()}>
+        <div className="m-sheet-grip" />
+        <div className="m-sheet-head">
+          <strong style={{ flex: 1 }}>版本 {release.version} 可用</strong>
+          <button className="m-iconbtn" aria-label="关闭" onClick={onClose}><Icon name="close" size={20} /></button>
         </div>
-        <div className="sheet-body">
-          <div className="row between small muted">
-            <span>{release.size ? `${(release.size / 1024 / 1024).toFixed(1)} MB` : "安装包"}</span>
-            <span>{manifest.mandatory ? "重要更新" : "可选更新"}</span>
+        <div className="m-sheet-body">
+          <div className="m-row" style={{ gap: 8, marginBottom: 12 }}>
+            <span className="m-pill">{manifest.mandatory ? "重要更新" : "可选更新"}</span>
+            <span className="m-meta">{release.size ? `${(release.size / 1024 / 1024).toFixed(1)} MB` : "安装包"}</span>
           </div>
-          <div className="update-notes">
-            {(release.notes || ["修复问题与体验优化"]).slice(0, 12).map((line, index) => <p key={index}>{line}</p>)}
+          <div className="m-text" style={{ fontSize: 13.5 }}>
+            {(release.notes || ["修复问题与体验优化"]).slice(0, 8).map((line, index) => <p key={index} style={{ margin: "0 0 6px" }}>{line}</p>)}
           </div>
         </div>
-        <div className="sheet-foot row">
-          <button className="btn ghost" style={{ flex: 1 }} onClick={onClose}>稍后</button>
-          <button className="btn primary" style={{ flex: 1 }} onClick={onOpen}>查看更新</button>
+        <div className="m-sheet-foot">
+          <button className="m-btn m-btn--ghost" onClick={onClose}>稍后</button>
+          <button className="m-btn m-btn--primary" onClick={onOpen}>去更新</button>
         </div>
       </div>
     </div>
@@ -114,7 +94,7 @@ function Shell() {
   const setUpdate = useApp((s) => s.setUpdate);
   const dismissUpdate = useApp((s) => s.dismissUpdate);
   const showToast = useApp((s) => s.showToast);
-  const { push } = useNav();
+  const { push, top } = useNav();
   const lastCheck = useRef(0);
 
   useEffect(() => {
@@ -169,24 +149,26 @@ function Shell() {
 
   if (!booted) {
     return (
-      <div className="boot-screen">
-        <div className="center">
-          <div className="boot-logo">妖</div>
-          <div className="muted small">正在打开妖精论坛…</div>
-        </div>
+      <div className="m-boot">
+        <div className="m-boot-logo">妖</div>
+        <div className="m-boot-name">妖精论坛</div>
+        <span className="m-spinner" style={{ marginTop: 18 }} />
       </div>
     );
   }
 
   if (!consented) {
     return (
-      <div className="privacy-gate">
-        <div className="boot-logo">妖</div>
-        <h1>欢迎来到妖精论坛</h1>
-        <p>在开始之前，请阅读并同意《隐私政策》与《用户条款》。我们只在你同意后才会发起网络请求。</p>
-        <p className="small muted">当前隐私政策版本：{PRIVACY_VERSION}</p>
-        <button className="btn primary block" onClick={() => void consent()}>同意并继续</button>
-        <button className="btn ghost block" style={{ marginTop: 10 }} onClick={() => push("settings")}>查看隐私说明</button>
+      <div className="m-intro">
+        <div className="m-intro-glow" />
+        <div className="m-intro-inner">
+          <div className="m-boot-logo" style={{ margin: "0 0 22px" }}>妖</div>
+          <h1>欢迎来到<br />妖精论坛</h1>
+          <p>在开始之前，请阅读并同意《隐私政策》与《用户条款》。<br />我们只在你同意后才会发起网络请求。</p>
+          <button className="m-btn m-btn--primary m-btn--block" onClick={() => void consent()}>同意并继续</button>
+          <button className="m-btn m-btn--ghost m-btn--block" style={{ marginTop: 8 }} onClick={() => push("settings")}>查看隐私说明</button>
+          <div className="m-small m-muted" style={{ marginTop: 22, textAlign: "center" }}>隐私政策版本 {PRIVACY_VERSION}</div>
+        </div>
       </div>
     );
   }
@@ -194,7 +176,7 @@ function Shell() {
   return (
     <div className="app-shell">
       <main className="app-main">
-        <ScreenHost />
+        <ScreenHost key={top.key} />
       </main>
       <TabBar />
       <ToastHost />
