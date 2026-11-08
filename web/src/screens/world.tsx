@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { sse } from "../lib/native";
 import { useNav } from "../lib/nav";
@@ -6,7 +6,12 @@ import { useApp } from "../lib/store";
 import { AppBar, Avatar, Empty, Screen, Skeletons } from "../components/mobile";
 import { Icon } from "../components/icons";
 import { RichContent } from "../components/ui";
-import { timeAgo } from "../lib/format";
+import { stripHtml, timeAgo } from "../lib/format";
+
+/** TipTap 按需加载：只在切到富文本输入时加载 */
+const RichEditor = React.lazy(() =>
+  import("../components/RichEditor").then((mod) => ({ default: mod.RichEditor })),
+);
 
 /**
  * 世界频道（底部 Tab 一级页）。
@@ -217,6 +222,9 @@ export function WorldScreen() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
+  /** 富文本模式：正文以 HTML 保存，发送时直接作为 content_html */
+  const [richOpen, setRichOpen] = useState(false);
+  const [richDoc, setRichDoc] = useState("");
   const [sending, setSending] = useState(false);
   const [pendingNew, setPendingNew] = useState(0);
   const [live, setLive] = useState<LiveState>("connecting");
@@ -420,8 +428,13 @@ export function WorldScreen() {
 
   const send = async () => {
     if (sendingRef.current) return;
-    const text = draft.trim();
+    const richPlain = stripHtml(richDoc).trim();
+    const text = richOpen ? richPlain : draft.trim();
     if (!text) return;
+    if (text.length > MAX_CHARS) {
+      showToast(`内容超过 ${MAX_CHARS} 字上限`, "error");
+      return;
+    }
     if (!user) {
       showToast("请先登录后参与世界频道", "error");
       return;
@@ -435,10 +448,12 @@ export function WorldScreen() {
     sendingRef.current = true;
     setSending(true);
     const tempId = `tmp-${now}`;
-    const html = plainTextToHtml(text);
+    // 富文本直接发 HTML（已由编辑器产出，提交前再做一次白名单清洗在渲染侧完成）
+    const html = richOpen ? richDoc : plainTextToHtml(text);
     // 乐观发送：先以本地消息占位，失败再回滚。
     setPending((list) => [...list, { tempId, content: html, createdAt: new Date().toISOString() }]);
-    setDraft("");
+    if (richOpen) setRichDoc("");
+    else setDraft("");
     nearBottomRef.current = true;
     requestAnimationFrame(() => scrollToBottom("smooth"));
     try {
@@ -449,7 +464,8 @@ export function WorldScreen() {
       requestAnimationFrame(() => scrollToBottom("smooth"));
     } catch (err) {
       setPending((list) => list.filter((item) => item.tempId !== tempId));
-      setDraft((current) => (current ? current : text));
+      if (richOpen) setRichDoc((current) => (current ? current : html));
+      else setDraft((current) => (current ? current : text));
       if (err instanceof ApiError && err.status === 429) {
         cooldownRef.current = Date.now() + SEND_COOLDOWN_MS;
         showToast("发言太快，稍后再试", "error");
@@ -490,7 +506,8 @@ export function WorldScreen() {
   }, [messages, myId, parentNames]);
 
   const openUser = (id: string) => push("user", { id });
-  const counterVisible = draft.length > COUNTER_FROM;
+  const richLength = stripHtml(richDoc).trim().length;
+  const counterVisible = (richOpen ? richLength : draft.length) > COUNTER_FROM;
 
   return (
     <Screen
@@ -511,29 +528,76 @@ export function WorldScreen() {
         <div className="wd-composer">
           {counterVisible ? (
             <div className="wd-counter" aria-live="polite">
-              {draft.length} / {MAX_CHARS}
+              {richOpen ? richLength : draft.length} / {MAX_CHARS}
+            </div>
+          ) : null}
+          {richOpen ? (
+            <div className="wd-rich">
+              <Suspense
+                fallback={
+                  <div className="wd-rich-loading">
+                    <span className="m-spinner" />
+                    <span>编辑器加载中…</span>
+                  </div>
+                }
+              >
+                <RichEditor
+                  value={richDoc}
+                  onChange={setRichDoc}
+                  placeholder="支持加粗、链接与图片…"
+                  scene="comment_image"
+                  minHeight={64}
+                  toolbar="compact"
+                />
+              </Suspense>
             </div>
           ) : null}
           <div className="wd-inputrow">
-            <textarea
-              ref={inputRef}
-              className="wd-input"
-              value={draft}
-              rows={1}
-              maxLength={MAX_CHARS}
-              aria-label="世界频道输入框"
-              placeholder={user ? "说点什么…" : "登录后即可参与世界频道"}
-              onChange={(event) => setDraft(event.target.value)}
-            />
             <button
               type="button"
-              className="wd-send"
-              aria-label="发送"
-              disabled={sending || !draft.trim()}
-              onClick={() => void send()}
+              className={`wd-rich-toggle${richOpen ? " on" : ""}`}
+              aria-label={richOpen ? "切换为纯文本" : "切换为富文本"}
+              aria-pressed={richOpen}
+              onClick={() => setRichOpen((open) => !open)}
             >
-              <Icon name="send" size={19} />
+              <Icon name="edit" size={18} />
             </button>
+            {richOpen ? (
+              <>
+                <span className="wd-rich-hint">富文本模式</span>
+                <button
+                  type="button"
+                  className="wd-send"
+                  aria-label="发送"
+                  disabled={sending || richLength === 0}
+                  onClick={() => void send()}
+                >
+                  <Icon name="send" size={19} />
+                </button>
+              </>
+            ) : (
+              <>
+                <textarea
+                  ref={inputRef}
+                  className="wd-input"
+                  value={draft}
+                  rows={1}
+                  maxLength={MAX_CHARS}
+                  aria-label="世界频道输入框"
+                  placeholder={user ? "说点什么…" : "登录后即可参与世界频道"}
+                  onChange={(event) => setDraft(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="wd-send"
+                  aria-label="发送"
+                  disabled={sending || !draft.trim()}
+                  onClick={() => void send()}
+                >
+                  <Icon name="send" size={19} />
+                </button>
+              </>
+            )}
           </div>
         </div>
       }

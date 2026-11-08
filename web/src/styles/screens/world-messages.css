@@ -85,6 +85,51 @@
   gap: 8px;
 }
 
+/* 富文本开关 */
+.wd-rich-toggle {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--m-track-bg);
+  color: var(--color-text-secondary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background .16s var(--m-ease), color .16s var(--m-ease);
+}
+.wd-rich-toggle.on {
+  background: color-mix(in srgb, var(--m-accent-ink) 18%, transparent);
+  color: var(--m-accent-ink);
+}
+.wd-rich-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: center;
+  padding-left: 4px;
+  font-size: var(--m-font-xs);
+  color: var(--color-text-tertiary);
+}
+.wd-rich { margin-bottom: 8px; }
+.wd-rich .m-editor {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-input);
+}
+.wd-rich .m-editor-body { padding: 8px 12px; }
+.wd-rich .m-editor-body .ProseMirror { font-size: 15px; line-height: 1.6; }
+.wd-rich-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 104px;
+  border-radius: var(--m-radius-md);
+  background: var(--color-bg-input);
+  color: var(--color-text-tertiary);
+  font-size: var(--m-font-sm);
+}
+
 .wd-input,
 .ms-input {
   flex: 1 1 auto;

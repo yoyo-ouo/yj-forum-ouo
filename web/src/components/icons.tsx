@@ -19,7 +19,7 @@ const D: Record<IconName, React.ReactNode> = {
   bell: <><path d="M18 16.4V11a6 6 0 1 0-12 0v5.4L4 19.2h16z" /><path d="M10 22h4" /></>,
   user: <><circle cx="12" cy="8" r="3.6" /><path d="M5 20c1.2-3.6 3.9-5.4 7-5.4s5.8 1.8 7 5.4" /></>,
   globe: <><circle cx="12" cy="12" r="8.6" /><path d="M3.6 12h16.8M12 3.4c2.8 3.4 2.8 13.8 0 17.2M12 3.4c-2.8 3.4-2.8 13.8 0 17.2" /></>,
-  grid: <><rect x="3.6" y="3.6" width="7" height="7" rx="2.2" /><rect x="13.4" y="3.6" width="7" height="7" rx="2.2" /><rect x="3.6" y="13.4" width="7" height="7" rx="2.2" /><rect x="13.4" y="13.4" width="7" height="7" rx="2.2" /></>,
+  grid: <><rect x="3.4" y="4.4" width="17.2" height="15.2" rx="3.6" /><path d="M6.9 9.3h6.4M6.9 12.3h10.2M6.9 15.3h7.8" /></>,
   plus: <path d="M12 5.5v13M5.5 12h13" />,
   more: <><circle cx="5.5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="18.5" cy="12" r="1.5" /></>,
   share: <><path d="M12 15.5V3.8M8 7.6l4-3.8 4 3.8" /><path d="M5 13.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-5.5" /></>,

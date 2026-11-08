@@ -20,20 +20,29 @@
   --m-font-xl: 21px;
   --m-ease: cubic-bezier(.22, .61, .36, 1);
   --m-hairline: var(--color-border-divider);
-  --m-card-bg: var(--color-bg-card);
+  /* 卡片是一层“浮起来的表面”；夜间不能直接用近黑，否则像控出来的洞 */
+  --m-card-bg: #FCFEFD;
+  --m-track-bg: rgba(106, 140, 137, .12);
+  --m-raised-bg: #FFFFFF;
   --m-shadow-card: 0 6px 20px -14px rgba(24, 48, 46, .45);
   --m-shadow-float: 0 12px 32px -14px rgba(24, 48, 46, .5);
   --m-press: rgba(106, 140, 137, .12);
+  /* 主色作为“文字/图标色”时的取值；夜间会换成亮青 */
+  --m-accent-ink: var(--color-primary);
+  --m-tab-idle: var(--color-text-tertiary);
 }
 
 .night-mode {
   --m-shadow-card: 0 6px 20px -12px rgba(0, 0, 0, .55);
   --m-shadow-float: 0 14px 36px -12px rgba(0, 0, 0, .6);
   --m-press: rgba(132, 168, 185, .16);
+  --m-card-bg: #3A636C;
+  --m-track-bg: rgba(0, 0, 0, .22);
+  --m-raised-bg: #45717A;
   /* 深色底上主色本身的对比度不够，作为“文字/图标色”时换成亮青 */
-  --m-accent-ink: #9FC9C5;
+  --m-accent-ink: #A6DCD5;
+  --m-tab-idle: #93B3BC;
 }
-:root { --m-accent-ink: var(--color-primary); }
 
 /* ---------- 基础 ---------- */
 *, *::before, *::after { box-sizing: border-box; }
@@ -168,22 +177,36 @@ img { max-width: 100%; }
   height: 100%;
   border: 0;
   background: none;
-  color: var(--color-text-tertiary);
+  color: var(--m-tab-idle);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  font-size: 10px;
+  gap: 3px;
+  font-size: 10.5px;
   font-weight: 500;
   letter-spacing: .02em;
   position: relative;
   cursor: pointer;
   padding: 0;
+  transition: color .16s var(--m-ease);
 }
-.m-tab svg { width: 23px; height: 23px; }
+.m-tab svg { width: 24px; height: 24px; stroke-width: 2; }
 .m-tab.on { color: var(--m-accent-ink); }
-.m-tab.on svg { stroke-width: 2.2; }
+.m-tab.on svg { stroke-width: 2.2; fill: currentColor; fill-opacity: .16; }
+.m-tab.on span { font-weight: 650; }
+/* 选中指示：顶部小短条，替代大块底色 */
+.m-tab.on::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 22px;
+  height: 3px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--m-accent-ink);
+}
 .m-tab-badge {
   position: absolute;
   top: 8px;
@@ -204,22 +227,28 @@ img { max-width: 100%; }
   box-shadow: 0 0 0 2px var(--color-bg-body);
 }
 .m-fab {
-  width: 46px;
-  height: 46px;
+  width: 48px;
+  height: 48px;
   justify-self: center;
   border: 0;
-  border-radius: 16px;
-  background: linear-gradient(140deg, var(--color-primary), var(--color-secondary));
-  color: #f7fdfc;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #5F9490, #4A807D);
+  color: #F6FCFB;
   display: grid;
   place-items: center;
   cursor: pointer;
-  transform: translateY(-7px);
-  box-shadow: 0 10px 22px -10px var(--color-shadow-primary);
+  transform: translateY(-8px);
+  box-shadow: 0 10px 20px -8px rgba(24, 60, 57, .55), inset 0 1px 0 rgba(255, 255, 255, .18);
   transition: transform .16s var(--m-ease);
 }
-.m-fab:active { transform: translateY(-7px) scale(.93); }
-.m-fab svg { width: 24px; height: 24px; stroke-width: 2.4; }
+.night-mode .m-fab {
+  background: linear-gradient(145deg, #A8D3CE, #8CBDBA);
+  color: #16302E;
+  box-shadow: 0 10px 22px -8px rgba(0, 0, 0, .55);
+}
+.m-fab:active { transform: translateY(-8px) scale(.93); }
+.m-fab svg { width: 25px; height: 25px; stroke-width: 2.6; }
+.m-fab { position: relative; }
 
 /* ---------- 通用排版 ---------- */
 .m-title { font-size: var(--m-font-lg); font-weight: 650; line-height: 1.4; }
