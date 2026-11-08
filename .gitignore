@@ -25,6 +25,11 @@ release/
 .DS_Store
 Thumbs.db
 
+# ── 前端 / Capacitor 生成物 ──
+web/node_modules/
+web/dist/
+app/src/main/assets/public/
+
 # ── 签名材料（严禁入库）──
 *.jks
 *.keystore

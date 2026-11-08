@@ -1,23 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 联网：所有内容都来自 https://www.yjlt.top 的 HTTPS 接口 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-    <!--
-      自更新：下载新版 APK 后交给系统安装器安装。
-      该权限只是「允许发起安装」；实际安装仍需用户在系统弹窗里确认，
-      首次使用会先引导到「安装未知应用」授权页。
-    -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-
-    <!-- 消息通知（Android 13+ 需运行时授权） -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".ForumApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -39,11 +31,6 @@
             </intent-filter>
         </activity>
 
-        <!--
-          自更新下载的 APK 放在 App 私有 cacheDir/updates/，系统安装器读不到，
-          必须经 FileProvider 换成 content:// URI 并临时授权。
-          authorities 用 ${applicationId}，debug 版的 .debug 后缀也能各自匹配。
-        -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -55,4 +42,21 @@
         </provider>
     </application>
 
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+            <data android:mimeType="image/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.PICK" />
+            <data android:mimeType="image/*" />
+        </intent>
+    </queries>
 </manifest>

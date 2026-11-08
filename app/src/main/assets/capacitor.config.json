@@ -1,0 +1,18 @@
+{
+  "appId": "top.crazying.forum",
+  "appName": "妖精论坛",
+  "webDir": "public",
+  "server": {
+    "androidScheme": "https",
+    "hostname": "localhost",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "native"
+    }
+  }
+}

@@ -42,11 +42,29 @@ jobs:
             exit 1
           fi
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.24.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Build mobile web
+        run: |
+          cd web
+          pnpm install --frozen-lockfile
+          pnpm build
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -116,7 +134,8 @@ jobs:
             fi
           done
           if [ -z "${ALTCHA_APP_SECRET:-}" ]; then
-            echo "::warning::未设置 secrets.ALTCHA_APP_SECRET，本版 APK 将回退 ALTCHA 本地求解（真机可能卡顿/被系统杀）"
+            echo "::error::未设置 secrets.ALTCHA_APP_SECRET，2.0 不再内置 PBKDF2 求解器，无法登录/评论"
+            exit 1
           fi
           chmod +x gradlew
           if [ "${IS_TAG}" = "true" ]; then
