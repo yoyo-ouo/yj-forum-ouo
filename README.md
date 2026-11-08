@@ -56,7 +56,7 @@
 | 入口 | 地址 |
 |---|---|
 | 线上站点 | <https://www.yjlt.top>（注册后即可体验） |
-| Android 客户端 | [Android 分支](https://github.com/yoyo-ouo/yj-forum-ouo/tree/Android)（Kotlin + Jetpack Compose） |
+| Android 客户端 | [Android 分支](https://github.com/yoyo-ouo/yj-forum-ouo/tree/Android)（Capacitor + Kotlin 原生桥，内置 React 移动界面） |
 
 ## 功能特性
 
@@ -160,7 +160,7 @@ make dev                # Docker PGSQL + Go :8090 + Next.js :3200
 | 仓库 | 说明 |
 |---|---|
 | [yj-forum-ouo](https://github.com/yoyo-ouo/yj-forum-ouo) | 论坛本体：Next.js Web + Go API（当前仓库） |
-| [Android 分支](https://github.com/yoyo-ouo/yj-forum-ouo/tree/Android) | Android 客户端：Kotlin + Jetpack Compose（同一远程仓库的独立分支） |
+| [Android 分支](https://github.com/yoyo-ouo/yj-forum-ouo/tree/Android) | Android 客户端：Capacitor + Kotlin 原生桥（同一远程仓库的独立分支） |
 
 ## 文档
 
