@@ -34,12 +34,12 @@ jobs:
           java-version: "21"
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.24.0
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
@@ -50,6 +50,11 @@ jobs:
           cd web
           pnpm install --frozen-lockfile
           pnpm build
+
+      - name: Run mobile web unit tests
+        run: |
+          cd web
+          pnpm test
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -63,13 +68,23 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      # services.gradle.org 偶发慢连接：Gradle wrapper 自带的 10 秒超时会让整个 job
+      # 在编译前就失败，这里显式重试并配合 gradle-wrapper.properties 的 120 秒超时。
+      - name: Warm up Gradle wrapper
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if ./gradlew --version; then
+              exit 0
+            fi
+            echo "::warning::Gradle wrapper 下载失败（第 ${attempt}/3 次），10 秒后重试"
+            sleep 10
+          done
+          echo "::error::Gradle wrapper 连续 3 次下载失败，请检查 services.gradle.org 连通性或稍后重试"
+          exit 1
+
       - name: Run unit tests and build debug APK
         run: ./gradlew --stacktrace testDebugUnitTest assembleDebug
-
-      - name: Run mobile web unit tests
-        run: |
-          cd web
-          pnpm test -- --passWithNoTests
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7

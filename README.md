@@ -10,7 +10,7 @@
 - **完整二级页面**：帖子详情、评论编辑器、发帖、搜索、用户主页、会馆、角色设定、指南、反馈、账号安全、版本更新等。
 - **原生桥直连 `/ov2/api`**：Cookie、`Origin`/`Referer`、multipart 上传、SSE 都由 Kotlin 统一处理，Web 层不直接出网。
 - **APP 零 PoW**：登录与评论走 `/captcha/app/*`，一次 HMAC 换取 grant，不再在手机上跑 PBKDF2。
-- **不中断更新**：包名、签名、`versionCode` 公式、`Android-V*` tag 与 APK 命名全部沿用 1.x；1.3.0 用户可覆盖安装 2.0.0。
+- **不中断更新**：包名、签名、`versionCode` 公式、`Android-V*` tag 与 APK 命名全部沿用 1.x；1.2.0 / 1.3.0 用户可直接覆盖安装 2.0.0。
 - **自更新**：首启 + 前台每 5 分钟检查；提示可关闭；支持 GitHub 直连 / 加速镜像 / 站内反代三级回退，校验大小与 SHA-256。
 - **高还原 Web UI**：广场、帖子详情、评论区、用户主页/个人中心、会馆、世界、消息、角色设定、设置/账号、搜索、发帖、登录注册、指南、反馈、更新日志与年制换算均复用论坛 Web 的样式分片与 DOM 结构；仅做移动端宽度/换行/安全区适配。
 - **Web 同源富文本**：正文/评论支持 HTML 与历史 Markdown 渲染、图片、引用卡片（用户/帖子/文章/角色，可点击跳转）；编辑器支持 H2/H3、粗/斜/下划线、列表、引用、代码块、行内代码、链接、分割线、清除格式、表情与图片上传。
@@ -163,17 +163,18 @@ git push origin Android-V2.0.0
 - 校验：大小完全相等 + SHA-256 匹配；失败删包换线路。
 - 安装：FileProvider + 系统安装器；首次需允许「安装未知应用」。
 
-## 从 1.3.0 升级
+## 从 1.x 升级
 
-- 包名与签名不变，`versionCode` 从 10300 → 20000，可直接覆盖安装。
+- 包名与签名不变，`versionCode` 从 10200 / 10300 → 20000，可直接覆盖安装。
+- 1.3.0 未单独发过 Release，其消息中心、线性图标等能力已并入 2.0.0；不需要先装 1.3.0。
 - `SessionMigrator` 会读取旧 `forum_prefs` 的 `cookie_store` / 主题 / 年制 / 隐私版本并迁移到加密存储，尽量保持登录态。
 - 若旧 Cookie 解析失败，会要求重新登录，不阻塞启动。
 
 ## 已知限制
 
-- 角色设定为只读（创建/编辑在 Web 端）；账号注销、邮箱换绑引导到 Web 端。
-- 世界频道输入仅纯文本；SSE 在后台会暂停，回前台重连。
-- 发帖草稿暂未接入 `/posts/drafts`；定时发布用 `datetime-local`。
+- 暂未接入第三方登录（OAuth）；邮箱换绑与账号注销已可在 APP 内完成。
+- 世界频道支持富文本 / 纯文本切换；SSE 在后台会被系统节流，回前台自动补拉。
+- 定时发布使用 `datetime-local`，精确到分钟。
 - 未接 FCM 推送；只有前台未读角标 + SSE。
 - 移动 SPA 与论坛 Web 共用色板与视觉语言，但组件是两套；`web/src/styles/tokens.css` 是唯一色板源。
 
@@ -181,10 +182,10 @@ git push origin Android-V2.0.0
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
-| 2.0.0 | 开发中 | 彻底重构为 Capacitor + Kotlin 原生桥；底部四栏、零 PoW、版本更新二级页、个人中心完整帖子 |
-| [1.3.0](https://github.com/yoyo-uo0/yj-forum-ouo/releases/tag/Android-V1.3.0) | 2026-10-31 | 消息中心、通知、左侧抽屉、线性图标 |
-| [1.2.0](https://github.com/yoyo-uo0/yj-forum-ouo/releases/tag/Android-V1.2.0) | 2026-10-18 | 迁移 `/ov2/api`、ALTCHA 零 PoW、自建富文本 |
-| [1.1.0](https://github.com/yoyo-uo0/yj-forum-ouo/releases/tag/Android-V1.1.0) | 2026-10-25 | 全量迁移 `/ov2/api` |
+| [2.0.0](https://github.com/yoyo-ouo/yj-forum-ouo/releases/tag/Android-V2.0.0) | 2026-11-08 | 彻底重构为 Capacitor + Kotlin 原生桥；底部四栏、零 PoW、版本更新二级页、个人中心完整帖子 |
+| 1.3.0 | 未单独发布 | 消息中心、通知、左侧抽屉、线性图标（内容并入 2.0.0） |
+| [1.2.0](https://github.com/yoyo-ouo/yj-forum-ouo/releases/tag/Android-V1.2.0) | 2026-10-31 | 迁移 `/ov2/api`、ALTCHA 零 PoW、自建富文本 |
+| [1.1.0](https://github.com/yoyo-ouo/yj-forum-ouo/releases/tag/Android-V1.1.0) | 2026-10-31 | 全量迁移 `/ov2/api` |
 
 ## 许可与说明
 
