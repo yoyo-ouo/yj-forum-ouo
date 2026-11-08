@@ -3,8 +3,9 @@ import { NavProvider, useNav } from "./lib/nav";
 import { useApp, PRIVACY_VERSION } from "./lib/store";
 import { bus } from "./lib/bus";
 import { handleBack, registerBackHandler } from "./lib/back";
-import { checkUpdate, onSessionExpired, onUpdateProgress, sse } from "./lib/native";
+import { checkUpdate, onSessionExpired, onUpdateProgress, onVersionTooLow, sse } from "./lib/native";
 import { ToastHost, TabBar } from "./components/mobile";
+import { CaptchaErrorSheet } from "./components/CaptchaErrorSheet";
 import { Icon } from "./components/icons";
 import type { UpdateManifest } from "./lib/types";
 
@@ -22,13 +23,18 @@ import { WorldScreen } from "./screens/world";
 import { MessagesScreen } from "./screens/messages";
 import { CharacterScreen, CharacterDetailScreen } from "./screens/character";
 import { GuideScreen, GuideDetailScreen, FeedbackScreen, FeedbackDetailScreen, ChangelogScreen, YearConverterScreen } from "./screens/misc";
+import { FollowsScreen } from "./screens/follows";
+import { LikesScreen } from "./screens/likes";
+import { ProfileEditScreen } from "./screens/profile-edit";
+import { EmailScreen, AccountDeleteScreen, DraftsScreen } from "./screens/account";
+import { CharacterEditorScreen } from "./screens/editor";
 
 function ScreenHost() {
   const { top } = useNav();
   switch (top.name) {
     case "feed": return <FeedScreen />;
     case "post": return <PostScreen id={top.params?.id} />;
-    case "compose": return <ComposeScreen />;
+    case "compose": return <ComposeScreen draftId={top.params?.draft} />;
     case "search": return <SearchScreen initial={top.params?.keyword || ""} />;
     case "user": return <UserScreen id={top.params?.id} initialTab={(top.params?.tab || "posts") as any} />;
     case "me": return <MeScreen />;
@@ -49,6 +55,13 @@ function ScreenHost() {
     case "feedback-detail": return <FeedbackDetailScreen id={top.params?.id} />;
     case "changelog": return <ChangelogScreen />;
     case "year": return <YearConverterScreen />;
+    case "follows": return <FollowsScreen id={top.params?.id} tab={top.params?.tab} />;
+    case "likes": return <LikesScreen />;
+    case "profile-edit": return <ProfileEditScreen />;
+    case "email": return <EmailScreen stage={top.params?.stage} />;
+    case "account-delete": return <AccountDeleteScreen />;
+    case "drafts": return <DraftsScreen id={top.params?.id} />;
+    case "character-editor": return <CharacterEditorScreen id={top.params?.id} />;
     default: return <FeedScreen />;
   }
 }
@@ -117,8 +130,13 @@ function Shell() {
       useApp.setState({ user: null });
       showToast("登录已过期，请重新登录", "error");
     });
+    // 版本过低：原生壳自己会 notify，web 端由 api 层写入同一事件
+    void onVersionTooLow(() => bus.emit("versionTooLow", { status: 426 }));
+    const offVersion = bus.on("versionTooLow", () => {
+      showToast("当前版本过低，请更新 App 后继续", "error");
+    });
     void onUpdateProgress((progress) => bus.emit("updateProgress", progress));
-    return () => { off(); };
+    return () => { off(); offVersion(); };
   }, [showToast]);
 
   useEffect(() => {
@@ -180,6 +198,7 @@ function Shell() {
       </main>
       <TabBar />
       <ToastHost />
+      <CaptchaErrorSheet />
       {update?.available && !updateDismissed ? (
         <UpdatePrompt
           manifest={update}

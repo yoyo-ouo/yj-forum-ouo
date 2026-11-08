@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { api } from "./api";
-import { getAppInfo, getStartupState, saveSettings, setStatusBar, clearSession } from "./native";
-import type { AppInfo, StartupState, Theme, UpdateManifest, User } from "./types";
+import { getAppInfo, getStartupState, saveSettings, setNativeApiBase, setStatusBar, clearSession } from "./native";
+import { bus } from "./bus";
+import type { AppInfo, CaptchaErrorCode, StartupState, Theme, UpdateManifest, User } from "./types";
 
 export const PRIVACY_VERSION = "2.2";
 
@@ -17,6 +18,8 @@ interface AppState {
   updateDismissed: boolean;
   unread: { likes: number; comments: number; system: number; chat: number };
   toast: { message: string; kind: "info" | "error" } | null;
+  /** 验证失败分类；非空时 CaptchaErrorSheet 自动弹出 */
+  captchaError: CaptchaErrorCode | null;
   boot: () => Promise<void>;
   refreshUser: () => Promise<void>;
   setUser: (user: User | null) => void;
@@ -27,6 +30,8 @@ interface AppState {
   setUpdate: (manifest: UpdateManifest | null) => void;
   dismissUpdate: () => void;
   setUnread: (unread: AppState["unread"]) => void;
+  setCaptchaError: (code: CaptchaErrorCode | null) => void;
+  clearCaptchaError: () => void;
   logout: () => Promise<void>;
 }
 
@@ -55,6 +60,7 @@ export const useApp = create<AppState>((set, get) => ({
   updateDismissed: false,
   unread: { likes: 0, comments: 0, system: 0, chat: 0 },
   toast: null,
+  captchaError: null,
 
   async boot() {
     // 先只读本地状态：未同意隐私政策前不得发起任何网络请求
@@ -62,6 +68,8 @@ export const useApp = create<AppState>((set, get) => ({
       getAppInfo().catch(() => null),
       getStartupState().catch(() => null),
     ]);
+    // 图片等媒体地址跟随原生壳下发的 apiBase（debug 包不能写死生产域名）
+    if (appInfo?.apiBase) setNativeApiBase(appInfo.apiBase);
     const consented = startup?.privacyAgreedVersion === PRIVACY_VERSION;
     const user = consented ? await api.me().catch(() => null) : null;
     const theme = (startup?.theme as Theme) || "auto";
@@ -117,6 +125,8 @@ export const useApp = create<AppState>((set, get) => ({
   setUpdate: (update) => set({ update, updateDismissed: false }),
   dismissUpdate: () => set({ updateDismissed: true }),
   setUnread: (unread) => set({ unread }),
+  setCaptchaError: (captchaError) => set({ captchaError }),
+  clearCaptchaError: () => set({ captchaError: null }),
 
   async logout() {
     await api.logout().catch(() => undefined);
@@ -125,3 +135,6 @@ export const useApp = create<AppState>((set, get) => ({
     set({ user: null, unread: { likes: 0, comments: 0, system: 0, chat: 0 } });
   },
 }));
+
+// api 层无法直接依赖 store（会形成循环），验证失败统一经事件总线抛过来。
+bus.on("captchaError", (code: CaptchaErrorCode) => useApp.setState({ captchaError: code }));

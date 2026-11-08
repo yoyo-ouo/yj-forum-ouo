@@ -919,3 +919,110 @@
   line-height: 1.7;
   color: var(--color-text-secondary);
 }
+
+/* ======================
+ * 角色：新建入口 / 点赞 / 详情底栏（第三批）
+ * ==================== */
+
+.ch-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 0;
+}
+.ch-top-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.ch-top-title {
+  font-size: var(--m-font-md);
+  font-weight: 650;
+  color: var(--color-text-primary);
+}
+.ch-top-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-tertiary);
+}
+.ch-new { flex: 0 0 auto; gap: 4px; }
+
+/* 卡片是 div[role=button]（内部需要可点的点赞按钮）：保留原视觉并补焦点环 */
+.ch-card { cursor: pointer; }
+.ch-card:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* 卡片点赞（仅他人设定；服务端不允许自赞） */
+.ch-like-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-bg-icon);
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.ch-like-btn:active { transform: scale(.96); }
+.ch-like-btn.on {
+  background: rgba(224, 86, 92, .14);
+  color: #d84b52;
+}
+.night-mode .ch-like-btn.on { color: #ff9a9f; }
+.ch-like-btn:disabled { opacity: .6; }
+
+/* 详情底栏：自己的设定 → 编辑/删除；他人设定 → 点赞 */
+.ch-actionbar { gap: 8px; }
+.ch-edit-action { flex: 1 1 auto; min-width: 0; }
+.ch-delete-action { flex: 0 0 auto; padding: 0 16px; }
+.ch-like-action {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 44px;
+  border: 0;
+  border-radius: 13px;
+  background: var(--color-bg-icon);
+  color: var(--color-text-secondary);
+  font-size: var(--m-font-md);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+}
+.ch-like-action:active { transform: scale(.98); }
+.ch-like-action.on {
+  background: rgba(224, 86, 92, .16);
+  color: #d84b52;
+}
+.night-mode .ch-like-action.on { color: #ff9a9f; }
+.ch-like-action:disabled { opacity: .6; }
+
+/* 图集：图片包成按钮后才能点开 Lightbox */
+.ch-gallery-item {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--color-bg-icon);
+  cursor: zoom-in;
+}
+.ch-gallery-item img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.ch-gallery-item:active { opacity: .92; }
+.ch-gallery-item:only-child { grid-column: 1 / -1; }

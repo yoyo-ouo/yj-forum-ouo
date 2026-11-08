@@ -307,11 +307,17 @@ export function UserScreen({ id, initialTab = "posts" }: { id?: string | number;
         { key: "characters", label: "角色" },
       ];
 
-  const statItems: { label: string; value: number }[] = [
-    { label: "帖子", value: Number(stats?.post_count ?? 0) },
-    { label: "关注", value: Number(follow?.following_count ?? 0) },
-    { label: "粉丝", value: Number(follow?.follower_count ?? 0) },
-    { label: "获赞", value: Number(stats?.total_likes ?? 0) },
+  const statItems: { key: string; label: string; value: number; onClick?: () => void }[] = [
+    { key: "posts", label: "帖子", value: Number(stats?.post_count ?? 0) },
+    { key: "following", label: "关注", value: Number(follow?.following_count ?? 0), onClick: () => push("follows", { id: userId, tab: "following" }) },
+    { key: "followers", label: "粉丝", value: Number(follow?.follower_count ?? 0), onClick: () => push("follows", { id: userId, tab: "followers" }) },
+    // 获赞明细（谁赞了我）只有本人可见，看别人时不可点
+    {
+      key: "likes",
+      label: "获赞",
+      value: Number(stats?.total_likes ?? 0),
+      onClick: isSelf ? () => push("likes") : undefined,
+    },
   ];
 
   return (
@@ -362,12 +368,25 @@ export function UserScreen({ id, initialTab = "posts" }: { id?: string | number;
         </p>
 
         <div className="us-stats">
-          {statItems.map((item) => (
-            <div className="us-stat" key={item.label}>
-              <b>{item.value}</b>
-              <span>{item.label}</span>
-            </div>
-          ))}
+          {statItems.map((item) =>
+            item.onClick ? (
+              <button
+                key={item.key}
+                type="button"
+                className="us-stat us-stat--btn"
+                aria-label={`${item.label} ${item.value}`}
+                onClick={item.onClick}
+              >
+                <b>{item.value}</b>
+                <span>{item.label}</span>
+              </button>
+            ) : (
+              <div className="us-stat" key={item.key}>
+                <b>{item.value}</b>
+                <span>{item.label}</span>
+              </div>
+            ),
+          )}
         </div>
       </section>
 

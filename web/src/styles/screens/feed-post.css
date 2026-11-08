@@ -642,3 +642,72 @@
 }
 .pd-menu-row:active { background: var(--m-press); }
 .pd-menu-row--danger { color: #c4383f; } /* 与 .m-cell--danger 同色 */
+
+/* ============================================================
+   广场 · 随机推荐入口（feed-reco）
+   与最新流分离：进入随机模式后不显示分页/到底提示
+   ============================================================ */
+
+.feed-reco {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 14px 8px;
+}
+
+.feed-reco-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--m-font-xs);
+  color: var(--color-text-tertiary);
+}
+.feed-reco-label svg {
+  flex: 0 0 auto;
+  color: var(--m-accent-ink);
+}
+
+.feed-reco-btn,
+.feed-reco-back {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 999px;
+  font-size: var(--m-font-sm);
+  cursor: pointer;
+  transition: background .16s var(--m-ease), color .16s var(--m-ease);
+}
+
+/* 热区补到 44px（34 + 5×2），视觉仍是小胶囊 */
+.feed-reco-btn::after,
+.feed-reco-back::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 999px;
+}
+
+.feed-reco-btn {
+  background: var(--color-bg-icon);
+  color: var(--m-accent-ink);
+  font-weight: 600;
+}
+.feed-reco-btn[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--m-accent-ink) 22%, transparent);
+}
+.feed-reco-btn:disabled { opacity: .6; cursor: default; }
+.feed-reco-btn:active:not(:disabled) { background: var(--color-bg-icon-hover); }
+
+.feed-reco-back {
+  padding: 0 8px;
+  background: none;
+  color: var(--color-text-tertiary);
+}
+.feed-reco-back:active { background: var(--m-press); }

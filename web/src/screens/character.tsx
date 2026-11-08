@@ -1,15 +1,19 @@
 import React, { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useApp } from "../lib/store";
 import { useNav } from "../lib/nav";
-import { AppBar, Avatar, Empty, IconButton, Loader, Screen, Skeletons } from "../components/mobile";
+import { AppBar, Avatar, Confirm, Empty, IconButton, Loader, Screen, Skeletons } from "../components/mobile";
 import { Icon } from "../components/icons";
 import { RichContent } from "../components/ui";
+import { Lightbox } from "../components/Lightbox";
 import { shareContent } from "../lib/native";
 import { avatarUrl, formatDate, stripHtml, timeAgo } from "../lib/format";
 
 /* 角色设定：移动端列表 + 详情（ch-*） */
+
+/** 每人最多 20 个角色（服务端 characterMaxPerUser） */
+const CHARACTER_LIMIT = 20;
 
 /** 性别：0 无 / 1 男 / 2 女（与后端一致） */
 function genderLabel(value: unknown): string {
@@ -53,37 +57,83 @@ function statusLabel(status: unknown): string {
 /* ---------------- 列表卡片 ---------------- */
 
 function CharacterCard({ item, onOpen }: { item: any; onOpen: () => void }) {
+  const showToast = useApp((s) => s.showToast);
+  const viewer = useApp((s) => s.user);
+  /** 有草稿时卡片优先展示草稿内容（未发布的修改也更像「他现在的样子」） */
+  const draftData = item.draft && typeof item.draft === "object" ? item.draft : null;
+  const name = String(draftData?.name || item.name || "");
+  const identity = String(draftData?.identity || item.identity || "");
+  const alias = String(draftData?.alias || item.alias || "");
+  const avatar = draftData?.avatar_media_id
+    ? sheetMediaPath(String(draftData.avatar_media_id))
+    : sheetMediaPath(item.avatar);
   const guild = sheetGuildName(item);
-  const summary = stripHtml(item.description_html || item.intro || "");
+  const summary = stripHtml(draftData?.description_html || item.description_html || item.intro || "");
   const status = Number(item.status);
+  const draft = status === 0;
+  /** 自己的设定不能点赞（服务端会拒）；mine 缺字段时用 user_id 兑底 */
+  const mine = Boolean(item.mine) || Boolean(viewer?.id && String(viewer.id) === String(item.user_id));
   const updated = item.updated_at || item.created_at;
+  const [liked, setLiked] = useState(Boolean(item.liked));
+  const [likes, setLikes] = useState(Number(item.like_count) || 0);
+  const [likeBusy, setLikeBusy] = useState(false);
+
+  /** 乐观更新；失败回滚 */
+  const toggleLike = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (likeBusy) return;
+    const previous = { liked, likes };
+    setLiked(!liked);
+    setLikes(Math.max(0, likes + (liked ? -1 : 1)));
+    setLikeBusy(true);
+    try {
+      const res = await api.likeCharacter(String(item.id));
+      setLiked(Boolean(res?.liked));
+      setLikes(Number(res?.likes) || 0);
+    } catch (error) {
+      setLiked(previous.liked);
+      setLikes(previous.likes);
+      showToast(error instanceof Error ? error.message : "点赞失败", "error");
+    } finally {
+      setLikeBusy(false);
+    }
+  };
+
   return (
-    <button
-      type="button"
-      className={`ch-card${status === 0 ? " is-draft" : ""}${status === 2 ? " is-off" : ""}`.trim()}
-      aria-label={`查看角色设定 ${item.name || "未命名角色"}`}
+    <div
+      className={`ch-card${draft ? " is-draft" : ""}${status === 2 ? " is-off" : ""}`.trim()}
+      role="button"
+      tabIndex={0}
+      aria-label={`${draft ? "编辑草稿" : "查看角色设定"} ${name || "未命名角色"}`}
       onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
     >
       <span className="ch-card-head">
-        <Avatar src={sheetMediaPath(item.avatar)} name={item.name} size={42} />
+        <Avatar src={avatar} name={name} size={42} />
         <span className="ch-card-id">
           <span className="ch-name-row">
-            <span className="ch-name">{item.name || "未命名角色"}</span>
-            {status === 0 ? <span className="ch-tag ch-tag--draft">草稿</span> : null}
+            <span className="ch-name">{name || "未命名角色"}</span>
+            {draft ? <span className="ch-tag ch-tag--draft">草稿 · 点按编辑</span> : null}
             {status === 2 ? <span className="ch-tag ch-tag--off">已下架</span> : null}
+            {item.has_draft && status !== 0 ? <span className="ch-tag ch-tag--draft">有未发布草稿</span> : null}
           </span>
           <span className="ch-tag-row">
-            {item.identity ? <span className="ch-tag">{item.identity}</span> : null}
+            {identity ? <span className="ch-tag">{identity}</span> : null}
             {guild ? (
               <span className="ch-tag ch-tag--guild">
                 <Icon name="home" size={11} />
                 {guild}
               </span>
             ) : null}
-            {item.alias ? <span className="ch-tag ch-tag--quiet">别称 · {item.alias}</span> : null}
+            {alias ? <span className="ch-tag ch-tag--quiet">别称 · {alias}</span> : null}
           </span>
         </span>
-        <Icon name="forward" size={17} className="ch-card-chev" />
+        <Icon name={draft ? "edit" : "forward"} size={17} className="ch-card-chev" />
       </span>
       {summary ? <span className="ch-summary m-clamp2">{summary}</span> : null}
       <span className="ch-card-foot">
@@ -95,14 +145,26 @@ function CharacterCard({ item, onOpen }: { item: any; onOpen: () => void }) {
         ) : (
           <span className="ch-time" />
         )}
-        {Number(item.like_count) > 0 ? (
+        {!mine ? (
+          <button
+            type="button"
+            className={`ch-like-btn ${liked ? "on" : ""}`.trim()}
+            aria-pressed={liked}
+            aria-label={liked ? "取消点赞" : "点赞"}
+            disabled={likeBusy}
+            onClick={(event) => void toggleLike(event)}
+          >
+            <Icon name="heart" size={12} />
+            {likes}
+          </button>
+        ) : likes > 0 ? (
           <span className="ch-like">
             <Icon name="heart" size={12} />
-            {item.like_count}
+            {likes}
           </span>
         ) : null}
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -148,63 +210,101 @@ export function CharacterScreen() {
 
   const shown = filter === "all" ? items : items.filter((item) => String(Number(item?.status ?? 1)) === filter);
 
+  /** 最多 20 个角色（服务端限制） */
+  const limitReached = items.length >= CHARACTER_LIMIT;
+
+  const openItem = (item: any) => {
+    if (Number(item?.status) === 0) push("character-editor", { id: item.id });
+    else push("character-detail", { id: item.id });
+  };
+
   return (
     <Screen appbar={<AppBar back title="角色设定" />} onRefresh={async () => { await mine.refetch(); }}>
       {!user ? (
         <Empty
           icon="user"
           title="登录后查看角色设定"
-          hint="角色设定卡在网页端创建与编辑，APP 内可随时查看。"
+          hint="登录后可以新建角色、自动保存草稿并发布，也能继续编辑未完成的设定。"
           action={
             <button type="button" className="m-btn m-btn--primary" onClick={() => push("auth")}>
               登录 / 注册
             </button>
           }
         />
-      ) : mine.isLoading ? (
-        <Skeletons count={3} />
-      ) : mine.error ? (
-        <Empty
-          icon="info"
-          title="角色设定加载失败"
-          hint={mine.error instanceof Error ? mine.error.message : "请稍后再试"}
-          action={
-            <button type="button" className="m-btn" onClick={() => void mine.refetch()}>
-              重试
-            </button>
-          }
-        />
-      ) : items.length === 0 ? (
-        <Empty icon="sparkle" title="还没有角色设定" hint="角色设定卡在网页端创建与编辑，APP 内可随时查看。" />
       ) : (
         <>
-          {statuses.size > 1 ? (
-            <div className="m-chips ch-filters">
-              {filters.map((entry) => (
-                <button
-                  key={entry.key}
-                  type="button"
-                  className={`m-chip ${filter === entry.key ? "on" : ""}`.trim()}
-                  onClick={() => setFilter(entry.key)}
-                >
-                  {entry.label}
-                  <span className="ch-chip-count">{entry.count}</span>
+          <div className="ch-top">
+            <div className="ch-top-info">
+              <span className="ch-top-title">我的角色</span>
+              <span className="ch-top-count">{items.length} / {CHARACTER_LIMIT}</span>
+            </div>
+            <button
+              type="button"
+              className="m-btn m-btn--primary m-btn--sm ch-new"
+              disabled={limitReached}
+              aria-label="新建角色"
+              onClick={() => push("character-editor")}
+            >
+              <Icon name="plus" size={15} />
+              新建角色
+            </button>
+          </div>
+
+          {mine.isLoading ? (
+            <Skeletons count={3} />
+          ) : mine.error ? (
+            <Empty
+              icon="info"
+              title="角色设定加载失败"
+              hint={mine.error instanceof Error ? mine.error.message : "请稍后再试"}
+              action={
+                <button type="button" className="m-btn" onClick={() => void mine.refetch()}>
+                  重试
                 </button>
-              ))}
-            </div>
-          ) : null}
-
-          {shown.length === 0 ? (
-            <Empty icon="search" title="没有符合条件的角色" hint="换一个筛选看看" />
+              }
+            />
+          ) : items.length === 0 ? (
+            <Empty
+              icon="sparkle"
+              title="还没有角色设定"
+              hint="新建一个角色，写下名字、能力与描述；草稿每 3 秒自动保存。"
+              action={
+                <button type="button" className="m-btn m-btn--primary" onClick={() => push("character-editor")}>
+                  新建角色
+                </button>
+              }
+            />
           ) : (
-            <div className="ch-list">
-              {shown.map((item: any) => (
-                <CharacterCard key={item.id} item={item} onOpen={() => push("character-detail", { id: item.id })} />
-              ))}
-            </div>
-          )}
+            <>
+              {statuses.size > 1 ? (
+                <div className="m-chips ch-filters">
+                  {filters.map((entry) => (
+                    <button
+                      key={entry.key}
+                      type="button"
+                      className={`m-chip ${filter === entry.key ? "on" : ""}`.trim()}
+                      onClick={() => setFilter(entry.key)}
+                    >
+                      {entry.label}
+                      <span className="ch-chip-count">{entry.count}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
 
-          <div className="m-end">— 到底了 —</div>
+              {shown.length === 0 ? (
+                <Empty icon="search" title="没有符合条件的角色" hint="换一个筛选看看" />
+              ) : (
+                <div className="ch-list">
+                  {shown.map((item: any) => (
+                    <CharacterCard key={item.id} item={item} onOpen={() => openItem(item)} />
+                  ))}
+                </div>
+              )}
+
+              <div className="m-end">— 到底了 —</div>
+            </>
+          )}
         </>
       )}
     </Screen>
@@ -224,7 +324,10 @@ function FieldRow({ label, value, wide }: { label: string; value: React.ReactNod
 
 export function CharacterDetailScreen({ id }: { id?: string | number }) {
   const sheetId = id === undefined || id === null ? "" : String(id);
-  const { push } = useNav();
+  const { push, pop } = useNav();
+  const user = useApp((s) => s.user);
+  const showToast = useApp((s) => s.showToast);
+  const queryClient = useQueryClient();
   const detail = useQuery({
     queryKey: ["character-sheet", sheetId],
     queryFn: () => api.characterSheet(sheetId),
@@ -232,6 +335,12 @@ export function CharacterDetailScreen({ id }: { id?: string | number }) {
   });
 
   const item = detail.data?.item;
+  /** 本地点赞态：未操作时直接读详情数据（避免先闪一下 0 再补成真实数字） */
+  const [likeState, setLikeState] = useState<{ liked: boolean; likes: number } | null>(null);
+  const [likeBusy, setLikeBusy] = useState(false);
+  const [lightbox, setLightbox] = useState<number | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   if (!sheetId) {
     return (
@@ -277,6 +386,10 @@ export function CharacterDetailScreen({ id }: { id?: string | number }) {
   const status = Number(item.status);
   const description = item.description_html || item.content || "";
   const ownerName = item.owner_name || "";
+  /** mine 由服务端下发；旧接口缺字段时用 user_id 兑底 */
+  const mine = item.mine === true || Boolean(user && String(user.id) === String(item.user_id));
+  const liked = likeState ? likeState.liked : Boolean(item.liked);
+  const likes = likeState ? likeState.likes : Number(item.like_count) || 0;
 
   const share = async () => {
     await shareContent({
@@ -285,14 +398,99 @@ export function CharacterDetailScreen({ id }: { id?: string | number }) {
     }).catch(() => undefined);
   };
 
+  /** 点赞：乐观更新，失败回滚 */
+  const toggleLike = async () => {
+    if (!user) {
+      push("auth");
+      return;
+    }
+    if (mine || likeBusy) return;
+    const previous = { liked, likes };
+    setLikeState({ liked: !liked, likes: Math.max(0, likes + (liked ? -1 : 1)) });
+    setLikeBusy(true);
+    try {
+      const res = await api.likeCharacter(sheetId);
+      setLikeState({ liked: Boolean(res?.liked), likes: Number(res?.likes) || 0 });
+    } catch (error) {
+      setLikeState(previous);
+      showToast(error instanceof Error ? error.message : "点赞失败", "error");
+    } finally {
+      setLikeBusy(false);
+    }
+  };
+
+  const removeCharacter = async () => {
+    setConfirmDelete(false);
+    setDeleting(true);
+    try {
+      await api.deleteCharacter(sheetId);
+      void queryClient.invalidateQueries({ queryKey: ["character-sheets-mine"] });
+      queryClient.removeQueries({ queryKey: ["character-sheet", sheetId] });
+      showToast("角色已删除");
+      pop();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "删除失败", "error");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <Screen
       appbar={
         <AppBar
           back
           title={item.name || "角色设定"}
-          actions={<IconButton icon="share" label="分享角色设定" onClick={() => void share()} />}
+          actions={
+            <>
+              <IconButton icon="share" label="分享角色设定" onClick={() => void share()} />
+              {mine ? (
+                <IconButton
+                  icon="edit"
+                  label="编辑角色设定"
+                  onClick={() => push("character-editor", { id: sheetId })}
+                />
+              ) : null}
+            </>
+          }
         />
+      }
+      footer={
+        <div className="m-actionbar ch-actionbar">
+          {mine ? (
+            <>
+              <button
+                type="button"
+                className="m-btn m-btn--soft ch-edit-action"
+                onClick={() => push("character-editor", { id: sheetId })}
+              >
+                <Icon name="edit" size={17} />
+                {item.has_draft ? "继续编辑草稿" : "编辑设定"}
+              </button>
+              <button
+                type="button"
+                className="m-btn m-btn--danger ch-delete-action"
+                disabled={deleting}
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Icon name="trash" size={17} />
+                {deleting ? "删除中…" : "删除"}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className={`ch-like-action ${liked ? "on" : ""}`.trim()}
+              aria-pressed={liked}
+              aria-label={liked ? "取消点赞" : "点赞"}
+              disabled={likeBusy}
+              onClick={() => void toggleLike()}
+            >
+              <Icon name="heart" size={18} />
+              {liked ? "已喜欢" : "喜欢"} · {likes}
+            </button>
+          )}
+        </div>
       }
     >
       <div className="ch-detail">
@@ -302,6 +500,7 @@ export function CharacterDetailScreen({ id }: { id?: string | number }) {
           {item.title ? <p className="ch-hero-title">{item.title}</p> : null}
           <div className="ch-tag-row ch-tag-row--center">
             <span className={`ch-tag ch-tag--status is-${status}`}>{statusLabel(status)}</span>
+            {item.has_draft && status !== 0 ? <span className="ch-tag ch-tag--draft">有未发布草稿</span> : null}
             {item.identity ? <span className="ch-tag">{item.identity}</span> : null}
             {guild ? (
               <span className="ch-tag ch-tag--guild">
@@ -364,18 +563,21 @@ export function CharacterDetailScreen({ id }: { id?: string | number }) {
             <h2 className="ch-section-title">图集</h2>
             <div className="ch-gallery">
               {images.map((src: string, index: number) => (
-                <img
+                <button
                   key={`${src}-${index}`}
-                  src={avatarUrl(src)}
-                  alt={`${item.name || "角色"} 图片 ${index + 1}`}
-                  loading="lazy"
-                />
+                  type="button"
+                  className="ch-gallery-item"
+                  aria-label={`查看第 ${index + 1} 张角色图片`}
+                  onClick={() => setLightbox(index)}
+                >
+                  <img src={avatarUrl(src)} alt={`${item.name || "角色"} 图片 ${index + 1}`} loading="lazy" />
+                </button>
               ))}
             </div>
           </section>
         ) : null}
 
-        {(item.user_id || item.published_at || item.updated_at || Number(item.like_count) > 0) ? (
+        {(item.user_id || item.published_at || item.updated_at || likes > 0) ? (
           <section className="ch-section ch-meta">
             {item.user_id ? (
               <button type="button" className="ch-owner" onClick={() => push("user", { id: item.user_id })}>
@@ -386,16 +588,32 @@ export function CharacterDetailScreen({ id }: { id?: string | number }) {
             ) : null}
             {item.published_at ? <p className="ch-meta-line">发布于 {formatDate(item.published_at)}</p> : null}
             {item.updated_at ? <p className="ch-meta-line">最后更新 {formatDate(item.updated_at)}</p> : null}
-            {Number(item.like_count) > 0 ? (
+            {likes > 0 ? (
               <p className="ch-meta-line">
-                <Icon name="heart" size={13} /> {item.like_count} 人喜欢
+                <Icon name="heart" size={13} /> {likes} 人喜欢
               </p>
             ) : null}
           </section>
         ) : null}
 
-        <p className="ch-note">角色编辑请在网页端完成</p>
+        {mine ? (
+          <p className="ch-note">草稿与修改仅自己可见，发布后才会公开展示；随时可以回来继续编辑。</p>
+        ) : null}
       </div>
+
+      {lightbox !== null ? (
+        <Lightbox images={images} index={lightbox} onClose={() => setLightbox(null)} />
+      ) : null}
+
+      <Confirm
+        open={confirmDelete}
+        title="删除这个角色？"
+        confirmText="删除"
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={() => void removeCharacter()}
+      >
+        角色设定与图片会被删除且无法恢复。
+      </Confirm>
     </Screen>
   );
 }

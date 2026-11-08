@@ -1,7 +1,33 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { registerBackHandler } from "./back";
+import type { EmailChangeStage } from "./types";
 
 export type TabKey = "square" | "world" | "messages" | "me";
+
+export type FollowTab = "following" | "followers" | "mutual";
+
+/**
+ * 二级页参数约定（新页面按下表传参；未列出的路由仍接受任意参数）。
+ * ScreenHost 的取名规则：路由名与 case 一一对应，参数从 top.params 取。
+ */
+export interface RouteParamMap {
+  post: { id: string | number };
+  user: { id: string | number; tab?: "posts" | "favorites" | "comments" };
+  guild: { slug: string };
+  article: { id: string | number };
+  guide: { id: string | number };
+  "character-detail": { id: string | number };
+  /** 关注 / 粉丝 / 共同关注列表（id 缺省 = 当前登录用户） */
+  follows: { id?: string | number; tab?: FollowTab };
+  /** 帖子草稿箱（带 id 直接打开某份草稿） */
+  drafts: { id?: string };
+  /** 角色设定编辑器（无 id = 新建） */
+  "character-editor": { id?: string };
+  email: { stage?: EmailChangeStage };
+  [name: string]: Record<string, any> | undefined;
+}
+
+export type RouteParams<N extends string> = N extends keyof RouteParamMap ? RouteParamMap[N] : Record<string, any> | undefined;
 
 export interface ScreenEntry {
   name: string;
@@ -19,11 +45,11 @@ interface NavApi {
   canGoBack: boolean;
   /** 仅一级页显示底部 TabBar，二级页全屏 */
   showTab: boolean;
-  push: (name: string, params?: Record<string, any>) => void;
-  replace: (name: string, params?: Record<string, any>) => void;
+  push: <N extends string>(name: N, params?: RouteParams<N>) => void;
+  replace: <N extends string>(name: N, params?: RouteParams<N>) => void;
   pop: () => void;
   switchTab: (tab: TabKey) => void;
-  reset: (name: string, params?: Record<string, any>) => void;
+  reset: <N extends string>(name: N, params?: RouteParams<N>) => void;
 }
 
 const NavContext = createContext<NavApi | null>(null);
@@ -69,16 +95,16 @@ export function NavProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  const push = useCallback((name: string, params: Record<string, any> = {}) => {
+  const push = useCallback(<N extends string>(name: N, params?: RouteParams<N>) => {
     setStacks((current) => {
       const list = current[tab];
       history.pushState({ yjDepth: list.length }, "");
-      return { ...current, [tab]: [...list, entry(name, params)] };
+      return { ...current, [tab]: [...list, entry(name, params as Record<string, any> | undefined)] };
     });
   }, [tab]);
 
-  const replace = useCallback((name: string, params: Record<string, any> = {}) => {
-    setStacks((current) => ({ ...current, [tab]: [...current[tab].slice(0, -1), entry(name, params)] }));
+  const replace = useCallback(<N extends string>(name: N, params?: RouteParams<N>) => {
+    setStacks((current) => ({ ...current, [tab]: [...current[tab].slice(0, -1), entry(name, params as Record<string, any> | undefined)] }));
   }, [tab]);
 
   const pop = useCallback(() => {
@@ -100,8 +126,8 @@ export function NavProvider({ children }: { children: React.ReactNode }) {
     history.replaceState({ yjDepth: 0 }, "");
   }, [tab]);
 
-  const reset = useCallback((name: string, params: Record<string, any> = {}) => {
-    setStacks((current) => ({ ...current, [tab]: [entry(name, params)] }));
+  const reset = useCallback(<N extends string>(name: N, params?: RouteParams<N>) => {
+    setStacks((current) => ({ ...current, [tab]: [entry(name, params as Record<string, any> | undefined)] }));
   }, [tab]);
 
   const stack = stacks[tab];

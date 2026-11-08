@@ -11,6 +11,7 @@ const RichEditor = React.lazy(() =>
 );
 import { AppBar, Avatar, Confirm, Empty, IconButton, Screen, Sheet, Skeletons } from "../components/mobile";
 import { Icon } from "../components/icons";
+import { ReportSheet } from "../components/ReportSheet";
 import { categoryColor, categoryLabel, contrastText, timeAgo } from "../lib/format";
 import { shareContent, vibrate } from "../lib/native";
 import type { CommentItem } from "../lib/types";
@@ -42,6 +43,7 @@ export function PostScreen({ id }: { id?: string | number }) {
   const [submitting, setSubmitting] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const commentsRef = useRef<HTMLElement | null>(null);
 
@@ -385,6 +387,18 @@ export function PostScreen({ id }: { id?: string | number }) {
                 <Icon name="link" size={18} />
                 <span>复制链接</span>
               </button>
+              {user && !isMine ? (
+                <button
+                  className="pd-menu-row"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    setReportOpen(true);
+                  }}
+                >
+                  <Icon name="flag" size={18} />
+                  <span>举报</span>
+                </button>
+              ) : null}
               {isMine ? (
                 <button
                   className="pd-menu-row pd-menu-row--danger"
@@ -403,6 +417,16 @@ export function PostScreen({ id }: { id?: string | number }) {
               </button>
             </div>
           </Sheet>
+
+          <ReportSheet
+            open={reportOpen}
+            onClose={() => setReportOpen(false)}
+            onSubmit={async (reason, detail) => {
+              // 失败时 ReportSheet 会留在弹层里展示错误，这里只负责报成功
+              await api.reportPost(post.id, reason, detail);
+              showToast("举报已提交");
+            }}
+          />
 
           <Confirm
             open={confirmDelete}

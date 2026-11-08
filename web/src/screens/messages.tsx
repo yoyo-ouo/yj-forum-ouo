@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
-import { openExternal, requestApi, sse } from "../lib/native";
+import { fetchMedia, openExternal, pickImage, requestApi, sse, uploadImage } from "../lib/native";
 import { useNav } from "../lib/nav";
 import { useApp } from "../lib/store";
 import { AppBar, Avatar, Empty, IconButton, Screen, Segmented, Skeletons } from "../components/mobile";
 import { Icon, type IconName } from "../components/icons";
+import { RichContent } from "../components/ui";
 import { stripHtml, timeAgo } from "../lib/format";
 
 /**
@@ -15,8 +16,21 @@ import { stripHtml, timeAgo } from "../lib/format";
  * 团队会话发送、SSE 订阅与断线 15 秒轮询兜底。
  */
 
-type MessageTab = "likes" | "comments" | "system" | "chat";
+type MessageTab = "all" | "likes" | "comments" | "system" | "chat";
 type MessageCategory = "likes" | "comments" | "system";
+
+/** 「全部」汇总的分页游标（三类各自游标；done 后不再请求，避免重复拉首页） */
+type AllCursor = {
+  likes: { cursor?: string; done: boolean };
+  comments: { cursor?: string; done: boolean };
+  system: { cursor?: string; done: boolean };
+};
+
+const EMPTY_ALL_CURSOR = (): AllCursor => ({
+  likes: { done: false },
+  comments: { done: false },
+  system: { done: false },
+});
 
 interface TabMeta {
   key: MessageTab;
@@ -27,6 +41,7 @@ interface TabMeta {
 }
 
 const TABS: TabMeta[] = [
+  { key: "all", label: "全部", icon: "grid", empty: "还没有消息", hint: "点赞、评论与系统通知都会汇总在这里" },
   { key: "likes", label: "赞", icon: "heart", empty: "还没有收到赞", hint: "有人点赞你的帖子或评论时会出现在这里" },
   { key: "comments", label: "评论", icon: "comment", empty: "还没有评论消息", hint: "帖子下的新评论与回复会出现在这里" },
   { key: "system", label: "系统", icon: "bell", empty: "暂无系统通知", hint: "站内公告与系统提醒会出现在这里" },
@@ -75,8 +90,27 @@ function likeVerb(targetType?: string): string {
 }
 
 function unreadOf(type: MessageTab, unread: { likes: number; comments: number; system: number; chat: number }): number {
+  if (type === "all") return 0;
   if (type === "chat") return unread.chat;
   return unread[type];
+}
+
+/** 「全部」：三类消息按时间倒序合并，按 kind+id 去重 */
+function mergeAllItems(groups: Array<{ kind: MessageCategory; items: any[] }>, previous: any[]): any[] {
+  const map = new Map<string, any>();
+  previous.forEach((item) => {
+    if (item?.id === undefined || item?.id === null) return;
+    map.set(`${item.__kind}:${item.id}`, item);
+  });
+  groups.forEach(({ kind, items }) => {
+    (items || []).forEach((item) => {
+      if (!item || item.id === undefined || item.id === null) return;
+      map.set(`${kind}:${item.id}`, { ...item, __kind: kind });
+    });
+  });
+  return [...map.values()].sort(
+    (a, b) => (Date.parse(String(b?.created_at || "")) || 0) - (Date.parse(String(a?.created_at || "")) || 0),
+  );
 }
 
 function badgeText(count: number): string {
@@ -89,6 +123,7 @@ function MessageRow({
   leading,
   title,
   body,
+  rich,
   time,
   tag,
   onClick,
@@ -100,6 +135,8 @@ function MessageRow({
   leading: React.ReactNode;
   title: string;
   body?: string;
+  /** 带图片等富文本内容时优先渲染（聊天消息的私有图片） */
+  rich?: React.ReactNode;
   time?: string;
   tag?: React.ReactNode;
   onClick?: () => void;
@@ -143,7 +180,7 @@ function MessageRow({
           <span className="ms-item-title-txt">{title}</span>
           {tag}
         </div>
-        {body ? <div className="ms-item-text">{body}</div> : null}
+        {rich ? <div className="ms-item-rich">{rich}</div> : body ? <div className="ms-item-text">{body}</div> : null}
         {time ? <div className="ms-item-time">{time}</div> : null}
       </div>
     </div>
@@ -165,11 +202,14 @@ export function MessagesScreen() {
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [conn, setConn] = useState<ConnState>("connecting");
   /** 进入 tab 时的未读预算：告警清零后，本次浏览仍保留未读标记。 */
-  const [dots, setDots] = useState<Record<MessageTab, number>>({ likes: 0, comments: 0, system: 0, chat: 0 });
+  const [dots, setDots] = useState<Record<MessageTab, number>>({ all: 0, likes: 0, comments: 0, system: 0, chat: 0 });
 
   const cursorRef = useRef<string | undefined>(undefined);
+  /** 「全部」的三类游标（与普通 tab 的 cursorRef 互不影响） */
+  const allCursorRef = useRef<AllCursor>(EMPTY_ALL_CURSOR());
   const requestIdRef = useRef(0);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -218,6 +258,44 @@ export function MessagesScreen() {
       // 聊天 silent 刷新只做增量合并，保留已加载的更早分页与游标。
       const mergeChat = reset && silent && tab === "chat";
       try {
+        if (tab === "all") {
+          // 首屏用 api.messagesAll；后续页按三类游标各取下一页（游标用尽即停止）
+          const state: AllCursor = reset ? EMPTY_ALL_CURSOR() : allCursorRef.current;
+          let data: any;
+          if (reset) {
+            data = await api.messagesAll();
+          } else {
+            const query: Record<string, string> = {};
+            if (state.likes.cursor) query.likes_cursor = state.likes.cursor;
+            if (state.comments.cursor) query.comments_cursor = state.comments.cursor;
+            if (state.system.cursor) query.system_cursor = state.system.cursor;
+            const res = await requestApi<any>({ method: "GET", path: "/messages/all", query });
+            if (!res.ok || res.data?.success === false) {
+              throw new Error(String(res.data?.message || "消息加载失败"));
+            }
+            data = res.data;
+          }
+          if (requestId !== requestIdRef.current) return;
+          const next: AllCursor = {
+            likes: { ...state.likes },
+            comments: { ...state.comments },
+            system: { ...state.system },
+          };
+          const groups = (["likes", "comments", "system"] as MessageCategory[])
+            .filter((kind) => !state[kind].done)
+            .map((kind) => {
+              const page = data?.[kind];
+              next[kind] = {
+                cursor: page?.next_cursor ? String(page.next_cursor) : undefined,
+                done: !page?.has_more,
+              };
+              return { kind, items: Array.isArray(page?.items) ? (page.items as any[]) : [] };
+            });
+          allCursorRef.current = next;
+          setItems((current) => mergeAllItems(groups, reset ? [] : current));
+          setHasMore(!next.likes.done || !next.comments.done || !next.system.done);
+          return;
+        }
         const cursor = reset ? undefined : cursorRef.current;
         const res: any =
           tab === "chat" ? await api.messagesChat(cursor) : await api.messagesCategory(tab, cursor);
@@ -266,6 +344,7 @@ export function MessagesScreen() {
   useEffect(() => {
     if (!user?.id) return;
     cursorRef.current = undefined;
+    allCursorRef.current = EMPTY_ALL_CURSOR();
     setItems([]);
     setHasMore(false);
     setError("");
@@ -276,6 +355,8 @@ export function MessagesScreen() {
   // 切换 tab：记录未读预算，非团队 tab 立即上报已读并刷新全局未读数。
   useEffect(() => {
     if (!user?.id) return;
+    // 「全部」是汇总视图，不代用户上报已读（避免误清未读）
+    if (tab === "all") return;
     if (tab === "chat") {
       const snapshot = useApp.getState().unread.chat || 0;
       setDots((current) => (current.chat > 0 ? current : { ...current, chat: snapshot }));
@@ -474,7 +555,7 @@ export function MessagesScreen() {
           () => undefined,
         );
       }
-      setDots({ likes: 0, comments: 0, system: 0, chat: 0 });
+      setDots({ all: 0, likes: 0, comments: 0, system: 0, chat: 0 });
       await refreshUnread();
       showToast("已全部标记为已读");
     } catch {
@@ -482,22 +563,19 @@ export function MessagesScreen() {
     }
   };
 
-  const sendChat = async () => {
-    if (sendingRef.current) return;
-    const text = draft.trim();
-    if (!text) return;
+  /** 发送 HTML 消息（文本 / 纯图片共用）：返回是否真的发出去了 */
+  const postChat = async (html: string): Promise<boolean> => {
+    if (sendingRef.current) return false;
     const now = Date.now();
     if (now - lastSentRef.current < SEND_COOLDOWN_MS) {
       const seconds = Math.max(1, Math.ceil((SEND_COOLDOWN_MS - (now - lastSentRef.current)) / 1000));
       showToast(`发送太快，请 ${seconds} 秒后再试`, "error");
-      return;
+      return false;
     }
     sendingRef.current = true;
     setSending(true);
-    const html = plainTextToHtml(text);
     try {
       const res: any = await api.sendChat(html);
-      setDraft("");
       lastSentRef.current = Date.now();
       stickRef.current = true;
       if (res?.id) {
@@ -516,6 +594,7 @@ export function MessagesScreen() {
         ]);
       }
       await load(true, true);
+      return true;
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
         lastSentRef.current = Date.now();
@@ -523,11 +602,42 @@ export function MessagesScreen() {
       } else {
         showToast(err instanceof Error && err.message ? err.message : "发送失败", "error");
       }
+      return false;
     } finally {
       sendingRef.current = false;
       setSending(false);
     }
   };
+
+  const sendChat = async () => {
+    if (sendingRef.current) return;
+    const text = draft.trim();
+    if (!text) return;
+    const ok = await postChat(plainTextToHtml(text));
+    if (ok) setDraft("");
+  };
+
+  /** 图片消息：相册选图 → 上传（scene=chat_message）→ 直接发图片消息（允许纯图片） */
+  const sendChatImage = async () => {
+    if (sendingRef.current) return;
+    try {
+      const picked = await pickImage("gallery");
+      setUploadingImage(true);
+      const res = await uploadImage(picked.path, "chat_message");
+      const data: any = res.data;
+      if (!res.ok || data?.success === false) throw new Error(data?.message || "图片上传失败");
+      const src = data?.id ? `/ov2/api/media/${data.id}` : data?.url ? String(data.url) : "";
+      if (!src) throw new Error("图片上传失败");
+      await postChat(`<p><img src="${src}" alt=""></p>`);
+    } catch (err) {
+      showToast(err instanceof Error && err.message ? err.message : "图片发送失败", "error");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  /** 私有图片解析：聊天图片受权限保护，需先经原生/带凭据的 fetch 拿到可渲染地址 */
+  const resolveChatMedia = useCallback((src: string) => fetchMedia(src), []);
 
   if (!user) {
     return (
@@ -665,8 +775,11 @@ export function MessagesScreen() {
   const renderChatRow = (message: any, index: number) => {
     const isAdmin = message?.sender_type !== "user";
     const name = isAdmin ? message?.sender_name || "管理团队" : "我";
-    const body = stripHtml(message?.content_html || message?.content) || message?.text || "";
+    const html = String(message?.content_html || message?.content || "");
+    const body = stripHtml(html) || message?.text || "";
     const unreadMark = chatDotBudget > 0 && index >= chatMessages.length - chatDotBudget;
+    // 带图片的消息交给 RichContent：私有媒体经 resolveMedia 换成可渲染地址
+    const hasRichMedia = /<img\b/i.test(html);
     return (
       <MessageRow
         key={String(message?.id ?? index)}
@@ -682,6 +795,7 @@ export function MessagesScreen() {
         }
         title={name}
         body={body}
+        rich={hasRichMedia ? <RichContent html={html} format="html" resolveMedia={resolveChatMedia} /> : undefined}
         time={timeAgo(message?.created_at)}
         tag={isAdmin ? <span className="ms-tag">官方</span> : undefined}
         label={`${name}：${body}`}
@@ -710,8 +824,11 @@ export function MessagesScreen() {
       <>
         <div className="ms-list">
           {items.map((item, index) => {
-            if (tab === "likes") return renderLike(item, index);
-            if (tab === "comments") return renderComment(item, index);
+            // 「全部」：按合并时打上的 __kind 分发到各自的渲染器
+            const kind: MessageCategory =
+              tab === "all" ? ((item?.__kind as MessageCategory) || "system") : (tab as MessageCategory);
+            if (kind === "likes") return renderLike(item, index);
+            if (kind === "comments") return renderComment(item, index);
             return renderSystem(item, index);
           })}
         </div>
@@ -804,6 +921,15 @@ export function MessagesScreen() {
               </div>
             ) : null}
             <div className="ms-inputrow">
+              <button
+                type="button"
+                className="ms-imgbtn"
+                aria-label="发送图片"
+                disabled={sending || uploadingImage}
+                onClick={() => void sendChatImage()}
+              >
+                {uploadingImage ? <span className="m-spinner" /> : <Icon name="image" size={19} />}
+              </button>
               <textarea
                 ref={chatInputRef}
                 className="ms-input"

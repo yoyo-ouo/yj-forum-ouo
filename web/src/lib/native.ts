@@ -1,7 +1,22 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
-import type { ApiResponse, AppInfo, StartupState, UpdateManifest } from "./types";
+import type { ApiResponse, AppInfo, CaptchaStatus, StartupState, UpdateManifest } from "./types";
 
 const WEB_API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") || "http://127.0.0.1:8090";
+/** 原生壳未下发 apiBase 时的历史默认站（旧安装包） */
+const NATIVE_FALLBACK_API_BASE = "https://www.yjlt.top";
+
+/**
+ * 原生壳下发的 API 基址。mediaUrl() 优先用它，避免 debug 包把图片引到生产域名：
+ * 原生请求走 OkHttp（debug 指向本地/测试服务），而图片若写死生产域名会跨域且与登录态无关。
+ */
+let nativeApiBase: string | null = null;
+
+/** getAppInfo 结果缓存：验证码状态诊断需要 altchaConfigured，不必每次重启原生桥。 */
+let cachedAppInfo: AppInfo | null = null;
+
+export function setNativeApiBase(base?: string | null) {
+  nativeApiBase = base ? base.trim().replace(/\/$/, "") || null : null;
+}
 
 export interface ForumApiPlugin {
   request(o: {
@@ -13,6 +28,16 @@ export interface ForumApiPlugin {
   }): Promise<ApiResponse>;
   uploadImage(o: { path: string; scene?: string }): Promise<ApiResponse>;
   captchaConfig(): Promise<Record<string, unknown>>;
+  /** 清掉本地缓存的验证凭证（下次请求重新向服务端换取） */
+  clearCaptcha(): Promise<{ success: boolean }>;
+  /** 验证通道状态（服务端开关 + 客户端密钥是否内置） */
+  getCaptchaStatus(): Promise<CaptchaStatus>;
+  /** 头像上传（multipart 字段名 avatar，成功后服务端已回写用户资料） */
+  uploadAvatar(o: { path: string }): Promise<ApiResponse>;
+  /** 裁剪后的头像 data URL 直接上传（原生解析 base64 后打 /users/me/avatar） */
+  uploadAvatarData(o: { dataUrl: string }): Promise<ApiResponse>;
+  /** 裁剪后的 data URL 直接上传（原生解析 base64 后打 /media/images） */
+  uploadImageData(o: { dataUrl: string; scene?: string }): Promise<ApiResponse>;
   getAppInfo(): Promise<AppInfo>;
   getStartupState(): Promise<StartupState>;
   saveSettings(o: Partial<{ theme: string; yearMode: string; privacyAgreedVersion: string; lastName: string }>): Promise<{ success: boolean }>;
@@ -23,6 +48,8 @@ export interface ForumApiPlugin {
 export interface ForumMediaPlugin {
   pickImage(o: { source: "gallery" | "camera" }): Promise<{ path: string; name: string; mime: string }>;
   uploadImage(o: { path: string; scene?: string }): Promise<ApiResponse>;
+  /** 下载站内图片到 App 缓存，返回本地文件路径（用 fileSrc 转成可访问 URL） */
+  fetchMedia(o: { url: string }): Promise<{ path: string }>;
 }
 
 export interface ForumUpdatePlugin {
@@ -66,6 +93,47 @@ function webUrl(path: string, query?: Record<string, string>): string {
   return url.toString();
 }
 
+/** 把 fetch 的响应统一成 ApiResponse（与原生壳返回的 shape 一致）。 */
+async function toApiResponse<T = any>(res: Response): Promise<ApiResponse<T>> {
+  const text = await res.text();
+  let data: any = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
+  return { status: res.status, ok: res.ok, data, text };
+}
+
+/** data URL → Blob（web 端上传裁剪结果用）。 */
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [head, body] = dataUrl.split(",");
+  const mime = /data:([^;]+)/.exec(head)?.[1] || "image/jpeg";
+  const binary = atob(body || "");
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mime });
+}
+
+function extensionFor(mime: string): string {
+  if (mime.includes("png")) return "png";
+  if (mime.includes("webp")) return "webp";
+  if (mime.includes("gif")) return "gif";
+  return "jpg";
+}
+
+async function webUpload(pathname: string, field: string, blob: Blob, scene?: string): Promise<ApiResponse> {
+  const form = new FormData();
+  form.append(field, blob, `upload-${Date.now()}.${extensionFor(blob.type)}`);
+  const query = scene ? `?scene=${encodeURIComponent(scene)}` : "";
+  const res = await fetch(`${WEB_API_BASE}/ov2/api${pathname}${query}`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  return toApiResponse(res);
+}
+
 async function webRequest(o: {
   method: string;
   path: string;
@@ -79,14 +147,7 @@ async function webRequest(o: {
     headers: o.body === undefined ? undefined : { "Content-Type": "application/json" },
     body: o.body === undefined ? undefined : JSON.stringify(o.body),
   });
-  const text = await res.text();
-  let data: any = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = null;
-  }
-  return { status: res.status, ok: res.ok, data, text };
+  return toApiResponse(res);
 }
 
 export async function requestApi<T = any>(o: {
@@ -106,11 +167,17 @@ export async function getAppInfo(): Promise<AppInfo> {
       versionName: "2.0.0",
       versionCode: 20000,
       packageName: "top.crazying.forum.debug",
+      apiBase: WEB_API_BASE,
       apiBaseUrl: WEB_API_BASE,
       altchaConfigured: false,
     };
   }
-  return ForumApi.getAppInfo();
+  if (cachedAppInfo) return cachedAppInfo;
+  const info = await ForumApi.getAppInfo();
+  // 旧壳只下发 apiBaseUrl：统一归一到 apiBase，并让 mediaUrl 立刻跟随该基址
+  cachedAppInfo = { ...info, apiBase: info.apiBase || info.apiBaseUrl || NATIVE_FALLBACK_API_BASE };
+  setNativeApiBase(cachedAppInfo.apiBase);
+  return cachedAppInfo;
 }
 
 export async function getStartupState(): Promise<StartupState> {
@@ -166,21 +233,7 @@ export async function pickImage(source: "gallery" | "camera"): Promise<{ path: s
 export async function uploadImage(path: string, scene = "post_image"): Promise<ApiResponse> {
   if (isNative) return ForumMedia.uploadImage({ path, scene });
   const blob = await fetch(path).then((r) => r.blob());
-  const form = new FormData();
-  form.append("file", blob, path.startsWith("data:") ? `upload-${Date.now()}.jpg` : path.split("/").pop() || "upload.jpg");
-  const res = await fetch(`${WEB_API_BASE}/ov2/api/media/images?scene=${encodeURIComponent(scene)}`, {
-    method: "POST",
-    credentials: "include",
-    body: form,
-  });
-  const text = await res.text();
- let data: any = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = null;
-  }
-  return { status: res.status, ok: res.ok, data, text };
+  return webUpload("/media/images", "file", blob, scene);
 }
 
 export async function checkUpdate(version: string): Promise<UpdateManifest> {
@@ -249,8 +302,162 @@ export function fileSrc(path?: string | null): string {
 export function mediaUrl(path?: string | null): string {
   if (!path) return "";
   if (path.startsWith("http") || path.startsWith("data:") || path.startsWith("blob:")) return path;
-  const base = isNative ? "https://www.yjlt.top" : WEB_API_BASE;
+  const base = isNative ? nativeApiBase || NATIVE_FALLBACK_API_BASE : WEB_API_BASE;
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+/* ---------------- 人机验证 ---------------- */
+
+/** Capacitor 未实现的方法会以 UNIMPLEMENTED 拒绝：只在这种情况下才走兼容回退。 */
+function isUnimplemented(error: unknown): boolean {
+  const code = (error as any)?.code;
+  if (code === "UNIMPLEMENTED") return true;
+  return /not implemented/i.test(String((error as any)?.message || ""));
+}
+
+/** 清掉本地缓存的验证凭证（验证失败后重试前调用；未实现该方法的旧壳静默忽略）。 */
+export async function clearCaptcha(): Promise<{ success: boolean }> {
+  if (!isNative) return { success: true };
+  try {
+    return await ForumApi.clearCaptcha();
+  } catch {
+    return { success: false };
+  }
+}
+
+/** 把服务端 /captcha/config 归一成 CaptchaStatus（旧壳只提供 captchaConfig）。 */
+function normalizeCaptchaStatus(raw: any, source: "native" | "web", clientSecret?: boolean): CaptchaStatus {
+  const data = raw && typeof raw === "object" ? raw : {};
+  return {
+    enabled: Boolean(data.enabled),
+    app_enabled: Boolean(data.app_enabled),
+    algorithm: data.algorithm ? String(data.algorithm) : undefined,
+    cost: Number.isFinite(Number(data.cost)) ? Number(data.cost) : undefined,
+    error: typeof data.error === "string" ? data.error : null,
+    client_secret_configured: clientSecret,
+    source,
+  };
+}
+
+/** 验证通道状态：服务端开关 + 客户端密钥是否内置。 */
+export async function getCaptchaStatus(): Promise<CaptchaStatus> {
+  if (!isNative) {
+    try {
+      const res = await requestApi<any>({ method: "GET", path: "/captcha/config" });
+      return normalizeCaptchaStatus(res.data, "web", false);
+    } catch {
+      return { enabled: false, app_enabled: false, error: "NETWORK", source: "web" };
+    }
+  }
+  let clientSecret: boolean | undefined;
+  try {
+    clientSecret = (await getAppInfo()).altchaConfigured;
+  } catch {
+    clientSecret = undefined;
+  }
+  try {
+    const status = await ForumApi.getCaptchaStatus();
+    if (status && typeof status.enabled === "boolean") {
+      return normalizeCaptchaStatus(status, "native", status.client_secret_configured ?? clientSecret);
+    }
+  } catch {
+    /* 旧壳没有该方法，继续用 captchaConfig 兜底 */
+  }
+  try {
+    const config = await ForumApi.captchaConfig();
+    return normalizeCaptchaStatus(config, "native", clientSecret);
+  } catch {
+    return { enabled: false, app_enabled: false, error: "NETWORK", client_secret_configured: clientSecret, source: "native" };
+  }
+}
+
+/* ---------------- 头像 / 图片上传 ---------------- */
+
+/**
+ * 头像上传：multipart 字段名 avatar，服务端成功后已回写用户资料。
+ * 旧壳没有 uploadAvatar 时退化为「先传媒体，再把返回的 URL 写回 avatar」。
+ */
+export async function uploadAvatar(path: string): Promise<ApiResponse> {
+  if (!isNative) {
+    const blob = await fetch(path).then((r) => r.blob());
+    return webUpload("/users/me/avatar", "avatar", blob);
+  }
+  try {
+    return await ForumApi.uploadAvatar({ path });
+  } catch (error) {
+    if (!isUnimplemented(error)) throw error;
+  }
+  // 旧壳未实现 uploadAvatar：退化为「先传媒体，再把返回的 URL 写回 avatar」
+  const uploaded = await ForumMedia.uploadImage({ path, scene: "post_image" });
+  const url = (uploaded?.data as any)?.url;
+  if (!uploaded?.ok || !url) return uploaded;
+  const patched = await ForumApi.request({ method: "PATCH", path: "/users/me", body: { avatar: url } });
+  return patched.ok ? { ...patched, data: { ...(patched.data || {}), avatar: url } } : patched;
+}
+
+/** 上传裁剪后的头像 data URL；旧壳退化为媒体上传 + PATCH avatar。 */
+export async function uploadAvatarData(dataUrl: string): Promise<ApiResponse> {
+  if (!isNative) return webUpload("/users/me/avatar", "avatar", dataUrlToBlob(dataUrl));
+  try {
+    return await ForumApi.uploadAvatarData({ dataUrl });
+  } catch (error) {
+    if (!isUnimplemented(error)) throw error;
+  }
+  const uploaded = await uploadImageData(dataUrl, "post_image");
+  const url = (uploaded?.data as any)?.url;
+  if (!uploaded?.ok || !url) return uploaded;
+  const patched = await ForumApi.request({ method: "PATCH", path: "/users/me", body: { avatar: url } });
+  return patched.ok ? { ...patched, data: { ...(patched.data || {}), avatar: url } } : patched;
+}
+
+/** 上传裁剪后的 data URL（scene 与 /media/images 的白名单一致）。 */
+export async function uploadImageData(dataUrl: string, scene = "post_image"): Promise<ApiResponse> {
+  if (isNative) {
+    try {
+      return await ForumApi.uploadImageData({ dataUrl, scene });
+    } catch (error) {
+      if (!isUnimplemented(error)) throw error;
+      return {
+        status: 0,
+        ok: false,
+        data: { success: false, message: "当前客户端版本不支持直接上传裁剪图片，请更新 App 后重试" },
+        text: "",
+      };
+    }
+  }
+  return webUpload("/media/images", "file", dataUrlToBlob(dataUrl), scene);
+}
+
+/**
+ * 下载站内图片，返回可直接放进 img.src 的地址：
+ * 原生壳落到缓存文件（fileSrc 转换），web 兑底成 data URL。
+ */
+export async function fetchMedia(input: string): Promise<string> {
+  if (!input) return "";
+  if (input.startsWith("data:") || input.startsWith("blob:")) return input;
+  const target = /^https?:/.test(input)
+    ? input
+    : /^\/(ov2\/api|avatar|static)\//.test(input)
+      ? mediaUrl(input)
+      : fileSrc(input);
+  if (isNative) {
+    try {
+      const res = await ForumMedia.fetchMedia({ url: target });
+      if (res?.path) return fileSrc(res.path);
+    } catch {
+      /* 旧壳未实现：继续用 fetch 兑底（公开媒体可直接读） */
+    }
+  }
+  const res = await fetch(target, { credentials: "include" });
+  if (!res.ok) throw new Error("图片下载失败");
+  const blob = await res.blob();
+  if (typeof FileReader === "undefined") return target;
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("图片读取失败"));
+    reader.readAsDataURL(blob);
+  });
 }
 
 export async function onSessionExpired(cb: () => void) {

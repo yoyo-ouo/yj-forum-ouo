@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { registerBackHandler } from "../lib/back";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { useNav } from "../lib/nav";
 import { useApp } from "../lib/store";
 import { api } from "../lib/api";
+import { Lightbox } from "./Lightbox";
+import { mediaUrl } from "../lib/native";
 import { avatarUrl, categoryColor, categoryLabel, contrastText, stripHtml, textLimit, timeAgo } from "../lib/format";
 import type { Post } from "../lib/types";
 
@@ -176,9 +178,45 @@ function installPurifyHooks() {
   });
 }
 
-export const RichContent = React.memo(function RichContent({ html, format }: { html?: string | null; format?: string | null }) {
+/**
+ * 站内图片判定：/ov2/api/media/ 下的路径（原生壳里与页面不同源也要认）、
+ * 同源绝对地址，以及站内 API 基址下的绝对地址。
+ * 返回 null 表示不接管（外链图、data:/blob: 等）。
+ */
+function siteImagePath(src?: string | null): string | null {
+  if (!src || src.startsWith("data:") || src.startsWith("blob:")) return null;
+  try {
+    const url = new URL(src, window.location.href);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    if (url.pathname.startsWith("/ov2/api/media/")) return url.pathname;
+    if (url.origin === window.location.origin) return url.pathname;
+    // 原生壳：页面是 localhost，站内媒体走 apiBase，同样算站内
+    const base = mediaUrl("/");
+    if (base && new URL(base, window.location.href).origin === url.origin) return url.pathname;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** 富文本正文里图片当前可用的地址：解析私有媒体后原地址仍记在 data-origin-src。 */
+function imageSource(img: HTMLImageElement): string {
+  return img.dataset.originSrc || img.getAttribute("src") || "";
+}
+
+export const RichContent = React.memo(function RichContent({
+  html,
+  format,
+  resolveMedia,
+}: {
+  html?: string | null;
+  format?: string | null;
+  /** 私有媒体解析：把站内图片地址换成已授权的本地/data 地址（聊天图片等） */
+  resolveMedia?: (src: string) => Promise<string>;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const { push } = useNav();
+  const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null);
   const clean = useMemo(() => {
     const raw = format === "markdown" ? (marked.parse(html || "") as string) : html || "";
     installPurifyHooks();
@@ -198,6 +236,28 @@ export const RichContent = React.memo(function RichContent({ html, format }: { h
       a.rel = "noopener noreferrer";
     });
   }, [clean]);
+
+  // 私有媒体：拿到授权地址后替换容器内 img.src（原地址留存，灯箱仍按站内图片处理）
+  useEffect(() => {
+    const root = ref.current;
+    if (!root || !resolveMedia) return;
+    let cancelled = false;
+    root.querySelectorAll("img").forEach((img) => {
+      const src = img.getAttribute("src") || "";
+      if (!src || src.startsWith("data:") || src.startsWith("blob:")) return;
+      img.dataset.originSrc = src;
+      void resolveMedia(src)
+        .then((next) => {
+          if (cancelled || !next || !img.isConnected) return;
+          img.dataset.originSrc = src;
+          img.setAttribute("src", next);
+        })
+        .catch(() => undefined);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clean, resolveMedia]);
 
   useEffect(() => {
     const root = ref.current;
@@ -248,6 +308,21 @@ export const RichContent = React.memo(function RichContent({ html, format }: { h
   }, [clean]);
 
   const onClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    // 站内图片：收集同一容器内的图片，交给 Lightbox 左右切换（外链图不接管）
+    const clickedImg = (event.target as HTMLElement).closest("img") as HTMLImageElement | null;
+    if (clickedImg && ref.current) {
+      const nodes = Array.from(ref.current.querySelectorAll<HTMLImageElement>("img")).filter((img) =>
+        siteImagePath(imageSource(img)),
+      );
+      const index = nodes.indexOf(clickedImg);
+      if (index >= 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        // 用当前实际 src（已解析的私有媒体是 data:/本地地址）交给灯箱，避免再请求受权限保护的媒体
+        setViewer({ images: nodes.map((img) => img.getAttribute("src") || imageSource(img)), index });
+        return;
+      }
+    }
     const internal = (event.target as HTMLElement).closest("a[data-internal]") as HTMLAnchorElement | null;
     if (internal) {
       const href = internal.getAttribute("href") || "";
@@ -275,7 +350,12 @@ export const RichContent = React.memo(function RichContent({ html, format }: { h
     else if (type === "character") push("character-detail", { id });
   };
 
-  return <div ref={ref} className="rich-content" onClick={onClick} dangerouslySetInnerHTML={{ __html: clean }} />;
+  return (
+    <>
+      <div ref={ref} className="rich-content" onClick={onClick} dangerouslySetInnerHTML={{ __html: clean }} />
+      {viewer ? <Lightbox images={viewer.images} index={viewer.index} onClose={() => setViewer(null)} /> : null}
+    </>
+  );
 });
 
 export function PostCard({ post, onOpen }: { post: Post; onOpen?: () => void }) {

@@ -558,3 +558,19 @@
   font-size: var(--m-font-xs);
   color: var(--color-text-tertiary);
 }
+
+/* ---------------- 设置 · 账号区（可点邮箱 / 资料入口） ---------------- */
+/* 邮箱较长时在行尾省略，避免把「>」挤出屏幕 */
+.m-cell-value > .st-info-value {
+  display: inline-block;
+  max-width: 42vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* 注销入口的副标题用弱化红，和不危险的行区分开（不用白边框） */
+.st-danger-list .m-cell-sub {
+  color: color-mix(in srgb, #c4383f 52%, var(--color-text-tertiary));
+}

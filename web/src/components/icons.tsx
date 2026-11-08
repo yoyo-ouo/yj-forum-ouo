@@ -7,7 +7,9 @@ export type IconName =
   | "close" | "settings" | "refresh" | "image" | "bold" | "italic" | "underline"
   | "link" | "list" | "ordered" | "quote" | "code" | "smile" | "check"
   | "edit" | "eye" | "clock" | "send" | "trash" | "mail" | "shield"
-  | "moon" | "sun" | "sparkle" | "download" | "info" | "logout" | "pin" | "compass";
+  | "moon" | "sun" | "sparkle" | "download" | "info" | "logout" | "pin" | "compass"
+  /* 社交 / 账号 / 编辑器补充 */
+  | "flag" | "users" | "crop" | "grip" | "reply" | "chevron-right" | "alert" | "rotate" | "copy";
 
 const D: Record<IconName, React.ReactNode> = {
   back: <path d="M15 5l-7 7 7 7" />,
@@ -56,6 +58,15 @@ const D: Record<IconName, React.ReactNode> = {
   logout: <><path d="M14.4 4.4h3.8a1.4 1.4 0 0 1 1.4 1.4v12.4a1.4 1.4 0 0 1-1.4 1.4h-3.8" /><path d="M10 8l-4 4 4 4M6 12h9" /></>,
   pin: <><path d="M12 21s6-5.4 6-10a6 6 0 1 0-12 0c0 4.6 6 10 6 10z" /><circle cx="12" cy="11" r="2.2" /></>,
   compass: <><circle cx="12" cy="12" r="8.6" /><path d="M14.9 9.1l-1.6 4.2-4.2 1.6 1.6-4.2z" /></>,
+  flag: <><path d="M6 3.6v16.8" /><path d="M6 4.8h9.9l-1.7 3.4 1.7 3.4H6" /></>,
+  users: <><circle cx="9" cy="8.6" r="3.2" /><path d="M3.4 19.8c1-3 3-4.5 5.6-4.5s4.6 1.5 5.6 4.5" /><path d="M15.4 6.2a3 3 0 0 1 0 5.6" /><path d="M17 15.6c1.6.6 2.8 2 3.4 4.2" /></>,
+  crop: <><path d="M6.4 3.2v12.4a2 2 0 0 0 2 2h12.4" /><path d="M17.6 20.8V8.4a2 2 0 0 0-2-2H3.2" /></>,
+  grip: <><circle cx="9" cy="6" r="1.3" /><circle cx="15" cy="6" r="1.3" /><circle cx="9" cy="12" r="1.3" /><circle cx="15" cy="12" r="1.3" /><circle cx="9" cy="18" r="1.3" /><circle cx="15" cy="18" r="1.3" /></>,
+  reply: <><path d="M9.6 6.4L4 12l5.6 5.6" /><path d="M4.6 12h9.2a5.8 5.8 0 0 1 5.8 5.8v.8" /></>,
+  "chevron-right": <path d="M9.6 5.4l6.6 6.6-6.6 6.6" />,
+  alert: <><path d="M12 4.2l8.4 14.6H3.6z" /><path d="M12 9.4v4.4" /><circle cx="12" cy="16.9" r=".95" /></>,
+  rotate: <><path d="M12 4.6a7.4 7.4 0 1 1-5.2 2.2" /><path d="M3 4.4v4.2h4.2" /><path d="M12 8.4v3.8l2.9 1.7" /></>,
+  copy: <><rect x="8.6" y="8.6" width="11" height="11" rx="2.4" /><path d="M15.4 4.4H6.6a2.2 2.2 0 0 0-2.2 2.2v8.8" /></>,
 };
 
 export function Icon({ name, size = 22, className, strokeWidth = 1.8 }: { name: IconName; size?: number; className?: string; strokeWidth?: number }) {

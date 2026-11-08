@@ -48,6 +48,43 @@ class ForumApiPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun uploadImageData(call: PluginCall) {
+        val dataUrl = call.getString("dataUrl") ?: return call.reject("dataUrl required")
+        val scene = call.getString("scene", "post_image") ?: "post_image"
+        scope.launch {
+            runCatching {
+                val response = client.uploadImageData(dataUrl, scene)
+                notifyIfNeeded(response)
+                resolveOnUi(call, response.toJs())
+            }.onFailure { rejectOnUi(call, it.message ?: "上传失败") }
+        }
+    }
+
+    @PluginMethod
+    fun uploadAvatar(call: PluginCall) {
+        val path = call.getString("path") ?: return call.reject("path required")
+        scope.launch {
+            runCatching {
+                val response = client.uploadAvatar(path)
+                notifyIfNeeded(response)
+                resolveOnUi(call, response.toJs())
+            }.onFailure { rejectOnUi(call, it.message ?: "头像上传失败") }
+        }
+    }
+
+    @PluginMethod
+    fun uploadAvatarData(call: PluginCall) {
+        val dataUrl = call.getString("dataUrl") ?: return call.reject("dataUrl required")
+        scope.launch {
+            runCatching {
+                val response = client.uploadAvatarData(dataUrl)
+                notifyIfNeeded(response)
+                resolveOnUi(call, response.toJs())
+            }.onFailure { rejectOnUi(call, it.message ?: "头像上传失败") }
+        }
+    }
+
+    @PluginMethod
     fun captchaConfig(call: PluginCall) {
         scope.launch {
             runCatching {
@@ -55,6 +92,21 @@ class ForumApiPlugin : Plugin() {
                 resolveOnUi(call, JsonUtil.toJsObject(config ?: JSONObject()))
             }.onFailure { rejectOnUi(call, it.message ?: "验证码配置获取失败") }
         }
+    }
+
+    @PluginMethod
+    fun getCaptchaStatus(call: PluginCall) {
+        scope.launch {
+            runCatching {
+                resolveOnUi(call, JsonUtil.toJsObject(client.captchaStatus()))
+            }.onFailure { rejectOnUi(call, it.message ?: "验证码状态获取失败") }
+        }
+    }
+
+    @PluginMethod
+    fun clearCaptcha(call: PluginCall) {
+        client.clearCaptcha()
+        resolveOnUi(call, JSObject().put("success", true))
     }
 
     @PluginMethod
@@ -66,6 +118,7 @@ class ForumApiPlugin : Plugin() {
                 .put("versionCode", BuildConfig.VERSION_CODE)
                 .put("packageName", context.packageName)
                 .put("apiBaseUrl", BridgeStore.apiBaseUrl)
+                .put("apiBase", client.apiBaseUrl())
                 .put("altchaConfigured", BridgeStore.altchaSecret.isNotBlank()),
         )
     }

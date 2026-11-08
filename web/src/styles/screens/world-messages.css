@@ -766,3 +766,157 @@ span.wd-name { cursor: default; }
 .ms-chatwrap > .m-empty {
   padding-top: 32px;
 }
+
+/* ============================================================
+   世界频道 · 引用回复（wd-quotebar / wd-tools / wd-replybtn）
+   ============================================================ */
+
+/* 每条消息可见的回复按钮：视觉 28px，::after 把热区补到 44×44 */
+.wd-replybtn {
+  position: relative;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--color-text-tertiary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: .8;
+  transition: background .16s var(--m-ease), color .16s var(--m-ease), opacity .16s var(--m-ease);
+}
+.wd-replybtn::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 999px;
+}
+.wd-replybtn:active {
+  background: var(--m-press);
+  color: var(--m-accent-ink);
+  opacity: 1;
+}
+
+/* 续行（不显示昵称行）的回复按钮单独一行，右/左对齐跟随气泡 */
+.wd-tools {
+  display: flex;
+  align-items: center;
+  margin-top: 1px;
+  padding: 0 2px;
+}
+
+.wd-reply--missing {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--color-text-tertiary);
+  font-style: normal;
+}
+.wd-reply--missing svg { flex: 0 0 auto; opacity: .8; }
+
+/* 输入框上方的引用条 */
+.wd-quotebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 7px 8px 7px 10px;
+  border-radius: var(--m-radius-sm);
+  background: var(--color-bg-icon);
+  color: var(--color-text-secondary);
+  font-size: var(--m-font-xs);
+  line-height: 1.4;
+}
+.wd-quotebar > svg {
+  flex: 0 0 auto;
+  color: var(--m-accent-ink);
+}
+.wd-quotebar-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.wd-quotebar-name {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.wd-quotebar-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-tertiary);
+}
+.wd-quotebar-x {
+  position: relative;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--color-text-tertiary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+/* 热区 44×44（28 + 8×2） */
+.wd-quotebar-x::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 999px;
+}
+.wd-quotebar-x:active { background: var(--m-press); }
+
+/* ============================================================
+   消息中心 · 团队会话图片（ms-imgbtn / ms-item-rich）
+   ============================================================ */
+
+.ms-imgbtn {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--m-track-bg);
+  color: var(--color-text-secondary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background .16s var(--m-ease), color .16s var(--m-ease);
+}
+.ms-imgbtn:active:not(:disabled) {
+  background: var(--color-bg-icon);
+  color: var(--m-accent-ink);
+}
+.ms-imgbtn:disabled { opacity: .55; }
+.ms-imgbtn .m-spinner { width: 16px; height: 16px; border-width: 2px; }
+
+/* 聊天里的富文本（图片消息） */
+.ms-item-rich {
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+}
+.ms-item-rich .rich-content {
+  font-size: var(--m-font-sm);
+  line-height: 1.65;
+}
+.ms-item-rich .rich-content p { margin: 0 0 4px; }
+.ms-item-rich .rich-content p:last-child { margin-bottom: 0; }
+.ms-item-rich .rich-content img {
+  display: block;
+  max-width: 168px;
+  max-height: 168px;
+  width: auto;
+  height: auto;
+  margin: 2px 0;
+  border-radius: 10px;
+  object-fit: cover;
+}

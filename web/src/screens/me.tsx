@@ -94,15 +94,18 @@ export function MeScreen() {
 
   const statItems: Array<{ key: string; label: string; value: number | string; onClick: () => void }> = [
     { key: "posts", label: "帖子", value: stats?.post_count ?? 0, onClick: () => push("user", { id: user.id, tab: "posts" }) },
-    { key: "likes", label: "获赞", value: stats?.total_likes ?? 0, onClick: () => push("user", { id: user.id, tab: "posts" }) },
-    { key: "following", label: "关注", value: follow?.following_count ?? 0, onClick: () => push("user", { id: user.id, tab: "posts" }) },
-    { key: "followers", label: "粉丝", value: follow?.follower_count ?? 0, onClick: () => push("user", { id: user.id, tab: "posts" }) },
+    { key: "likes", label: "获赞", value: stats?.total_likes ?? 0, onClick: () => push("likes") },
+    { key: "following", label: "关注", value: follow?.following_count ?? 0, onClick: () => push("follows", { id: user.id, tab: "following" }) },
+    { key: "followers", label: "粉丝", value: follow?.follower_count ?? 0, onClick: () => push("follows", { id: user.id, tab: "followers" }) },
   ];
 
   const quickItems: QuickItem[] = [
     { key: "posts", icon: "edit", label: "我的帖子", onClick: () => push("user", { id: user.id, tab: "posts" }) },
     { key: "favorites", icon: "bookmark", label: "收藏", onClick: () => push("user", { id: user.id, tab: "favorites" }) },
     { key: "comments", icon: "comment", label: "评论", onClick: () => push("user", { id: user.id, tab: "comments" }) },
+    { key: "drafts", icon: "clock", label: "草稿箱", onClick: () => push("drafts") },
+    { key: "profile-edit", icon: "crop", label: "编辑资料", onClick: () => push("profile-edit") },
+    { key: "likes", icon: "heart", label: "谁赞了我", onClick: () => push("likes") },
     { key: "character", icon: "sparkle", label: "角色设定", onClick: () => push("character") },
   ];
 
@@ -112,10 +115,19 @@ export function MeScreen() {
         {/* 资料卡 */}
         <div className="m-card me-profile">
           <div className="me-profile-top">
-            <Avatar src={user.avatar} name={user.name} size={64} />
+            <button
+              type="button"
+              className="me-avatar-btn"
+              aria-label="编辑资料"
+              onClick={() => push("profile-edit")}
+            >
+              <Avatar src={user.avatar} name={user.name} size={64} />
+            </button>
             <div className="me-profile-id">
               <div className="me-name-row">
-                <div className="me-name m-ellipsis">{user.name}</div>
+                <button type="button" className="me-name me-name-btn m-ellipsis" onClick={() => push("profile-edit")}>
+                  {user.name}
+                </button>
                 <button
                   type="button"
                   className={`m-btn m-btn--sm m-btn--pill me-sign ${signedToday ? "is-done m-btn--soft" : "m-btn--primary"}`}

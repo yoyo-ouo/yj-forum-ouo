@@ -103,6 +103,17 @@ class ForumMediaPlugin : Plugin() {
         }
     }
 
+    /** 把站内媒体（仅 /ov2/api/media/ 前缀）下载到本地 cache，返回可给 WebView 用的 file 路径。 */
+    @PluginMethod
+    fun fetchMedia(call: PluginCall) {
+        val url = call.getString("url") ?: return call.reject("url required")
+        scope.launch {
+            runCatching {
+                resolveOnUi(call, JSObject().put("path", client.fetchMedia(url)))
+            }.onFailure { rejectOnUi(call, it.message ?: "媒体下载失败") }
+        }
+    }
+
     private fun copyToCache(uri: Uri): JSObject {
         val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
         val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "jpg"

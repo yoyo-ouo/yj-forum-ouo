@@ -92,6 +92,11 @@ export function FeedScreen() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [failed, setFailed] = useState(false);
+  /** 随机推荐（与最新流完全分离：不共用 items/page/hasMore） */
+  const [randomMode, setRandomMode] = useState(false);
+  const [randomItems, setRandomItems] = useState<Post[]>([]);
+  const [randomLoading, setRandomLoading] = useState(false);
+  const [randomFailed, setRandomFailed] = useState(false);
   const [noticeClosed, setNoticeClosed] = useState(() => {
     try {
       return localStorage.getItem(NOTICE_KEY) || "";
@@ -138,6 +143,22 @@ export function FeedScreen() {
     [space, guildId, category, showToast],
   );
 
+  /** 随机推荐：每次重新拉一批，独立于最新流的 items/page/hasMore */
+  const loadRandom = useCallback(async () => {
+    setRandomLoading(true);
+    setRandomFailed(false);
+    try {
+      const res = await api.randomPosts();
+      setRandomItems((res.posts || []) as Post[]);
+      setRandomMode(true);
+    } catch (error) {
+      setRandomFailed(true);
+      showToast(error instanceof Error ? error.message : "换一批失败", "error");
+    } finally {
+      setRandomLoading(false);
+    }
+  }, [showToast]);
+
   useEffect(() => {
     setItems([]);
     setPage(1);
@@ -145,18 +166,23 @@ export function FeedScreen() {
     void load(1, false);
   }, [load]);
 
+  // 切空间 / 会馆 / 分类就退出随机模式（随机流不参与筛选）
+  useEffect(() => {
+    setRandomMode(false);
+  }, [space, guildId, category]);
+
   useEffect(() => {
     const node = sentinel.current;
     if (!node) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting && hasMore && !loading && !loadingMore && !failed) void load(page + 1, true);
+        if (entries[0]?.isIntersecting && hasMore && !loading && !loadingMore && !failed && !randomMode) void load(page + 1, true);
       },
       { rootMargin: "240px" },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hasMore, loading, loadingMore, page, load, failed]);
+  }, [hasMore, loading, loadingMore, page, load, failed, randomMode]);
 
   /* ---------- 公告 ---------- */
   const announcement = site.data?.data?.announcement;
@@ -179,11 +205,15 @@ export function FeedScreen() {
 
   /* ---------- 刷新 / 筛选 ---------- */
   const refresh = useCallback(async () => {
+    if (randomMode) {
+      await loadRandom();
+      return;
+    }
     setItems([]);
     setPage(1);
     setHasMore(false);
     await load(1, false);
-  }, [load]);
+  }, [load, randomMode, loadRandom]);
 
   const selectSpace = (next: Space) => {
     if (next === "guild") {
@@ -262,7 +292,49 @@ export function FeedScreen() {
         </div>
       </div>
 
-      {loading && items.length === 0 ? (
+      <div className="feed-reco">
+        <span className="feed-reco-label">
+          <Icon name="sparkle" size={13} />
+          {randomMode ? "随机推荐" : "不知道看什么？"}
+        </span>
+        <button
+          type="button"
+          className="feed-reco-btn"
+          disabled={randomLoading}
+          aria-pressed={randomMode}
+          onClick={() => void loadRandom()}
+        >
+          <Icon name="refresh" size={13} />
+          {randomLoading ? "换一批中" : randomMode ? "换一批" : "推荐"}
+        </button>
+        {randomMode ? (
+          <button type="button" className="feed-reco-back" onClick={() => setRandomMode(false)}>
+            返回最新
+          </button>
+        ) : null}
+      </div>
+
+      {randomMode ? (
+        randomLoading ? (
+          <Skeletons count={3} />
+        ) : randomFailed && randomItems.length === 0 ? (
+          <div className="feed-failed">
+            <span>随机推荐加载失败</span>
+            <button className="m-btn m-btn--soft" onClick={() => void loadRandom()}>重试</button>
+          </div>
+        ) : randomItems.length === 0 ? (
+          <Empty
+            icon="sparkle"
+            title="这批没有推荐"
+            hint="换一批试试手气"
+            action={<button className="m-btn m-btn--primary" onClick={() => void loadRandom()}>换一批</button>}
+          />
+        ) : (
+          <div className="feed-list">
+            {randomItems.map((post) => <FeedCard key={`reco-${post.id}`} post={post} />)}
+          </div>
+        )
+      ) : loading && items.length === 0 ? (
         <Skeletons count={3} />
       ) : failed && items.length === 0 ? (
         <div className="feed-failed">
@@ -282,15 +354,19 @@ export function FeedScreen() {
         </div>
       )}
 
-      <div ref={sentinel} className="feed-sentinel" aria-hidden="true" />
-      {loadingMore ? <Loader text="加载更多…" /> : null}
-      {failed && items.length > 0 ? (
-        <div className="feed-failed">
-          <span>加载更多失败</span>
-          <button className="m-btn m-btn--soft" onClick={() => void load(page + 1, true)}>重试</button>
-        </div>
+      {!randomMode ? (
+        <>
+          <div ref={sentinel} className="feed-sentinel" aria-hidden="true" />
+          {loadingMore ? <Loader text="加载更多…" /> : null}
+          {failed && items.length > 0 ? (
+            <div className="feed-failed">
+              <span>加载更多失败</span>
+              <button className="m-btn m-btn--soft" onClick={() => void load(page + 1, true)}>重试</button>
+            </div>
+          ) : null}
+          {!hasMore && items.length > 0 && !loading ? <div className="m-end">— 到底了 —</div> : null}
+        </>
       ) : null}
-      {!hasMore && items.length > 0 && !loading ? <div className="m-end">— 到底了 —</div> : null}
 
       <Sheet open={guildOpen} title="选择会馆" onClose={() => setGuildOpen(false)}>
         {guilds.isLoading ? (

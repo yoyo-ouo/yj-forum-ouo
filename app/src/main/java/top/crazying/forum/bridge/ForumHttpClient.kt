@@ -1,5 +1,6 @@
 package top.crazying.forum.bridge
 
+import android.util.Base64
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -22,6 +23,8 @@ class ApiResponse(
     val ok: Boolean get() = status in 200..299
 
     fun code(): String = (data as? JSONObject)?.optString("code").orEmpty()
+
+    fun message(): String = (data as? JSONObject)?.optString("message").orEmpty()
 
     fun toJs(): com.getcapacitor.JSObject = com.getcapacitor.JSObject()
         .put("status", status)
@@ -67,16 +70,33 @@ class ForumHttpClient {
         body: JSONObject? = null,
         timeoutMs: Long = 0L,
         injectGrant: Boolean = true,
+        headers: Map<String, String> = emptyMap(),
     ): ApiResponse {
         val payload = body?.let { JSONObject(it.toString()) }
-        if (injectGrant && requiresGrant(path) && payload != null && !payload.has("grant") && !payload.has("altcha")) {
+        val grantable = injectGrant && requiresGrant(path)
+        if (grantable && payload != null && !payload.has("grant") && !payload.has("altcha")) {
             captcha.ensureGrant()?.let { payload.put("grant", it) }
         }
+        val response = execute(
+            method = method,
+            url = urlFor(path, query),
+            body = payload,
+            timeoutMs = timeoutMs,
+            headers = headers,
+        )
+        if (!grantable || payload == null || response.status != 400 || response.message() != CAPTCHA_REQUIRED) {
+            return response
+        }
+        // 服务端判定 grant 失效：清掉重取一次（仍为零 PoW），请求只重试一次。
+        captcha.invalidate()
+        payload.remove("grant")
+        captcha.ensureGrant(force = true)?.let { payload.put("grant", it) }
         return execute(
             method = method,
             url = urlFor(path, query),
             body = payload,
             timeoutMs = timeoutMs,
+            headers = headers,
         )
     }
 
@@ -85,26 +105,88 @@ class ForumHttpClient {
         path: String,
         query: Map<String, String> = emptyMap(),
         body: JSONObject? = null,
-    ): ApiResponse = request(method, path, query, body, injectGrant = false)
+        headers: Map<String, String> = emptyMap(),
+    ): ApiResponse = request(method, path, query, body, injectGrant = false, headers = headers)
 
-    fun uploadImage(filePath: String, scene: String = "post_image"): ApiResponse {
+    /** 通用 multipart 上传（endpoint 为 /ov2/api 下的相对路径）。 */
+    fun upload(
+        endpoint: String,
+        field: String,
+        filePath: String,
+        query: Map<String, String> = emptyMap(),
+    ): ApiResponse {
         val file = File(filePath)
         require(file.exists()) { "文件不存在" }
-        val mime = when (file.extension.lowercase()) {
-            "png" -> "image/png"
-            "webp" -> "image/webp"
-            "gif" -> "image/gif"
-            else -> "image/jpeg"
-        }
         val multipart = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
-            .addFormDataPart("file", file.name, file.asRequestBody(mime.toMediaTypeOrNull()))
+            .addFormDataPart(field, file.name, file.asRequestBody(mimeFor(file).toMediaTypeOrNull()))
             .build()
-        val request = baseRequest(urlFor("/media/images", mapOf("scene" to scene)))
+        val request = baseRequest(urlFor(endpoint, query))
             .post(multipart)
             .build()
         return executeRequest(request)
     }
+
+    fun uploadImage(filePath: String, scene: String = "post_image"): ApiResponse =
+        upload("/media/images", "file", filePath, mapOf("scene" to scene))
+
+    fun uploadAvatar(filePath: String): ApiResponse =
+        upload("/users/me/avatar", "avatar", filePath)
+
+    /** 解析 base64 data URL → 写 cache 临时文件 → 上传 /users/me/avatar。 */
+    fun uploadAvatarData(dataUrl: String): ApiResponse {
+        val file = writeDataUrl(dataUrl)
+        return try {
+            uploadAvatar(file.absolutePath)
+        } finally {
+            file.delete()
+        }
+    }
+
+    /** 解析 base64 data URL → 写 cache 临时文件 → 上传 /media/images。 */
+    fun uploadImageData(dataUrl: String, scene: String = "post_image"): ApiResponse {
+        val file = writeDataUrl(dataUrl)
+        return try {
+            uploadImage(file.absolutePath, scene)
+        } finally {
+            file.delete()
+        }
+    }
+
+    /** 拉取本站媒体到 cache 并返回本地绝对路径；仅允许同 host 且 /ov2/api/media/ 前缀。 */
+    fun fetchMedia(url: String): String {
+        val target = resolveMediaUrl(url)
+        require(target.host.equals(base.host, ignoreCase = true)) { "仅允许拉取本站媒体" }
+        require(target.encodedPath.startsWith(MEDIA_PATH_PREFIX)) { "媒体地址不在白名单内" }
+        val request = Request.Builder()
+            .url(target)
+            .header("Referer", "$origin/")
+            .header("User-Agent", "CrForum-Android/${BuildConfig.APP_VERSION}")
+            .header("Accept", "image/*,*/*;q=0.8")
+            .get()
+            .build()
+        okHttp.newCall(request).execute().use { response ->
+            require(response.isSuccessful) { "媒体下载失败（HTTP ${response.code}）" }
+            val body = response.body ?: error("媒体内容为空")
+            val dir = File(BridgeStore.context().cacheDir, "media").apply { mkdirs() }
+            val name = "md_${System.currentTimeMillis()}_${System.nanoTime() % 1000}." +
+                extensionFor(body.contentType()?.toString().orEmpty())
+            val file = File(dir, name)
+            body.byteStream().use { input ->
+                file.outputStream().use { output -> input.copyTo(output) }
+            }
+            return file.absolutePath
+        }
+    }
+
+    /** 站点根地址：scheme://host[:port]。 */
+    fun apiBaseUrl(): String = origin
+
+    fun clearCaptcha() {
+        captcha.invalidate()
+    }
+
+    fun captchaStatus(): JSONObject = captcha.status()
 
     fun originHeader(): String = origin
 
@@ -138,10 +220,17 @@ class ForumHttpClient {
         .header("Accept", "application/json, text/plain, */*")
         .header("Accept-Language", "zh-CN,zh;q=0.9")
 
-    private fun execute(method: String, url: HttpUrl, body: JSONObject?, timeoutMs: Long): ApiResponse {
+    private fun execute(
+        method: String,
+        url: HttpUrl,
+        body: JSONObject?,
+        timeoutMs: Long,
+        headers: Map<String, String> = emptyMap(),
+    ): ApiResponse {
         val upper = method.uppercase()
         val requestBody = body?.toString()?.toRequestBody(JSON)
         val builder = baseRequest(url)
+        headers.forEach { (key, value) -> builder.header(key, value) }
         when (upper) {
             "GET" -> builder.get()
             "HEAD" -> builder.head()
@@ -183,7 +272,51 @@ class ForumHttpClient {
             Regex("^/posts/[^/]+/comments$").matches(clean)
     }
 
+    private fun mimeFor(file: File): String = when (file.extension.lowercase()) {
+        "png" -> "image/png"
+        "webp" -> "image/webp"
+        "gif" -> "image/gif"
+        else -> "image/jpeg"
+    }
+
+    private fun extensionFor(mime: String): String =
+        when (mime.substringBefore(';').trim().lowercase()) {
+            "image/png" -> "png"
+            "image/webp" -> "webp"
+            "image/gif" -> "gif"
+            else -> "jpg"
+        }
+
+    private fun writeDataUrl(dataUrl: String): File {
+        val trimmed = dataUrl.trim()
+        require(trimmed.startsWith("data:")) { "dataUrl 必须以 data: 开头" }
+        val comma = trimmed.indexOf(',')
+        require(comma > 5) { "dataUrl 格式不正确" }
+        val meta = trimmed.substring(5, comma)
+        require(meta.contains("base64")) { "dataUrl 仅支持 base64 编码" }
+        val mime = meta.substringBefore(';').ifBlank { "image/jpeg" }
+        val bytes = Base64.decode(trimmed.substring(comma + 1), Base64.DEFAULT)
+        require(bytes.isNotEmpty()) { "dataUrl 内容为空" }
+        val dir = File(BridgeStore.context().cacheDir, "media").apply { mkdirs() }
+        val file = File(dir, "data_${System.currentTimeMillis()}.${extensionFor(mime)}")
+        file.writeBytes(bytes)
+        return file
+    }
+
+    private fun resolveMediaUrl(raw: String): HttpUrl {
+        val trimmed = raw.trim()
+        require(trimmed.isNotEmpty()) { "url required" }
+        return when {
+            trimmed.startsWith("http://", ignoreCase = true) ||
+                trimmed.startsWith("https://", ignoreCase = true) -> trimmed.toHttpUrl()
+            trimmed.startsWith("/") -> "$origin$trimmed".toHttpUrl()
+            else -> error("不支持的媒体地址")
+        }
+    }
+
     private companion object {
+        const val MEDIA_PATH_PREFIX = "/ov2/api/media/"
+        const val CAPTCHA_REQUIRED = "CAPTCHA_REQUIRED"
         val JSON = "application/json; charset=utf-8".toMediaType()
     }
 }

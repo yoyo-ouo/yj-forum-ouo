@@ -63,13 +63,16 @@ class ForumDevicePlugin : Plugin() {
     @PluginMethod
     fun vibrate(call: PluginCall) {
         val ms = (call.getInt("duration", 12) ?: 12).coerceIn(1, 100)
-        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-        if (vibrator != null && vibrator.hasVibrator()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(ms.toLong(), VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(ms.toLong())
+        // 震动是纯装饰能力：缺权限/系统服务异常时不应让插件线程崩溃。
+        runCatching {
+            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(ms.toLong(), VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(ms.toLong())
+                }
             }
         }
         call.resolve(JSObject().put("success", true))

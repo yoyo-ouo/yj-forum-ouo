@@ -1,12 +1,13 @@
 import React, { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
-import { sse } from "../lib/native";
+import { sse, vibrate } from "../lib/native";
 import { useNav } from "../lib/nav";
 import { useApp } from "../lib/store";
-import { AppBar, Avatar, Empty, Screen, Skeletons } from "../components/mobile";
+import { AppBar, Avatar, Cell, Empty, Screen, Sheet, Skeletons } from "../components/mobile";
 import { Icon } from "../components/icons";
 import { RichContent } from "../components/ui";
 import { stripHtml, timeAgo } from "../lib/format";
+import type { WorldParent } from "../lib/types";
 
 /** TipTap 按需加载：只在切到富文本输入时加载 */
 const RichEditor = React.lazy(() =>
@@ -47,6 +48,8 @@ interface WorldMessageItem {
   content_format?: string;
   created_at?: string;
   parent_id?: number | string | null;
+  /** 被引用消息摘要（服务端下发；父消息已删除时为 null） */
+  parent?: WorldParent | null;
   guild_name?: string;
   is_leader?: boolean;
   is_admin?: boolean;
@@ -57,6 +60,8 @@ interface PendingMessage {
   tempId: string;
   content: string;
   createdAt: string;
+  /** 引用发送时的原消息发送者昵称（仅用于本地占位展示） */
+  parentName?: string;
 }
 
 type SseListener = Awaited<ReturnType<typeof sse.addListener>>;
@@ -130,27 +135,84 @@ function parseWorldPayload(payload: any): WorldMessageItem | null {
   return candidate as WorldMessageItem;
 }
 
+/** 引用展示信息：服务端 parent / 本地兜底 / 父消息已删除 */
+interface ReplyParent {
+  name: string;
+  preview?: string;
+  missing?: boolean;
+}
+
 /** 单条消息：组首才显示头像与昵称；本人靠右、主色气泡。 */
 function WorldMessageRow({
   item,
   mine,
   head,
-  parentName,
+  parent,
   onOpenUser,
+  onLongPress,
+  onReply,
 }: {
   item: WorldMessageItem;
   mine: boolean;
   head: boolean;
-  parentName?: string;
+  parent?: ReplyParent | null;
   onOpenUser: (id: string) => void;
+  onLongPress: (item: WorldMessageItem) => void;
+  onReply: (item: WorldMessageItem) => void;
 }) {
   const name = senderName(item) || "匿名";
   const uid = senderId(item);
   const avatar = senderAvatar(item);
+  const pressTimer = useRef<number | null>(null);
+
+  const clearPress = () => {
+    if (pressTimer.current !== null) {
+      window.clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  };
+
+  useEffect(() => clearPress, []);
+
+  /** 长按 480ms 弹出操作 Sheet（触屏）；桌面右键同样弹 */
+  const startPress = () => {
+    clearPress();
+    pressTimer.current = window.setTimeout(() => {
+      pressTimer.current = null;
+      void vibrate(12);
+      onLongPress(item);
+    }, 480);
+  };
+
+  // 可见的回复按钮：组首放在昵称行，续行单独一行，保证每条消息都能点
+  const replyButton = (
+    <button
+      type="button"
+      className="wd-replybtn"
+      aria-label="回复这条消息"
+      onClick={(event) => {
+        event.stopPropagation();
+        clearPress();
+        onReply(item);
+      }}
+    >
+      <Icon name="reply" size={14} />
+    </button>
+  );
+
   return (
     <div
       className={`wd-row ${mine ? "wd-row--mine" : "wd-row--them"} ${head ? "wd-row--head" : "wd-row--cont"}`}
       data-message-id={item.id}
+      onTouchStart={startPress}
+      onTouchMove={clearPress}
+      onTouchEnd={clearPress}
+      onTouchCancel={clearPress}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        clearPress();
+        onLongPress(item);
+      }}
     >
       {head ? (
         uid ? (
@@ -195,16 +257,31 @@ function WorldMessageRow({
                 {timeAgo(item.created_at)}
               </time>
             ) : null}
+            {replyButton}
           </div>
         ) : null}
 
-        {parentName ? <div className="wd-reply">回复 {parentName}</div> : null}
+        {parent ? (
+          parent.missing ? (
+            <div className="wd-reply wd-reply--missing">
+              <Icon name="alert" size={10} />
+              原消息已删除
+            </div>
+          ) : (
+            <div className="wd-reply">
+              回复 <b>{parent.name}</b>
+              {parent.preview ? `：${parent.preview}` : ""}
+            </div>
+          )
+        ) : null}
 
         <div className={`wd-bubble${mine ? " wd-bubble--mine" : ""}`}>
           <div className="wd-txt">
             <RichContent html={item.content} format={item.content_format} />
           </div>
         </div>
+
+        {head ? null : <div className="wd-tools">{replyButton}</div>}
       </div>
     </div>
   );
@@ -228,6 +305,10 @@ export function WorldScreen() {
   const [sending, setSending] = useState(false);
   const [pendingNew, setPendingNew] = useState(0);
   const [live, setLive] = useState<LiveState>("connecting");
+  /** 引用回复目标（输入框上方的引用条） */
+  const [replyTo, setReplyTo] = useState<{ id: number | string; name: string; preview: string } | null>(null);
+  /** 长按操作 Sheet 的目标消息 */
+  const [actionTarget, setActionTarget] = useState<WorldMessageItem | null>(null);
 
   const messagesRef = useRef<WorldMessageItem[]>([]);
   const hasMoreRef = useRef(false);
@@ -450,15 +531,21 @@ export function WorldScreen() {
     const tempId = `tmp-${now}`;
     // 富文本直接发 HTML（已由编辑器产出，提交前再做一次白名单清洗在渲染侧完成）
     const html = richOpen ? richDoc : plainTextToHtml(text);
+    const parentId = replyTo && Number(replyTo.id) > 0 ? Number(replyTo.id) : undefined;
     // 乐观发送：先以本地消息占位，失败再回滚。
-    setPending((list) => [...list, { tempId, content: html, createdAt: new Date().toISOString() }]);
+    setPending((list) => [
+      ...list,
+      { tempId, content: html, createdAt: new Date().toISOString(), parentName: replyTo?.name },
+    ]);
     if (richOpen) setRichDoc("");
     else setDraft("");
     nearBottomRef.current = true;
     requestAnimationFrame(() => scrollToBottom("smooth"));
     try {
-      await api.sendWorld(html);
+      await api.sendWorld(html, parentId);
       cooldownRef.current = Date.now() + SEND_COOLDOWN_MS;
+      // 引用只在发送成功后清空，失败时保留以便重试
+      setReplyTo(null);
       await refreshAfter();
       setPending((list) => list.filter((item) => item.tempId !== tempId));
       requestAnimationFrame(() => scrollToBottom("smooth"));
@@ -478,9 +565,15 @@ export function WorldScreen() {
     }
   };
 
-  const parentNames = useMemo(() => {
-    const map = new Map<number, string>();
-    messages.forEach((item) => map.set(messageId(item), senderName(item) || "匿名"));
+  /** 本地已加载消息的摘要：服务端未下发 parent 时（旧数据）用它兑底 */
+  const parentMap = useMemo(() => {
+    const map = new Map<number, { name: string; preview: string }>();
+    messages.forEach((item) =>
+      map.set(messageId(item), {
+        name: senderName(item) || "匿名",
+        preview: stripHtml(item.content || "").slice(0, 60),
+      }),
+    );
     return map;
   }, [messages]);
 
@@ -496,16 +589,56 @@ export function WorldScreen() {
         (senderName(previous as WorldMessageItem) || "匿名") === (senderName(item) || "匿名");
       const withinWindow = stamp > 0 && previousStamp > 0 && Math.abs(stamp - previousStamp) <= GROUP_WINDOW_MS;
       const head = !previous || !sameAuthor || !withinWindow || Boolean(item.parent_id);
+      const parentKey = item.parent_id ? Number(item.parent_id) : 0;
+      const local = parentKey > 0 ? parentMap.get(parentKey) : undefined;
+      // 优先服务端 parent（含快照）；缺失时用本地列表兑底；都没有则视为已删除
+      const parent: ReplyParent | null = item.parent
+        ? {
+            name: item.parent.sender_name || "匿名",
+            preview: stripHtml(item.parent.content || "").slice(0, 60),
+          }
+        : local
+          ? { name: local.name, preview: local.preview }
+          : parentKey > 0
+            ? { name: "", missing: true }
+            : null;
       return {
         item,
         mine: Boolean(myId) && senderId(item) === myId,
         head,
-        parentName: item.parent_id ? parentNames.get(Number(item.parent_id)) : undefined,
+        parent,
       };
     });
-  }, [messages, myId, parentNames]);
+  }, [messages, myId, parentMap]);
 
   const openUser = (id: string) => push("user", { id });
+
+  /** 引用回复：记下目标消息，聚焦输入框 */
+  const startReply = (item: WorldMessageItem) => {
+    setActionTarget(null);
+    setReplyTo({
+      id: item.id,
+      name: senderName(item) || "匿名",
+      preview: stripHtml(item.content || "").replace(/\s+/g, " ").trim().slice(0, 60),
+    });
+    if (!richOpen) requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  /** 长按操作：复制正文纯文本 */
+  const copyMessage = async (item: WorldMessageItem) => {
+    setActionTarget(null);
+    const text = stripHtml(item.content || "").trim();
+    if (!text) {
+      showToast("这条消息没有可复制的文字", "info");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("已复制");
+    } catch {
+      showToast("复制失败，请长按选择文字", "error");
+    }
+  };
   const richLength = stripHtml(richDoc).trim().length;
   const counterVisible = (richOpen ? richLength : draft.length) > COUNTER_FROM;
 
@@ -545,11 +678,23 @@ export function WorldScreen() {
                   value={richDoc}
                   onChange={setRichDoc}
                   placeholder="支持加粗、链接与图片…"
-                  scene="comment_image"
+                  scene="world_message"
                   minHeight={64}
                   toolbar="compact"
                 />
               </Suspense>
+            </div>
+          ) : null}
+          {replyTo ? (
+            <div className="wd-quotebar">
+              <Icon name="reply" size={13} />
+              <span className="wd-quotebar-body">
+                <span className="wd-quotebar-name">回复 {replyTo.name}</span>
+                {replyTo.preview ? <span className="wd-quotebar-preview">{replyTo.preview}</span> : null}
+              </span>
+              <button type="button" className="wd-quotebar-x" aria-label="取消引用" onClick={() => setReplyTo(null)}>
+                <Icon name="close" size={15} />
+              </button>
             </div>
           ) : null}
           <div className="wd-inputrow">
@@ -649,8 +794,10 @@ export function WorldScreen() {
                   item={row.item}
                   mine={row.mine}
                   head={row.head}
-                  parentName={row.parentName}
+                  parent={row.parent}
                   onOpenUser={openUser}
+                  onLongPress={setActionTarget}
+                  onReply={startReply}
                 />
               ))}
 
@@ -663,6 +810,11 @@ export function WorldScreen() {
                     <div className="wd-meta">
                       <span className="wd-time">发送中…</span>
                     </div>
+                    {item.parentName ? (
+                      <div className="wd-reply">
+                        回复 <b>{item.parentName}</b>
+                      </div>
+                    ) : null}
                     <div className="wd-bubble wd-bubble--mine">
                       <div className="wd-txt">
                         <RichContent html={item.content} format="html" />
@@ -682,6 +834,27 @@ export function WorldScreen() {
           </button>
         ) : null}
       </div>
+
+      <Sheet open={Boolean(actionTarget)} title="消息操作" onClose={() => setActionTarget(null)}>
+        <div className="m-list">
+          <Cell
+            icon="reply"
+            label="回复"
+            chevron={false}
+            onClick={() => {
+              if (actionTarget) startReply(actionTarget);
+            }}
+          />
+          <Cell
+            icon="copy"
+            label="复制文字"
+            chevron={false}
+            onClick={() => {
+              if (actionTarget) void copyMessage(actionTarget);
+            }}
+          />
+        </div>
+      </Sheet>
     </Screen>
   );
 }

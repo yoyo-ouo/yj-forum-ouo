@@ -123,6 +123,24 @@ export function SettingsScreen() {
           </div>
         </div>
 
+        {/* 账号 */}
+        {user ? (
+          <>
+            <div className="m-section-title">账号</div>
+            <div className="m-list">
+              <Cell icon="edit" label="编辑资料" sub="头像、昵称、性别、年龄与签名" onClick={() => push("profile-edit")} />
+              <Cell
+                icon="mail"
+                label="邮箱"
+                sub={user.email_verified ? "已验证 · 点击更换邮箱" : "未验证 · 点击验证邮箱"}
+                value={<span className="st-info-value">{user.email || "未绑定"}</span>}
+                onClick={() => push("email")}
+              />
+              <Cell icon="bookmark" label="帖子草稿" sub="未发布的帖子会自动保存到这里" onClick={() => push("drafts")} />
+            </div>
+          </>
+        ) : null}
+
         {/* 隐私与安全 */}
         <div className="m-section-title">隐私与安全</div>
         <div className="m-list">
@@ -136,7 +154,7 @@ export function SettingsScreen() {
           <Cell
             icon="user"
             label="账号安全"
-            sub={user ? "修改密码与注销说明" : "登录后查看"}
+            sub={user ? "修改密码、邮箱与注销" : "登录后查看"}
             onClick={() => push("account")}
           />
         </div>
@@ -297,7 +315,13 @@ export function AccountScreen() {
       <div className="m-section-title">账号信息</div>
       <div className="m-list">
         <InfoCell icon="user" label="用户名" value={user.name} />
-        <InfoCell icon="mail" label="邮箱" value={user.email || <span className="st-muted">未绑定</span>} />
+        <Cell
+          icon="mail"
+          label="邮箱"
+          sub={verified ? "已验证 · 点击更换邮箱" : "未验证 · 点击验证邮箱"}
+          value={<span className="st-info-value">{user.email || "未绑定"}</span>}
+          onClick={() => push("email")}
+        />
         <InfoCell
           icon="shield"
           label="邮箱验证状态"
@@ -312,6 +336,8 @@ export function AccountScreen() {
         {user.created_at ? (
           <InfoCell icon="clock" label="注册时间" value={formatDate(user.created_at)} />
         ) : null}
+        <Cell icon="edit" label="编辑资料" sub="头像、昵称、性别、年龄与签名" onClick={() => push("profile-edit")} />
+        <Cell icon="bookmark" label="帖子草稿" sub="继续编辑未发布的帖子" onClick={() => push("drafts")} />
       </div>
 
       {/* 修改密码 */}
@@ -374,11 +400,21 @@ export function AccountScreen() {
         </button>
       </div>
 
-      {/* 注销说明 */}
+      {/* 注销账号（实际入口，不再是“APP 内不提供”） */}
+      <div className="m-section-title">注销账号</div>
+      <div className="m-list st-danger-list">
+        <Cell
+          icon="alert"
+          label="注销账号"
+          danger
+          sub="彻底删除账号与内容，或匿名化保留内容"
+          onClick={() => push("account-delete")}
+        />
+      </div>
       <div className="st-footnote">
-        <div className="st-footnote-title">关于注销账号</div>
+        <div className="st-footnote-title">关于注销</div>
         <p>
-          注销会同时删除帖子、评论、角色设定与关注关系，且不可恢复。为避免误操作，APP 内不提供一键注销：请在浏览器打开论坛网站，登录后进入「账号设置 → 注销账号」按提示确认。
+          注销不可恢复：你可以选择彻底删除账号与全部内容，或匿名化保留帖子与评论。进入注销页后需要输入密码与当前昵称确认。
         </p>
         {!verified ? <p>注销前建议先完成邮箱验证，以便找回账号。</p> : null}
         <p>密码只保存加盐哈希，我们不会也无法看到你的原密码。</p>
