@@ -1,6 +1,8 @@
 # ouo API 端点索引（自动生成）
 
 > 由 `server/internal/handler/router.go` 提取；唯一 API 前缀为 `/ov2/api`。旧 `/api/v1` 别名与 `/api/*` 兼容层已于 2026-11-07 移除。
+>
+> 用户列表分页：`GET /ov2/api/users/:id/posts`、`GET /ov2/api/users/:id/favorites`、`GET /ov2/api/users/:id/comments` 均返回 `has_more`（帖子/收藏为多取一条探测，评论由 `total` 计算）；字段与可见性说明见 `docs/api.md`「用户 Users」。
 
 | 方法 | 路径 | 分组 |
 |---|---|---|

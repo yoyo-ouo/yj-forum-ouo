@@ -9,6 +9,7 @@ import UserProfileModal from "@/components/UserProfileModal";
 import EmailChangeModal from "@/components/EmailChangeModal";
 import CategoryBadge from "@/components/ui/CategoryBadge";
 import SpaceBadge from "@/components/ui/SpaceBadge";
+import { LoadMoreButton } from "@/components/ui/ListState";
 import Markdown from "@/components/Markdown";
 import RichContent from "@/components/ui/RichContent";
 import HoverTip from "@/components/ui/HoverTip";
@@ -56,6 +57,16 @@ export default function UserPage() {
   const [stats, setStats] = useState<any>(null);
   const [followStats, setFollowStats] = useState<any>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  // 帖子列表分页（has_more 由后端多取一条探测）
+  const [postsLoading, setPostsLoading] = useState(true);
+  const [postsError, setPostsError] = useState("");
+  const [postsHasMore, setPostsHasMore] = useState(false);
+  const [postsLoadingMore, setPostsLoadingMore] = useState(false);
+  const postsPageRef = useRef(1);
+  // 展开全文：已展开集合 + 正文缓存（同一帖子不重复请求详情）
+  const [expandedPostIds, setExpandedPostIds] = useState<Record<string, boolean>>({});
+  const [postContentCache, setPostContentCache] = useState<Record<string, { content: string; content_format?: string }>>({});
+  const [expandingPostId, setExpandingPostId] = useState("");
   const [isFollowing, setIsFollowing] = useState(false);
   const [isSelf, setIsSelf] = useState(false);
   const [guild, setGuild] = useState<GuildMembership | null>(null);
@@ -73,7 +84,13 @@ export default function UserPage() {
   const [activeTab, setActiveTab] = useState<"posts" | "comments" | "likes">("posts");
   const [postView, setPostView] = useState<"posts" | "favorites" | "drafts">("posts");
   const [comments, setComments] = useState<ReplyItem[] | null>(null);
+  const [commentsHasMore, setCommentsHasMore] = useState(false);
+  const [commentsLoadingMore, setCommentsLoadingMore] = useState(false);
+  const commentsPageRef = useRef(1);
   const [favorites, setFavorites] = useState<Post[] | null>(null);
+  const [favoritesHasMore, setFavoritesHasMore] = useState(false);
+  const [favoritesLoadingMore, setFavoritesLoadingMore] = useState(false);
+  const favoritesPageRef = useRef(1);
   // 我的草稿（仅本人；服务端按 user_id 隔离）
   const [drafts, setDrafts] = useState<PostDraftItem[] | null>(null);
   const [confirmDraftId, setConfirmDraftId] = useState("");
@@ -88,7 +105,44 @@ export default function UserPage() {
   const [signedToday, setSignedToday] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
 
+  /** 帖子列表：pageNo=1 为首屏；append 用于「加载更多」。失败只影响帖子区域，不误报「用户不存在」。 */
+  const loadPosts = useCallback(
+    async (pageNo: number, append: boolean) => {
+      if (append) {
+        setPostsLoadingMore(true);
+      } else {
+        setPostsLoading(true);
+        setPostsError("");
+        // 重置分页游标，避免首屏重拉期间点「加载更多」拿到旧页码
+        setPostsHasMore(false);
+        postsPageRef.current = 1;
+      }
+      try {
+        const r = await userApi.posts(id, pageNo, 20);
+        setPosts((prev) => (append ? [...prev, ...(r.posts || [])] : r.posts || []));
+        setPostsHasMore(!!r.has_more);
+        postsPageRef.current = pageNo;
+      } catch (e) {
+        if (append) {
+          toast(e instanceof ApiException ? e.message : "加载更多失败", "error");
+        } else {
+          setPosts([]);
+          setPostsHasMore(false);
+          setPostsError(e instanceof ApiException ? e.message : "帖子加载失败");
+        }
+      } finally {
+        if (append) setPostsLoadingMore(false);
+        else setPostsLoading(false);
+      }
+    },
+    [id, toast]
+  );
+
   const load = useCallback(async () => {
+    // 切换用户主页/重新加载：清空「展开全文」缓存，避免不同用户的内容串用
+    setExpandedPostIds({});
+    setPostContentCache({});
+    setExpandingPostId("");
     try {
       const r = await userApi.profile(id);
       setProfile(r.user);
@@ -101,6 +155,8 @@ export default function UserPage() {
         setGuild(null);
         setIsLeader(false);
         setPosts([]);
+        setPostsHasMore(false);
+        setPostsLoading(false);
         return;
       }
       setSignedToday(!!r.user.last_sign_in && r.user.last_sign_in === shanghaiDateStr());
@@ -110,8 +166,8 @@ export default function UserPage() {
       setIsSelf(!!r.is_self || userId === id);
       setGuild(r.guild || null);
       setIsLeader(!!r.is_leader);
-      const p = await userApi.posts(id, 1, 20);
-      setPosts(p.posts || []);
+      // 帖子列表单独加载：失败只提示列表自身，不影响档案展示
+      void loadPosts(1, false);
       // 本人主页预取草稿，用于子标签计数；其他人不请求（服务端也会拒绝）
       if (r.is_self || userId === id) {
         postDraftApi
@@ -124,37 +180,89 @@ export default function UserPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, userId, toast]);
+  }, [id, userId, toast, loadPosts]);
 
   useEffect(() => { load(); }, [load]);
 
-  const loadComments = useCallback(async () => {
-    try {
-      const r = await userApi.comments(id, 1, 50);
-      setComments(r.comments || []);
-    } catch {
-      setComments([]);
-    }
-  }, [id]);
+  /** 展开/收起全文：首次展开时按需拉取正文（include_comments=0&track=0），之后用缓存 */
+  const togglePostExpand = useCallback(
+    async (p: Post) => {
+      if (expandedPostIds[p.id]) {
+        setExpandedPostIds((prev) => ({ ...prev, [p.id]: false }));
+        return;
+      }
+      if (postContentCache[p.id]) {
+        setExpandedPostIds((prev) => ({ ...prev, [p.id]: true }));
+        return;
+      }
+      if (expandingPostId) return;
+      setExpandingPostId(p.id);
+      try {
+        // 只取正文：include_comments=0 跳过评论查询，track=0 不计数
+        const r = await postApi.detail(p.id, false, false);
+        setPostContentCache((prev) => ({
+          ...prev,
+          [p.id]: { content: r.post.content || "", content_format: r.post.content_format },
+        }));
+        setExpandedPostIds((prev) => ({ ...prev, [p.id]: true }));
+      } catch (e) {
+        toast(e instanceof ApiException ? e.message : "正文加载失败", "error");
+      } finally {
+        setExpandingPostId("");
+      }
+    },
+    [expandedPostIds, postContentCache, expandingPostId, toast]
+  );
+
+  const loadComments = useCallback(
+    async (pageNo: number, append: boolean) => {
+      if (append) setCommentsLoadingMore(true);
+      try {
+        const r = await userApi.comments(id, pageNo, 50);
+        setComments((prev) => (append ? [...(prev || []), ...(r.comments || [])] : r.comments || []));
+        setCommentsHasMore(!!r.has_more);
+        commentsPageRef.current = pageNo;
+      } catch {
+        if (!append) {
+          setComments([]);
+          setCommentsHasMore(false);
+        }
+      } finally {
+        if (append) setCommentsLoadingMore(false);
+      }
+    },
+    [id]
+  );
 
   useEffect(() => {
     if (!isSelf || activeTab !== "comments" || comments !== null) return;
     // 延后一个 tick，避免在 effect 内同步触发加载态更新
-    const t = window.setTimeout(() => void loadComments(), 0);
+    const t = window.setTimeout(() => void loadComments(1, false), 0);
     return () => window.clearTimeout(t);
   }, [isSelf, activeTab, comments, loadComments]);
 
-  const loadFavorites = useCallback(async () => {
-    try {
-      const r = await userApi.favorites(id, 1, 50);
-      setFavorites(r.posts || []);
-    } catch {
-      setFavorites([]);
-    }
-  }, [id]);
+  const loadFavorites = useCallback(
+    async (pageNo: number, append: boolean) => {
+      if (append) setFavoritesLoadingMore(true);
+      try {
+        const r = await userApi.favorites(id, pageNo, 50);
+        setFavorites((prev) => (append ? [...(prev || []), ...(r.posts || [])] : r.posts || []));
+        setFavoritesHasMore(!!r.has_more);
+        favoritesPageRef.current = pageNo;
+      } catch {
+        if (!append) {
+          setFavorites([]);
+          setFavoritesHasMore(false);
+        }
+      } finally {
+        if (append) setFavoritesLoadingMore(false);
+      }
+    },
+    [id]
+  );
 
   useEffect(() => {
-    if (isSelf && postView === "favorites" && favorites === null) loadFavorites();
+    if (isSelf && postView === "favorites" && favorites === null) void loadFavorites(1, false);
   }, [isSelf, postView, favorites, loadFavorites]);
 
   const loadDrafts = useCallback(async () => {
@@ -559,35 +667,88 @@ export default function UserPage() {
               )}
               {effectivePostView === "posts" ? (
                 <div id="user-posts-list" className="user-posts-list">
-              {posts.length === 0 ? (
-                <p className="loading-text">还没有发布帖子</p>
-              ) : (
-                posts.map((p) => (
-                  <div className="post-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/post/${p.id}`)}>
-                    <h3 className="post-item-title">{p.title}</h3>
-                    <p className="post-item-summary">{(p.summary || "").replace(/<[^>]+>/g, "").substring(0, 200)}</p>
-                    <div className="post-item-footer">
-                      <div className="post-item-tags">
-                        <CategoryBadge category={p.category} className="post-item-category" />
-                        <SpaceBadge name={p.guild_name} color={p.guild_theme_color} />
-                      </div>
-                      <div className="post-item-stats">
-                        <span><i className="fa fa-eye"></i> {p.views || 0}</span>
-                        <span><i className="fa fa-thumbs-up"></i> {p.likes || 0}</span>
-                        <span><i className="fa fa-comment"></i> {p.comment_count ?? 0}</span>
-                        <span><i className="fa fa-clock-o"></i> {fmtDate(p.created_at)}</span>
-                      </div>
-                      {isSelf && isScheduledPost(p.published_at, p.created_at) && (
-                        <span className="post-scheduled-tag-wrap">
-                          <span className="post-scheduled-tag" title="尚未到达发布时间，仅自己可见">
-                            <i className="fa fa-clock-o"></i> 定时发布 {fmtDateTime(p.published_at)}
-                          </span>
-                        </span>
+                  {postsLoading ? (
+                    <p className="loading-text">加载中...</p>
+                  ) : postsError ? (
+                    <p className="loading-text">
+                      {postsError}{" "}
+                      <button type="button" className="user-likes-retry" onClick={() => void loadPosts(1, false)}>
+                        重试
+                      </button>
+                    </p>
+                  ) : posts.length === 0 ? (
+                    <p className="loading-text">还没有发布帖子</p>
+                  ) : (
+                    <>
+                      {posts.map((p) => {
+                        const expanded = !!expandedPostIds[p.id];
+                        const cached = postContentCache[p.id];
+                        // 列表只下发 200 字摘要；折叠时保留摘要与省略号
+                        const summary = (p.summary || "").replace(/<[^>]+>/g, "").substring(0, 200);
+                        return (
+                          <div className="post-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/post/${p.id}`)}>
+                            <h3 className="post-item-title">{p.title}</h3>
+                            {expanded && cached ? (
+                              // 展开：渲染完整正文（图片 / 引用卡片由 RichContent 处理），点正文不跳转
+                              <div
+                                className="post-item-summary post-item-summary-expanded"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {cached.content_format === "html" ? (
+                                  <RichContent content={cached.content} />
+                                ) : (
+                                  <Markdown content={cached.content} />
+                                )}
+                              </div>
+                            ) : (
+                              <p className="post-item-summary">
+                                {summary}
+                                {summary.length >= 200 ? "…" : ""}
+                              </p>
+                            )}
+                            <button
+                              type="button"
+                              className="post-item-expand-btn"
+                              disabled={expandingPostId === p.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void togglePostExpand(p);
+                              }}
+                            >
+                              <i className={`fa ${expanded ? "fa-angle-up" : "fa-angle-down"}`}></i>
+                              {expandingPostId === p.id ? "正文加载中..." : expanded ? "收起" : "展开全文"}
+                            </button>
+                            <div className="post-item-footer">
+                              <div className="post-item-tags">
+                                <CategoryBadge category={p.category} className="post-item-category" />
+                                <SpaceBadge name={p.guild_name} color={p.guild_theme_color} />
+                              </div>
+                              <div className="post-item-stats">
+                                <span><i className="fa fa-eye"></i> {p.views || 0}</span>
+                                <span><i className="fa fa-thumbs-up"></i> {p.likes || 0}</span>
+                                <span><i className="fa fa-comment"></i> {p.comment_count ?? 0}</span>
+                                <span><i className="fa fa-clock-o"></i> {fmtDate(p.created_at)}</span>
+                              </div>
+                              {isSelf && isScheduledPost(p.published_at, p.created_at) && (
+                                <span className="post-scheduled-tag-wrap">
+                                  <span className="post-scheduled-tag" title="尚未到达发布时间，仅自己可见">
+                                    <i className="fa fa-clock-o"></i> 定时发布 {fmtDateTime(p.published_at)}
+                                  </span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {postsHasMore && (
+                        <LoadMoreButton
+                          loading={postsLoadingMore}
+                          className="user-likes-more"
+                          onClick={() => void loadPosts(postsPageRef.current + 1, true)}
+                        />
                       )}
-                    </div>
-                  </div>
-                ))
-              )}
+                    </>
+                  )}
               </div>
             ) : effectivePostView === "drafts" ? (
               <div className="user-posts-list" id="user-drafts-list">
@@ -643,7 +804,8 @@ export default function UserPage() {
                 ) : favorites.length === 0 ? (
                   <p className="loading-text">还没有收藏帖子</p>
                 ) : (
-                  favorites.map((p) => (
+                  <>
+                  {favorites.map((p) => (
                     <div className="post-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/post/${p.id}`)}>
                       <div className="post-item-header">
                         <div className="post-item-avatar">
@@ -668,7 +830,15 @@ export default function UserPage() {
                         </div>
                       </div>
                     </div>
-                  ))
+                  ))}
+                  {favoritesHasMore && (
+                    <LoadMoreButton
+                      loading={favoritesLoadingMore}
+                      className="user-likes-more"
+                      onClick={() => void loadFavorites(favoritesPageRef.current + 1, true)}
+                    />
+                  )}
+                  </>
                 )}
               </div>
             )}
@@ -680,7 +850,8 @@ export default function UserPage() {
             ) : comments.length === 0 ? (
               <p className="loading-text">还没有发表评论</p>
             ) : (
-              comments.map((c) => {
+              <>
+              {comments.map((c) => {
                 const href = `/post/${c.post_id}#comment-${c.id}`;
                 return (
                   <div
@@ -717,7 +888,15 @@ export default function UserPage() {
                     </div>
                   </div>
                 );
-              })
+              })}
+              {commentsHasMore && (
+                <LoadMoreButton
+                  loading={commentsLoadingMore}
+                  className="user-likes-more"
+                  onClick={() => void loadComments(commentsPageRef.current + 1, true)}
+                />
+              )}
+              </>
             )}
           </div>
         ) : (

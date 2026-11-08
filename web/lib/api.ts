@@ -528,9 +528,9 @@ export const userApi = {
       is_leader?: boolean;
     }>(`/users/${id}`),
   posts: (id: string, page = 1, pageSize = 20) =>
-    request<{ posts: Post[]; page: number; page_size: number }>(`/users/${id}/posts?page=${page}&page_size=${pageSize}`),
+    request<{ posts: Post[]; page: number; page_size: number; has_more?: boolean }>(`/users/${id}/posts?page=${page}&page_size=${pageSize}`),
   favorites: (id: string, page = 1, pageSize = 20) =>
-    request<{ posts: Post[] }>(`/users/${id}/favorites?page=${page}&page_size=${pageSize}`),
+    request<{ posts: Post[]; page?: number; page_size?: number; has_more?: boolean }>(`/users/${id}/favorites?page=${page}&page_size=${pageSize}`),
   follow: (id: string) => request<{ following: boolean }>(`/users/${id}/follow`, { method: "POST" }),
   following: (id: string, page = 1, pageSize = 20) =>
     request<{ users: UserBrief[]; page?: number; page_size?: number; has_more?: boolean }>(`/users/${id}/following?page=${page}&page_size=${pageSize}`),
@@ -540,7 +540,7 @@ export const userApi = {
   mutual: (id: string, page = 1, pageSize = 20) =>
     request<{ users: UserBrief[]; page: number; page_size: number; has_more?: boolean }>(`/users/${id}/mutual?page=${page}&page_size=${pageSize}`),
   comments: (id: string, page = 1, pageSize = 20) =>
-    request<{ comments: ReplyItem[]; total: number }>(`/users/${id}/comments?page=${page}&page_size=${pageSize}`),
+    request<{ comments: ReplyItem[]; total: number; page?: number; page_size?: number; has_more?: boolean }>(`/users/${id}/comments?page=${page}&page_size=${pageSize}`),
   updateMe: (data: Record<string, unknown>) =>
     request<{ success: boolean }>("/users/me", { method: "PATCH", body: JSON.stringify(data) }),
   replies: (page = 1, pageSize = 50) =>
@@ -616,10 +616,15 @@ export const postApi = {
   list: (page = 1, pageSize = 20, category = "") =>
     request<{ posts: Post[]; page: number; page_size: number }>(`/posts?page=${page}&page_size=${pageSize}${category ? `&category=${encodeURIComponent(category)}` : ""}`),
   random: () => request<{ posts: Post[] }>("/posts/random"),
-  detail: (id: string, includeComments = true) =>
-    request<{ post: Post; comments: Comment[]; liked: boolean; favorited: boolean }>(
-      `/posts/${id}${includeComments ? "" : "?include_comments=0"}`
-    ),
+  // includeComments=false：只取正文（跳过 50 条评论）；track=false：不计数（track=0）
+  detail: (id: string, includeComments = true, track = true) => {
+    const q: string[] = [];
+    if (!includeComments) q.push("include_comments=0");
+    if (!track) q.push("track=0");
+    return request<{ post: Post; comments: Comment[]; liked: boolean; favorited: boolean }>(
+      `/posts/${id}${q.length ? `?${q.join("&")}` : ""}`
+    );
+  },
   // 引用选择器默认项（登录；关注/收藏各至多 20 条）
   pickerDefaults: () => request<{ data: PickerDefaults }>("/posts/picker-defaults"),
   // guildUuid 传入时帖子归属该会馆（需为该馆成员），否则发到公共空间；publishedAt 为 RFC3339（可选，未来时间即定时发布）

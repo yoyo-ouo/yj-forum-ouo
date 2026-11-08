@@ -277,7 +277,9 @@ func (d *DB) GetRepliesToMyComments(ctx context.Context, userID string, page, pa
 }
 
 // GetUserComments 用户发表的评论。
-func (d *DB) GetUserComments(ctx context.Context, userID string, page, pageSize int) ([]models.ReplyItem, int, error) {
+// 仅统计所属帖子未删除（p.status = 1）的评论；非本人视角还要求帖子已发布（排除定时帖），
+// 避免点进评论后帖子 404。
+func (d *DB) GetUserComments(ctx context.Context, userID, viewer string, page, pageSize int) ([]models.ReplyItem, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -285,8 +287,13 @@ func (d *DB) GetUserComments(ctx context.Context, userID string, page, pageSize 
 		pageSize = 20
 	}
 	offset := (page - 1) * pageSize
+	postWhere := "p.status = 1"
+	if viewer != userID {
+		postWhere += " AND p.published_at <= NOW()"
+	}
 	var total int
-	_ = d.QueryRow(ctx, `SELECT COUNT(*) FROM comments WHERE user_id = $1 AND status = 1`, userID).Scan(&total)
+	_ = d.QueryRow(ctx, `SELECT COUNT(*) FROM comments c JOIN posts p ON p.id = c.post_id
+		WHERE c.user_id = $1 AND c.status = 1 AND `+postWhere, userID).Scan(&total)
 	rows, err := d.Query(ctx, `SELECT c.id, c.post_id, c.user_id, c.content, c.content_format, c.parent_id, c.likes, c.status,
 		c.created_at, u.name, u.avatar,
 		COALESCE(g.name, ''), COALESCE(g.theme_color, ''), COALESCE(g.leader_user_id = c.user_id, false),
@@ -295,7 +302,7 @@ func (d *DB) GetUserComments(ctx context.Context, userID string, page, pageSize 
 		JOIN posts p ON c.post_id = p.id
 		LEFT JOIN guild_members gm ON gm.user_id = c.user_id
 		LEFT JOIN guilds g ON g.id = gm.guild_id
-		WHERE c.user_id = $1 AND c.status = 1
+		WHERE c.user_id = $1 AND c.status = 1 AND `+postWhere+`
 		ORDER BY c.created_at DESC LIMIT $2 OFFSET $3`, userID, pageSize, offset)
 	if err != nil {
 		return nil, 0, err

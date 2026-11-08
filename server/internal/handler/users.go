@@ -67,10 +67,11 @@ func (h *AuthHandler) UserProfile(c *gin.Context) {
 			"is_following": false, "is_self": false, "guild": nil, "is_leader": false})
 		return
 	}
-	stats, _ := h.DB.GetUserStats(c.Request.Context(), id)
-	followStats, _ := h.DB.GetFollowStats(c.Request.Context(), id)
 	me := h.CurrentUserFromCookie(c)
 	isSelf := me != "" && me == id
+	// 统计与列表口径一致：本人含定时帖，他人仅已发布
+	stats, _ := h.DB.GetUserStats(c.Request.Context(), id, me)
+	followStats, _ := h.DB.GetFollowStats(c.Request.Context(), id)
 	isFollowing := false
 	if me != "" && !isSelf {
 		isFollowing = h.DB.IsFollowing(c.Request.Context(), me, id)
@@ -98,16 +99,16 @@ func (h *AuthHandler) UserPosts(c *gin.Context) {
 	id := c.Param("id")
 	page, pageSize := parsePage(c)
 	if h.isDeletedUser(c.Request.Context(), id) {
-		c.JSON(http.StatusOK, gin.H{"success": true, "posts": []models.PostListItem{}, "page": page, "page_size": pageSize})
+		c.JSON(http.StatusOK, gin.H{"success": true, "posts": []models.PostListItem{}, "page": page, "page_size": pageSize, "has_more": false})
 		return
 	}
 	viewer := h.CurrentUserFromCookie(c)
-	posts, err := h.DB.GetUserPosts(c.Request.Context(), id, viewer, page, pageSize)
+	posts, hasMore, err := h.DB.GetUserPosts(c.Request.Context(), id, viewer, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "posts": posts, "page": page, "page_size": pageSize})
+	c.JSON(http.StatusOK, gin.H{"success": true, "posts": posts, "page": page, "page_size": pageSize, "has_more": hasMore})
 }
 
 // ---- PATCH /ov2/api/users/me ----
@@ -371,15 +372,16 @@ func (h *AuthHandler) UserComments(c *gin.Context) {
 	id := c.Param("id")
 	page, pageSize := parsePage(c)
 	if h.isDeletedUser(c.Request.Context(), id) {
-		c.JSON(http.StatusOK, gin.H{"success": true, "comments": []models.ReplyItem{}, "total": 0, "page": page, "page_size": pageSize})
+		c.JSON(http.StatusOK, gin.H{"success": true, "comments": []models.ReplyItem{}, "total": 0, "page": page, "page_size": pageSize, "has_more": false})
 		return
 	}
-	comments, total, err := h.DB.GetUserComments(c.Request.Context(), id, page, pageSize)
+	viewer := h.CurrentUserFromCookie(c)
+	comments, total, err := h.DB.GetUserComments(c.Request.Context(), id, viewer, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "comments": comments, "total": total, "page": page, "page_size": pageSize})
+	c.JSON(http.StatusOK, gin.H{"success": true, "comments": comments, "total": total, "page": page, "page_size": pageSize, "has_more": page*pageSize < total})
 }
 
 // ---- GET /ov2/api/users/:id/favorites ----
@@ -389,15 +391,15 @@ func (h *AuthHandler) UserFavorites(c *gin.Context) {
 	id := c.Param("id")
 	page, pageSize := parsePage(c)
 	if h.isDeletedUser(c.Request.Context(), id) {
-		c.JSON(http.StatusOK, gin.H{"success": true, "posts": []models.PostListItem{}, "page": page, "page_size": pageSize})
+		c.JSON(http.StatusOK, gin.H{"success": true, "posts": []models.PostListItem{}, "page": page, "page_size": pageSize, "has_more": false})
 		return
 	}
-	posts, err := h.DB.GetUserFavorites(c.Request.Context(), id, page, pageSize)
+	posts, hasMore, err := h.DB.GetUserFavorites(c.Request.Context(), id, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "posts": posts, "page": page, "page_size": pageSize})
+	c.JSON(http.StatusOK, gin.H{"success": true, "posts": posts, "page": page, "page_size": pageSize, "has_more": hasMore})
 }
 
 // parsePage 解析 page/page_size（默认每页 20，上限 100）。

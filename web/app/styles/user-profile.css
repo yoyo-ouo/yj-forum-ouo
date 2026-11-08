@@ -263,6 +263,37 @@
     overflow: hidden;
 }
 
+/* 展开全文：取消 3 行裁剪，完整显示正文、图片与引用卡片 */
+.post-item-summary-expanded {
+    display: block;
+    -webkit-line-clamp: unset;
+    -webkit-box-orient: horizontal;
+    overflow: visible;
+}
+
+/* 个人中心帖子卡片：展开全文 / 收起按钮 */
+.post-item-expand-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: -4px 0 12px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--color-primary);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.post-item-expand-btn:hover:not(:disabled) {
+    text-decoration: underline;
+}
+
+.post-item-expand-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
 .post-item-footer {
     display: flex;
     justify-content: space-between;
