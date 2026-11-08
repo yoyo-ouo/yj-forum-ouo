@@ -6,25 +6,33 @@ import { useNav } from "../lib/nav";
 import { Confirm, TopBar } from "../components/ui";
 import { formatDate } from "../lib/format";
 import type { Theme } from "../lib/types";
+import "../styles/character-settings-page.css";
 
-const THEME_OPTIONS: Array<{ value: Theme; label: string }> = [
-  { value: "day", label: "日间" },
-  { value: "night", label: "夜间" },
-  { value: "auto", label: "跟随系统" },
+const THEME_OPTIONS: Array<{ value: Theme; label: string; icon: string; desc: string }> = [
+  { value: "day", label: "日间", icon: "fa-sun-o", desc: "明亮的浅色界面，白天看得清。" },
+  { value: "night", label: "夜间", icon: "fa-moon-o", desc: "深色界面，弱光环境下更舒服。" },
+  { value: "auto", label: "跟随系统", icon: "fa-adjust", desc: "随手机的深色模式自动切换。" },
 ];
 
-const YEAR_OPTIONS: Array<{ value: "wuxian" | "ce"; label: string }> = [
-  { value: "wuxian", label: "无限年" },
-  { value: "ce", label: "公元年" },
+const YEAR_OPTIONS: Array<{ value: "wuxian" | "ce"; label: string; icon: string; desc: string }> = [
+  { value: "wuxian", label: "无限年", icon: "fa-magic", desc: "论坛通用纪年，无限元年 = 公元 1604 年。" },
+  { value: "ce", label: "公元年", icon: "fa-globe", desc: "直接显示现实中的公历年份。" },
 ];
 
+/** 键值行：Web 账号页没有对应类，排版见 character-settings-page.css */
 function InfoRow({ label, value, onClick }: { label: string; value?: React.ReactNode; onClick?: () => void }) {
-  return (
-    <div className="me-cell" onClick={onClick}>
+  const body = (
+    <>
       <span>{label}</span>
-      {value ? <span className="value" style={{ maxWidth: "68%", textAlign: "right", wordBreak: "break-all" }}>{value}</span> : null}
-      {onClick ? <span className="chev">›</span> : null}
-    </div>
+      {value === undefined || value === null || value === "" ? null : (
+        <span className="settings-info-value">{value}</span>
+      )}
+    </>
+  );
+  return onClick ? (
+    <button type="button" className="settings-info-row settings-info-action" onClick={onClick}>{body}</button>
+  ) : (
+    <div className="settings-info-row">{body}</div>
   );
 }
 
@@ -63,70 +71,117 @@ export function SettingsScreen() {
     <div className="screen">
       <TopBar title="设置" back />
 
-      <div className="me-group">
-        <div className="me-group-title">外观主题</div>
-        <div className="tabs" style={{ padding: "4px 10px 10px" }}>
-          {THEME_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              className={`tab-item ${theme === option.value ? "on" : ""}`}
-              onClick={() => setTheme(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
+      <div className="account-page">
+        <div className="settings-stack">
+          <div className="account-card">
+            <div className="account-page-header">
+              <h1><i className="fa fa-sliders" aria-hidden="true"></i> 设置</h1>
+              <p>外观、年制与隐私都由你决定，改动会立即生效。</p>
+            </div>
+
+            <section className="settings-block">
+              <h3 className="settings-block-title">外观主题</h3>
+              <div className="account-mode-list">
+                {THEME_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`account-mode-card${theme === option.value ? " selected" : ""}`}
+                    aria-pressed={theme === option.value}
+                    onClick={() => setTheme(option.value)}
+                  >
+                    <div className="account-mode-head">
+                      <span className="account-mode-radio" aria-hidden="true"></span>
+                      <h3><i className={`fa ${option.icon}`} aria-hidden="true"></i> {option.label}</h3>
+                    </div>
+                    <p className="account-mode-desc">{option.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="settings-block">
+              <h3 className="settings-block-title">年制偏好</h3>
+              <div className="account-mode-list">
+                {YEAR_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`account-mode-card${yearMode === option.value ? " selected" : ""}`}
+                    aria-pressed={yearMode === option.value}
+                    onClick={() => setYearMode(option.value)}
+                  >
+                    <div className="account-mode-head">
+                      <span className="account-mode-radio" aria-hidden="true"></span>
+                      <h3><i className={`fa ${option.icon}`} aria-hidden="true"></i> {option.label}</h3>
+                    </div>
+                    <p className="account-mode-desc">{option.desc}</p>
+                  </button>
+                ))}
+              </div>
+              <p className="settings-block-hint">
+                无限元年 = 公元 1604 年。
+                <button type="button" className="account-settings-btn" onClick={() => push("year")}>
+                  <i className="fa fa-exchange" aria-hidden="true"></i> 打开年制换算
+                </button>
+              </p>
+            </section>
+          </div>
+
+          <div className="privacy-section">
+            <h3>
+              <span className="section-icon"><i className="fa fa-shield" aria-hidden="true"></i></span> 隐私说明
+            </h3>
+            <p className="privacy-intro">
+              只收集必要的信息：账号信息（用户名、邮箱）、你主动发布的内容（帖子、评论、角色设定、反馈），以及保障安全与排障所需的请求日志。
+            </p>
+            <ul className="privacy-list">
+              <li>不读取通讯录，只有你主动选图时才会访问相册。</li>
+              <li>密码只保存加盐哈希，我们不会也无法看到你的原密码。</li>
+              <li>请求日志只用于安全与排障，并按期限滚动清理。</li>
+            </ul>
+            <span className="privacy-updated">
+              <i className="fa fa-clock-o" aria-hidden="true"></i> 隐私政策版本 {PRIVACY_VERSION}
+            </span>
+          </div>
+
+          <div className="privacy-section">
+            <h3>
+              <span className="section-icon"><i className="fa fa-mobile" aria-hidden="true"></i></span> 人机验证与零 PoW
+            </h3>
+            <p className="privacy-intro">
+              APP 使用专属验证通道（/captcha/app/*），一次签名换一张短期凭据，只在登录、注册、评论与反馈时校验；手机不再执行工作量证明，不会因求解而发烫或卡死。该密钥可随时在服务端撤销。
+            </p>
+          </div>
+
+          <div className="account-card">
+            <h3 className="settings-card-title"><i className="fa fa-info-circle" aria-hidden="true"></i> 关于</h3>
+            <div className="settings-info-list">
+              <InfoRow label="版本号" value={`${appInfo?.versionName || "2.0.0"}（${appInfo?.versionCode ?? 20000}）`} />
+              <InfoRow label="包名" value={appInfo?.packageName || "—"} />
+              <InfoRow label="API 地址" value={appInfo?.apiBaseUrl || "—"} />
+              <InfoRow label="彩蛋" value="点一下 ›" onClick={() => void revealEasterEgg()} />
+            </div>
+          </div>
+
+          <div className="account-card">
+            <h3 className="settings-card-title"><i className="fa fa-user-circle-o" aria-hidden="true"></i> 登录状态</h3>
+            <p className="privacy-intro" style={{ marginBottom: 16 }}>
+              {user ? `当前登录：${user.name}` : "当前未登录，登录后可以发帖、评论与查看角色设定。"}
+            </p>
+            {user ? (
+              <button type="button" className="account-btn-danger account-submit-btn" onClick={() => setConfirmLogout(true)}>退出登录</button>
+            ) : (
+              <button type="button" className="auth-btn primary" onClick={() => push("auth")}>登录 / 注册</button>
+            )}
+          </div>
         </div>
-        <div className="form-hint" style={{ padding: "0 14px 12px" }}>跟随系统会随手机的深色模式自动切换。</div>
-      </div>
 
-      <div className="me-group">
-        <div className="me-group-title">年制偏好</div>
-        <div className="tabs" style={{ padding: "4px 10px 10px" }}>
-          {YEAR_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              className={`tab-item ${yearMode === option.value ? "on" : ""}`}
-              onClick={() => setYearMode(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="privacy-footer">
+          <p>
+            {quote.data?.text ? `${quote.data.text}${quote.data.source ? ` —— ${quote.data.source}` : ""}` : "妖精论坛（二创） · 非商业同人项目"}
+          </p>
         </div>
-        <div className="form-hint" style={{ padding: "0 14px 12px" }}>
-          无限元年 = 公元 1604 年。
-          <button className="link-btn" onClick={() => push("year")}>打开年制换算</button>
-        </div>
-      </div>
-
-      <div className="section-title">隐私说明</div>
-      <div className="info-card">
-        <h4>只收集必要的信息</h4>
-        <p>账号信息（用户名、邮箱）、你主动发布的内容（帖子、评论、角色设定、反馈），以及保障安全与排障所需的请求日志。不读取通讯录，只有你主动选图时才会访问相册。</p>
-        <div className="meta">隐私政策版本 {PRIVACY_VERSION}</div>
-      </div>
-      <div className="info-card">
-        <h4>人机验证与零 PoW</h4>
-        <p>APP 使用专属验证通道（/captcha/app/*），一次签名换一张短期凭据，只在登录、注册、评论与反馈时校验；手机不再执行工作量证明，不会因求解而发烫或卡死。该密钥可随时在服务端撤销。</p>
-      </div>
-
-      <div className="me-group">
-        <div className="me-group-title">关于</div>
-        <InfoRow label="版本号" value={`${appInfo?.versionName || "2.0.0"}（${appInfo?.versionCode ?? 20000}）`} />
-        <InfoRow label="包名" value={appInfo?.packageName || "—"} />
-        <InfoRow label="API 地址" value={appInfo?.apiBaseUrl || "—"} />
-        <InfoRow label="彩蛋" value="点一下" onClick={() => void revealEasterEgg()} />
-      </div>
-
-      <div style={{ padding: "16px 14px 0" }}>
-        {user ? (
-          <button className="btn danger block" onClick={() => setConfirmLogout(true)}>退出登录</button>
-        ) : (
-          <button className="btn primary block" onClick={() => push("auth")}>登录 / 注册</button>
-        )}
-      </div>
-
-      <div className="me-footer">
-        {quote.data?.text ? `${quote.data.text}${quote.data.source ? ` —— ${quote.data.source}` : ""}` : "妖精论坛（二创） · 非商业同人项目"}
       </div>
 
       <Confirm
@@ -159,10 +214,14 @@ export function AccountScreen() {
     return (
       <div className="screen">
         <TopBar title="账号安全" back />
-        <div className="empty">
-          <div className="empty-mark">◐</div>
-          <p>登录后可以修改密码与管理账号</p>
-          <button className="btn primary" onClick={() => push("auth")}>登录 / 注册</button>
+        <div className="account-page">
+          <div className="account-card">
+            <div className="account-page-header">
+              <h1><i className="fa fa-shield" aria-hidden="true"></i> 账号安全</h1>
+              <p>登录后可以查看账号信息、修改密码。</p>
+            </div>
+            <button type="button" className="auth-btn primary" onClick={() => push("auth")}>登录 / 注册</button>
+          </div>
         </div>
       </div>
     );
@@ -195,48 +254,87 @@ export function AccountScreen() {
     <div className="screen">
       <TopBar title="账号安全" back />
 
-      <div className="me-group">
-        <div className="me-group-title">账号信息</div>
-        <InfoRow label="用户名" value={user.name} />
-        <InfoRow label="邮箱" value={user.email || "未绑定"} />
-        <InfoRow
-          label="邮箱验证"
-          value={<span style={{ color: verified ? "var(--color-secondary)" : "#e6803d" }}>{verified ? "已验证" : "未验证"}</span>}
-        />
-        {user.created_at ? <InfoRow label="注册时间" value={formatDate(user.created_at)} /> : null}
-      </div>
+      <div className="account-page">
+        <div className="settings-stack">
+          <div className="account-card">
+            <div className="account-page-header">
+              <h1><i className="fa fa-shield" aria-hidden="true"></i> 账号安全</h1>
+              <p>账号资料、登录密码与注销说明。</p>
+            </div>
+            <div className="settings-info-list">
+              <InfoRow label="用户名" value={user.name} />
+              <InfoRow label="邮箱" value={user.email || "未绑定"} />
+              <InfoRow
+                label="邮箱验证"
+                value={<span style={{ color: verified ? "var(--color-secondary)" : "#e6803d" }}>{verified ? "已验证" : "未验证"}</span>}
+              />
+              {user.created_at ? <InfoRow label="注册时间" value={formatDate(user.created_at)} /> : null}
+            </div>
+          </div>
 
-      <div className="section-title">修改密码</div>
-      <div className="screen-pad">
-        <div className="field">
-          <label>当前密码</label>
-          <input className="input" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="用于确认是你本人" />
-        </div>
-        <div className="field">
-          <label>新密码</label>
-          <input className="input" type="password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="至少 8 位，含字母与数字" />
-        </div>
-        <div className="field">
-          <label>确认新密码</label>
-          <input className="input" type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} placeholder="再输一遍新密码" />
-        </div>
-        {error ? <div className="form-error">{error}</div> : null}
-        <button className="btn primary block" disabled={busy} onClick={() => void changePassword()}>{busy ? "提交中…" : "更新密码"}</button>
-        <div className="form-hint">修改成功后其他设备上的登录会自动失效，当前设备保持登录。</div>
-      </div>
+          <div className="account-card">
+            <h3 className="settings-card-title"><i className="fa fa-lock" aria-hidden="true"></i> 修改密码</h3>
+            <div className="account-field">
+              <label htmlFor="account-current-password">当前密码</label>
+              <input
+                id="account-current-password"
+                type="password"
+                autoComplete="current-password"
+                placeholder="用于确认是你本人"
+                value={current}
+                onChange={(event) => setCurrent(event.target.value)}
+              />
+            </div>
+            <div className="account-field">
+              <label htmlFor="account-new-password">新密码</label>
+              <input
+                id="account-new-password"
+                type="password"
+                autoComplete="new-password"
+                placeholder="至少 8 位，含字母与数字"
+                value={next}
+                onChange={(event) => setNext(event.target.value)}
+              />
+            </div>
+            <div className="account-field">
+              <label htmlFor="account-repeat-password">确认新密码</label>
+              <input
+                id="account-repeat-password"
+                type="password"
+                autoComplete="new-password"
+                placeholder="再输一遍新密码"
+                value={repeat}
+                onChange={(event) => setRepeat(event.target.value)}
+              />
+            </div>
+            {error ? <p className="account-field-hint">{error}</p> : null}
+            <button type="button" className="auth-btn primary" disabled={busy} onClick={() => void changePassword()}>
+              {busy ? "提交中…" : "更新密码"}
+            </button>
+            <p className="settings-block-hint">修改成功后其他设备上的登录会自动失效，当前设备保持登录。</p>
+          </div>
 
-      <div className="section-title">注销账号</div>
-      <div className="info-card">
-        <h4>请到 Web 端完成注销</h4>
-        <p>注销会同时删除帖子、评论、角色设定与关注关系，且不可恢复。为避免误操作，APP 内不提供一键注销：请在浏览器打开论坛网站，登录后进入「账号设置 → 注销账号」按提示确认。</p>
-        {!verified ? <p>注销前建议先完成邮箱验证，以便找回账号。</p> : null}
-        <div className="meta">{appInfo?.apiBaseUrl ? `当前服务：${appInfo.apiBaseUrl}` : "当前服务：妖精论坛"}</div>
-      </div>
+          <div className="account-card">
+            <h3 className="settings-card-title"><i className="fa fa-user-times" aria-hidden="true"></i> 注销账号</h3>
+            <div className="account-warn-bar" style={{ marginBottom: 16 }}>
+              <i className="fa fa-exclamation-triangle" aria-hidden="true"></i> 注销后无法恢复，请谨慎操作。
+            </div>
+            <p className="privacy-intro">
+              注销会同时删除帖子、评论、角色设定与关注关系，且不可恢复。为避免误操作，APP 内不提供一键注销：请在浏览器打开论坛网站，登录后进入「账号设置 → 注销账号」按提示确认。
+            </p>
+            {!verified ? (
+              <p className="account-field-hint" style={{ margin: "10px 0 0" }}>注销前建议先完成邮箱验证，以便找回账号。</p>
+            ) : null}
+            <p className="settings-block-hint">{appInfo?.apiBaseUrl ? `当前服务：${appInfo.apiBaseUrl}` : "当前服务：妖精论坛"}</p>
+          </div>
 
-      <div style={{ padding: "16px 14px 0" }}>
-        <button className="btn danger block" onClick={() => setConfirmLogout(true)}>退出登录</button>
+          <button type="button" className="account-btn-danger account-submit-btn" onClick={() => setConfirmLogout(true)}>退出登录</button>
+        </div>
+
+        <div className="privacy-footer">
+          <p>密码只保存加盐哈希，我们不会也无法看到你的原密码。</p>
+        </div>
       </div>
-      <div className="me-footer">密码只保存加盐哈希，我们不会也无法看到你的原密码。</div>
 
       <Confirm
         open={confirmLogout}

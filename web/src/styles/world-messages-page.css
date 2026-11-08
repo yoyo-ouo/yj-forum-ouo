@@ -1,0 +1,469 @@
+/* =====================================================================
+   世界频道 / 消息中心：App 页面级适配（只服务 src/screens/world.tsx 与
+   src/screens/messages.tsx，共享样式 app.css 与 styles/web/*.css 保持不动）
+
+   论坛 Web 的这两块样式来自「浮动窗口」与「站点页面」，嵌进 App 的单屏页时
+   需要补三件事：
+   1) 世界频道：抵消 app.css 旧 .world-msg 的 margin-bottom，复位用 <button>
+      实现的头像 / 昵称，给输入条补安全区与输入框排版；
+   2) 消息中心：App 固定使用 message-center.css 里 ≤768px 的「单屏 + 横向类型
+      切换器」结构，这里用更高优先级选择器复刻该媒体查询（桌面预览同样是移动端
+      布局，不依赖视口宽度）；
+   3) 富文本（RichContent）在气泡里的行距对齐 Web 的 .world-msg-content。
+   ===================================================================== */
+
+/* ------------------------------ 世界频道 ------------------------------ */
+
+/* app.css 旧 .world-msg 有 margin-bottom:12px，Web 用容器 gap 控制间距 */
+.world-page .world-msg {
+  margin-bottom: 0;
+}
+
+/* 头像 / 昵称在 Web 里是 <a>，App 用 <button> 跳个人中心，需复位原生外观 */
+.world-page .world-msg-avatar {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.world-page .world-msg-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.world-page .world-msg-name:hover {
+  color: var(--color-primary);
+}
+
+/* 气泡内富文本：对齐 Web .world-msg-content 的 14px / 1.6 排版 */
+.world-page .world-msg-content .rich-content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+}
+
+.world-page .world-msg-content .rich-content > :first-child {
+  margin-top: 0;
+}
+
+.world-page .world-msg-content .rich-content > :last-child {
+  margin-bottom: 0;
+}
+
+.world-page .world-msg-content .rich-content p {
+  margin: 0 0 6px;
+}
+
+.world-page .world-msg-content .rich-content img {
+  border-radius: 8px;
+  margin: 6px 0;
+}
+
+/* 底部输入条：Web .world-input-bar + App 的 textarea / 发送按钮 */
+.world-page .world-input-bar {
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+}
+
+.world-page .world-input-hint button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.world-compose {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.world-compose textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  max-height: 112px;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border-card);
+  border-radius: 10px;
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
+  font-size: 15px;
+  line-height: 1.55;
+  resize: none;
+  outline: none;
+}
+
+.world-compose textarea:focus {
+  border-color: var(--color-border-focus);
+}
+
+.world-compose .btn.world-compose-send {
+  flex: 0 0 auto;
+  padding: 6px 18px;
+  border-radius: 15px;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+/* ------------------------------ 消息中心 ------------------------------ */
+
+/* 页根：填满 app-main（Web 的 .msg-page 是站点页面，padding / 高度都不适用） */
+.msg-page.app-msg-page {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  padding: calc(8px + env(safe-area-inset-top)) 8px 10px;
+  overflow: hidden;
+}
+
+.app-msg-page .msg-shell {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  border-radius: 12px;
+}
+
+/* 顶部一行「标题 + 连接状态」，其下横向类型切换器（复刻 message-center.css
+   @media (max-width:768px) 的 .msg-sidebar 网格） */
+.app-msg-page .msg-sidebar {
+  position: static;
+  z-index: auto;
+  width: auto;
+  height: auto;
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "head conn"
+    "types types";
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 8px;
+  padding: 9px 10px 8px;
+  border-right: none;
+  border-bottom: 1px solid var(--color-border-divider);
+  background: var(--color-bg-card);
+}
+
+.app-msg-page .msg-sidebar-head {
+  grid-area: head;
+  min-width: 0;
+  padding: 0;
+}
+
+.app-msg-page .msg-sidebar-title {
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+
+.app-msg-page .msg-sidebar-title i {
+  font-size: 14px;
+}
+
+.app-msg-page .msg-sidebar-sub {
+  display: none;
+}
+
+.app-msg-page .msg-conn {
+  grid-area: conn;
+  margin-top: 0;
+  max-width: 44vw;
+  padding: 4px 8px;
+  overflow: hidden;
+  font-size: 10.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 类型列表：横向居中排列，窄屏可横向滚动 */
+.app-msg-page .msg-type-list {
+  grid-area: types;
+  flex-direction: row;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 4px 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.app-msg-page .msg-type-list::-webkit-scrollbar {
+  display: none;
+}
+
+.app-msg-page .msg-type-item {
+  position: relative;
+  width: auto;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  min-width: 56px;
+  height: auto;
+  padding: 3px 0 2px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.app-msg-page .msg-type-item:hover,
+.app-msg-page .msg-type-item.active {
+  border: none;
+  background: transparent;
+}
+
+.app-msg-page .msg-type-item.active {
+  color: var(--color-primary);
+}
+
+.app-msg-page .msg-type-item.active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-primary);
+  transform: translateX(-50%);
+}
+
+.app-msg-page .msg-type-icon {
+  width: auto;
+  height: 26px;
+  font-size: 22px;
+  line-height: 26px;
+}
+
+.app-msg-page .msg-type-label {
+  flex: 0 0 auto;
+  max-width: 64px;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+}
+
+.app-msg-page .msg-type-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 8px;
+  font-size: 9px;
+  line-height: 15px;
+}
+
+/* 正文：占满剩余高度，列表 / 会话各自内部滚动 */
+.app-msg-page .msg-detail {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-msg-page .msg-detail-head {
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.app-msg-page .msg-detail-title {
+  font-size: 16px;
+}
+
+.app-msg-page .msg-detail-sub {
+  font-size: 11px;
+}
+
+.app-msg-page .msg-item {
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.app-msg-page .msg-item-avatar,
+.app-msg-page .msg-skeleton-avatar {
+  width: 36px;
+  height: 36px;
+}
+
+.app-msg-page .msg-item-name {
+  max-width: 50%;
+}
+
+.app-msg-page .msg-item-time {
+  margin-left: 0;
+}
+
+.app-msg-page .msg-item-arrow {
+  display: none;
+}
+
+/* 系统通知里的 RichContent：跟 .msg-item-body.msg-rich 对齐 */
+.app-msg-page .msg-item-body .rich-content {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--color-text-secondary);
+}
+
+.app-msg-page .msg-item-body .rich-content > :first-child {
+  margin-top: 0;
+}
+
+.app-msg-page .msg-item-body .rich-content > :last-child {
+  margin-bottom: 0;
+}
+
+.app-msg-page .msg-item-body .rich-content p {
+  margin: 0 0 6px;
+}
+
+.app-msg-page .msg-stream-note {
+  padding: 7px 12px;
+}
+
+.app-msg-page .msg-skeleton-row {
+  padding: 14px;
+}
+
+/* 管理团队会话 */
+.app-msg-page .msg-chat-list {
+  gap: 12px;
+  padding: 14px 12px 6px;
+}
+
+.app-msg-page .msg-chat-main {
+  max-width: 82%;
+}
+
+.app-msg-page .msg-chat-avatar {
+  width: 32px;
+  height: 32px;
+}
+
+.app-msg-page .msg-chat-composer {
+  padding: 8px 10px 10px;
+}
+
+.app-msg-page .msg-chat-compose {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.app-msg-page .msg-chat-compose textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 46px;
+  max-height: 120px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-card);
+  border-radius: 10px;
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
+  font-size: 15px;
+  line-height: 1.55;
+  resize: none;
+  outline: none;
+}
+
+.app-msg-page .msg-chat-compose textarea:focus {
+  border-color: var(--color-border-focus);
+}
+
+.app-msg-page .msg-chat-compose .btn.msg-chat-send {
+  flex: 0 0 auto;
+  padding: 8px 18px;
+  border-radius: 15px;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+/* 气泡内富文本对齐 .msg-chat-rich（自己的消息反白由 message-center.css 负责） */
+.app-msg-page .msg-chat-rich .rich-content {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-text-primary);
+}
+
+.app-msg-page .msg-chat-rich .rich-content > :first-child {
+  margin-top: 0;
+}
+
+.app-msg-page .msg-chat-rich .rich-content > :last-child {
+  margin-bottom: 0;
+}
+
+.app-msg-page .msg-chat-rich .rich-content p {
+  margin: 0 0 6px;
+}
+
+/* 单视图：隐藏类型栏，顶部居中标题 + 左侧返回 + 右侧刷新 */
+.app-msg-page .msg-shell.is-chat-view .msg-sidebar {
+  display: none;
+}
+
+.app-msg-page .msg-shell.is-chat-view .msg-detail-head {
+  position: relative;
+  justify-content: center;
+  min-height: 56px;
+}
+
+.app-msg-page .msg-shell.is-chat-view .msg-chat-back {
+  display: inline-flex;
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+}
+
+.app-msg-page .msg-shell.is-chat-view .msg-refresh-btn {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+}
+
+.app-msg-page .msg-shell.is-chat-view .msg-detail-heading {
+  flex: 0 1 auto;
+  align-items: center;
+  text-align: center;
+}
+
+.app-msg-page .msg-shell.is-chat-view .msg-detail-sub {
+  display: none;
+}
+
+/* 未登录 CTA：Web 用 <a>，App 用 <button> */
+.app-msg-page .msg-gate {
+  flex: 0 0 auto;
+  overflow-y: auto;
+}
+
+.app-msg-page .msg-gate-btn {
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}

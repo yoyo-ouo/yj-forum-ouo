@@ -1,0 +1,141 @@
+/* ===== 角色设定 / 设置 / 账号安全：页面级补充样式 =====
+   Web 的 character-sheet.css / account.css / privacy.css 已经提供卡片、表单与
+   信息块的主体样式，这里只补两类东西：
+   1. 论坛站点的全局 reset（base.css 的 *{margin:0;padding:0} 与 elements.css 的
+      ul,li{list-style:none}）在 APP 里不存在，用零优先级 :where() 补齐，
+      避免 <h3>/<p>/<ul> 带出浏览器默认间距与项目符号；
+   2. APP 特有的列表间距与键值行排版（Web 账号页没有对应类）。 */
+
+:where(.account-page, .cs-page) :where(p, h1, h2, h3, h4, h5, h6, ul, ol, li, dl, dd, dt) {
+    margin: 0;
+    padding: 0;
+}
+
+:where(.account-page, .cs-page) :where(ul, ol, li) {
+    list-style: none;
+}
+
+/* ---------- 角色设定 ---------- */
+.cs-page-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* RichContent 组件没有 className 入口，让它继承 Web .rich-content.cs-desc 的正文排版 */
+.cs-block .rich-content {
+    font-size: 13.5px;
+    line-height: 1.95;
+    color: var(--color-text-secondary);
+}
+
+.cs-block .rich-content > :first-child {
+    margin-top: 0;
+}
+
+.cs-block .rich-content > :last-child {
+    margin-bottom: 0;
+}
+
+/* ---------- 设置 / 账号安全 ---------- */
+.settings-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* Web 的 .privacy-section 自带 margin-bottom，放进 stack 后交给 gap 统一间距 */
+.settings-stack .privacy-section {
+    margin-bottom: 0;
+}
+
+.settings-block {
+    margin-top: 24px;
+}
+
+.settings-block:first-of-type {
+    margin-top: 4px;
+}
+
+.settings-block-title {
+    margin: 0 0 12px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--color-text-secondary);
+}
+
+.settings-block-hint {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0 0;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--color-text-tertiary);
+}
+
+.settings-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 14px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.settings-card-title i {
+    color: var(--color-primary);
+}
+
+.settings-info-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-info-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    padding: 11px 0;
+    border: 0;
+    border-top: 1px dashed var(--color-border-divider);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font: inherit;
+    font-size: 14px;
+    text-align: left;
+}
+
+.settings-info-row:first-child {
+    border-top: 0;
+    padding-top: 2px;
+}
+
+.settings-info-value {
+    margin-left: auto;
+    color: var(--color-text-tertiary);
+    font-size: 13px;
+    text-align: right;
+    word-break: break-all;
+}
+
+.settings-info-action {
+    cursor: pointer;
+}
+
+.settings-info-action:active {
+    opacity: 0.7;
+}
+
+/* Web 的 .auth-btn 没有禁用态，提交中需要弱化 */
+.account-page .auth-btn:disabled,
+.account-page .auth-btn.primary:disabled:hover {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}

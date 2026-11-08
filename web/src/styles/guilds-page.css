@@ -1,0 +1,101 @@
+/* ============ 会馆广场 / 会馆详情 / 文章详情（App 内适配） ============
+   主体样式直接复用 Web：src/styles/web/huiguan*.css、article-detail.css、article-cards.css。
+   本文件只做三件事，均由 src/screens/guilds.tsx 自行 import（不改 main.tsx）：
+   1) 手机上收窄 Web 页面的桌面内边距；
+   2) 把 App 全局 .post-card 的左右外边距在会馆页容器内归零（间距交给 .guild-feed-list 的 gap）；
+   3) 复位「Web 里是 <a>、App 里是 <button>」的原生按钮外观。 */
+
+/* 提高一级优先级（div.xxx），避免与 main.tsx 里的 Web 规则比拼加载顺序 */
+div.guild-page {
+    padding: 12px 12px 24px;
+}
+
+div.article-page {
+    padding: 12px 12px 32px;
+}
+
+/* App 全局 .post-card 带 margin: 0 14px 10px（信息流靠它撑边距），
+   会馆页容器本身已有内边距，这里归零避免二次缩进 */
+.guild-page .post-card {
+    margin: 0;
+}
+
+/* 文章：Web 是三栏网格 .article-layout（两侧留白列），App 直接单列渲染 .article-main */
+.article-page .article-main {
+    margin: 0 auto;
+}
+
+/* 文章封面（后端有封面字段时展示；无则为主题色头图留白） */
+.article-cover {
+    display: block;
+    width: 100%;
+    border-radius: 14px;
+    margin: 0 0 16px;
+}
+
+/* Web 的 .guild-member-char-badge 未随 huiguan-members.css 带入，这里补最小样式 */
+.guild-member-card {
+    position: relative;
+}
+
+.guild-member-char-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 1px 7px;
+    border-radius: 8px;
+    background: var(--color-bg-icon);
+    color: var(--color-text-tertiary);
+    font-size: 10px;
+}
+
+/* ---- 原生 button 复位：只补 Web 规则没写到的属性，避免覆盖 .guild-* 自带的字号/内距/边框 ---- */
+
+/* 无自带字号、无内距（整块复位） */
+button.guild-row-leader-link,
+button.guild-hero-meta-link,
+button.article-meta-item,
+button.article-participant {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    cursor: pointer;
+}
+
+/* 自带 padding/border-radius/字号的链接样式：只补原生边框与字体族 */
+button.guild-row-name,
+button.guild-row-enter,
+button.guild-leader-link,
+button.guild-leader-profile-btn,
+button.guild-empty-link,
+button.article-guild-tag {
+    border: 0;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+button.guild-row-name {
+    padding: 0;
+    background: none;
+    text-align: left;
+}
+
+/* 卡片/列表项：border、背景、内距均由 Web 规则给出 */
+button.guild-list-item,
+button.guild-members-leader,
+button.guild-member-card,
+button.guild-intro-meta-item {
+    font-family: inherit;
+    cursor: pointer;
+}
+
+button.guild-list-item {
+    width: 100%;
+    text-align: left;
+}
+
+button.guild-members-leader,
+button.guild-member-card {
+    width: 100%;
+}
