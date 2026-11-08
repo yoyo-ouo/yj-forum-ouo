@@ -29,6 +29,13 @@ import "./styles/web/account.css";
 import "./styles/web/auth.css";
 import "./styles/web/privacy.css";
 import "./styles/web/email-change.css";
+import "./styles/web/guide.css";
+import "./styles/web/feedback.css";
+import "./styles/web/changelog.css";
+import "./styles/web/year-converter.css";
+import "./styles/web/forum-publish.css";
+import "./styles/web/publish-page.css";
+
 
 import "./styles/web-overrides.css";
 

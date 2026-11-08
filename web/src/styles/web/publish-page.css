@@ -1,0 +1,392 @@
+/* ======================== 发帖页：发布到 / 左右排版 / 须知折叠 ======================== */
+.post-target-segmented {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.post-target-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 20px;
+    border: 1px solid var(--color-border-card);
+    border-radius: 20px;
+    background: var(--color-bg-icon);
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.post-target-btn:hover {
+    background: var(--color-bg-icon-hover);
+}
+
+.post-target-btn.active {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    color: #fff !important;
+}
+
+.post-target-btn.active i {
+    color: #fff !important;
+}
+
+/* 定时发布：开关 / 时间输入 / 提示文案 */
+.post-schedule-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+}
+
+/* 定时发布：日期胶囊条 + 时/分下拉 + 「更多日期」自研日历浮层 */
+.post-schedule-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.post-schedule-days {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    gap: 6px;
+    padding-bottom: 2px;
+    overflow-x: auto;
+}
+
+.post-schedule-day {
+    flex-shrink: 0;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    min-width: 54px;
+    padding: 6px 10px;
+    border: 1px solid var(--color-border-card);
+    border-radius: 10px;
+    background: var(--color-bg-icon);
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    line-height: 1.2;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.post-schedule-day:hover {
+    background: var(--color-bg-icon-hover);
+}
+
+.post-schedule-day.active {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    color: #fff;
+}
+
+.post-schedule-day-sub {
+    font-size: 11px;
+    color: var(--color-text-tertiary);
+}
+
+.post-schedule-day.active .post-schedule-day-sub {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.post-schedule-time {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.post-schedule-select-wrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.post-schedule-select {
+    padding: 7px 26px 7px 10px;
+    border: 1px solid var(--color-border-card);
+    border-radius: 10px;
+    background: var(--color-bg-search);
+    color: var(--color-text-primary);
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.post-schedule-select:focus {
+    border-color: var(--color-border-focus);
+}
+
+.post-schedule-select-caret {
+    position: absolute;
+    top: 50%;
+    right: 9px;
+    transform: translateY(-50%);
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+    pointer-events: none;
+}
+
+.post-schedule-time-sep {
+    font-size: 14px;
+    color: var(--color-text-tertiary);
+}
+
+.post-schedule-more {
+    position: relative;
+}
+
+.post-schedule-more-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border: 1px solid var(--color-border-card);
+    border-radius: 10px;
+    background: var(--color-bg-icon);
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.post-schedule-more-btn:hover {
+    background: var(--color-bg-icon-hover);
+}
+
+.post-schedule-more-btn.open {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+/* 日历浮层：按钮下方 absolute；层级高于页面内容、低于固定顶栏（100，见 header-nav） */
+.post-schedule-cal {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 95;
+    width: 264px;
+    padding: 12px;
+    border: 1px solid var(--color-border-card);
+    border-radius: 12px;
+    background: var(--color-bg-dropdown);
+    box-shadow: 0 10px 26px var(--color-shadow-dropdown);
+}
+
+.post-schedule-cal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.post-schedule-cal-nav {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--color-border-divider);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.post-schedule-cal-nav:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.post-schedule-cal-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+}
+
+.post-schedule-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.post-schedule-cal-week {
+    padding: 4px 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--color-text-tertiary);
+}
+
+.post-schedule-cal-day {
+    height: 30px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-primary);
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.post-schedule-cal-day:hover:not(:disabled) {
+    background: var(--color-bg-item-hover);
+}
+
+.post-schedule-cal-day.selected {
+    background: var(--color-primary);
+    color: #fff;
+}
+
+.post-schedule-cal-day:disabled {
+    color: var(--color-text-tertiary);
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.post-schedule-cal-empty {
+    height: 30px;
+}
+
+.post-schedule-hint {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--color-text-tertiary);
+}
+
+.post-target-hint {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.post-editor-split {
+    display: flex;
+    align-items: stretch;
+    gap: 16px;
+}
+
+.post-editor-split .form-editor,
+.post-editor-split .post-editor-preview {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 320px;
+}
+
+.post-editor-split .form-editor {
+    border: 1px solid var(--color-border-search);
+    border-radius: 10px;
+}
+
+.post-editor-split .post-editor-preview {
+    max-height: 640px;
+    overflow: auto;
+    border: 1px solid var(--color-border-card);
+    border-radius: 10px;
+}
+
+.post-compliance-collapse {
+    margin-top: 22px;
+    border: 1px solid var(--color-border-card);
+    border-radius: 12px;
+    background: var(--color-bg-item);
+    overflow: hidden;
+}
+
+.post-compliance-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px 16px;
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.post-compliance-toggle > i:first-child {
+    color: var(--color-primary);
+}
+
+.post-compliance-arrow {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--color-text-tertiary);
+}
+
+.post-compliance-collapse.open .post-compliance-toggle {
+    border-bottom: 1px dashed var(--color-border-divider);
+}
+
+.post-compliance-collapse .post-compliance-list {
+    padding: 12px 16px 14px 36px;
+}
+
+/* 桌面端：编辑区 + 实时预览左右排版，隐藏 编辑/预览 Tab */
+@media (min-width: 992px) {
+    .post-create-form .form-editor-tabs {
+        display: none;
+    }
+    .post-editor-split .form-editor,
+    .post-editor-split .post-editor-preview {
+        display: block;
+    }
+}
+
+/* 窄屏：编辑 / 预览 Tab 切换 */
+@media (max-width: 991px) {
+    .post-editor-split {
+        flex-direction: column;
+    }
+    .post-editor-split .form-editor,
+    .post-editor-split .post-editor-preview {
+        display: none;
+    }
+
+    .post-editor-split.show-edit .form-editor {
+        display: block;
+    }
+    .post-editor-split.show-preview .post-editor-preview {
+        display: block;
+    }
+    .article-toc {
+        display: none;
+    }
+    .article-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .article-main {
+        grid-column: 1;
+    }
+}
+
+/* 窄屏：定时选择器换行 + 胶囊条占满整行横向滚动（≤480px） */
+@media (max-width: 480px) {
+    .post-schedule-days {
+        flex: 1 1 100%;
+    }
+    .post-schedule-day {
+        min-width: 50px;
+        padding: 5px 8px;
+    }
+    .post-schedule-more {
+        margin-left: auto;
+    }
+}
+

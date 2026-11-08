@@ -1,0 +1,132 @@
+/* ===== 指南 / 反馈中心 / 更新日志 / 年制换算：页面级适配 =====
+   主体样式直接复用 Web：src/styles/web/{guide,feedback,changelog,year-converter}.css
+   （已由 main.tsx 引入）。本文件只做四件事，均由 src/screens/misc.tsx 自行 import
+   （不改 main.tsx / 共享样式）：
+   1) 补齐论坛站点的全局 reset（base.css 的 *{margin:0;padding:0} 与 elements.css 的
+      ul,li{list-style:none} 在 APP 里不存在），用零优先级 :where() 避免覆盖任何类选择器；
+   2) 手机上收窄 Web 页面的桌面内边距（Web 版按 1000~1320px 桌面宽度设计）；
+   3) 把 Web 里是「侧栏 / 弹窗」的容器（.guide-sidebar、.feedback-detail）复位成整页块；
+   4) 复位「Web 里是 a / div、APP 里是 button」的原生按钮外观，并补展开指示。
+   选择器加一级（div.xxx / button.xxx）优先级，避免与 main.tsx 里的 Web 规则比拼加载顺序。 */
+
+/* ---------- 1) 零优先级 reset ---------- */
+:where(.guide-page, .feedback-page, .feedback-submit-page, .changelog-page, .year-converter-page)
+    :where(p, h1, h2, h3, h4, h5, h6, ul, ol, li, dl, dt, dd) {
+    margin: 0;
+    padding: 0;
+}
+
+:where(.guide-page, .feedback-page, .feedback-submit-page, .changelog-page, .year-converter-page)
+    :where(ul, ol, li) {
+    list-style: none;
+}
+
+/* ---------- 2) 手机内边距 ---------- */
+div.guide-page,
+div.feedback-page,
+div.feedback-submit-page {
+    padding: 0 12px 24px;
+}
+
+div.changelog-page,
+div.year-converter-page {
+    padding: 12px 12px 40px;
+}
+
+/* ---------- 指南 ---------- */
+/* Web 的 .guide-sidebar 是桌面侧栏（sticky + 固定 250px 宽），窄屏更会变成右侧抽屉
+   （position:fixed / height:100dvh）；APP 单页里只有目录，统一复位成整宽卡片 */
+div.guide-page .guide-sidebar {
+    position: static;
+    width: auto;
+    height: auto;
+    max-width: none;
+    max-height: none;
+    justify-self: stretch;
+    margin: 0 0 14px;
+    padding: 8px;
+    transform: none;
+    transition: none;
+    box-shadow: none;
+}
+
+/* 正文页：Web 的 .guide-content 在桌面三栏网格的第 2 列，APP 单列居中即可 */
+div.guide-page .guide-content {
+    margin: 0 auto;
+}
+
+/* RichContent 没有 className 入口，正文排版靠内层 .rich-content 继承 Web .guide-doc-body */
+.guide-doc-body .rich-content {
+    font-size: 14px;
+    line-height: 1.9;
+    color: var(--color-text-primary);
+}
+
+/* ---------- 反馈中心 ---------- */
+/* Web 里工具条粘在 70px 的站点头部下方；APP 顶栏是 52px + 安全区，对齐后不会露出缝隙 */
+div.feedback-page .feedback-toolbar {
+    top: calc(52px + env(safe-area-inset-top));
+}
+
+/* 详情在 Web 是弹窗（限高 70vh + 内部滚动）；APP 是独立页面，改成整页滚动，
+   并把弹窗卡片的底与描边补回来，避免正文直接浮在页面背景上 */
+div.feedback-page .feedback-detail {
+    max-height: none;
+    overflow: visible;
+    margin-top: 14px;
+    padding: 18px 16px;
+    border: 1px solid var(--color-border-card);
+    border-radius: 14px;
+    background: var(--color-bg-card);
+}
+
+/* Sheet 的 body 已有内边距，表单第一个标签不再额外留白 */
+.feedback-form .feedback-form-label:first-child {
+    margin-top: 0;
+}
+
+/* ---------- 更新日志 ---------- */
+/* 展开/收起：整条头部在 Web 里是 div，APP 换成 button 后需要复位原生外观 */
+button.changelog-item-head {
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+/* 收起时的两行摘要（Web 是一次性全展开，APP 保留原来的折叠预览） */
+.changelog-preview {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: var(--color-text-tertiary);
+    font-size: 13px;
+    line-height: 1.75;
+    overflow-wrap: anywhere;
+}
+
+/* 展开指示 */
+.changelog-toggle {
+    flex: 0 0 auto;
+    color: var(--color-primary);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+/* 正文排版：内层 .rich-content 继承 Web .changelog-content */
+.changelog-content .rich-content {
+    font-size: 14px;
+    line-height: 1.85;
+    color: var(--color-text-secondary);
+}
+
+/* ---------- 年制换算 ---------- */
+/* Web 的规则列表靠 padding-left + li::marker 上色；APP 没有站点全局列表符号，显式恢复项目符号 */
+.yc-rules-list {
+    list-style: disc;
+}
