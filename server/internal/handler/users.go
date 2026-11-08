@@ -2,11 +2,13 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
@@ -149,13 +151,27 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		fields["name"] = *req.Name
 	}
 	if req.Gender != nil {
+		if err := validateProfileGender(*req.Gender); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
 		fields["gender"] = *req.Gender
 	}
 	if req.Age != nil {
-		fields["age"] = *req.Age
+		age, err := validateProfileAge(*req.Age)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		fields["age"] = age
 	}
 	if req.Intro != nil {
-		fields["intro"] = *req.Intro
+		intro, err := validateProfileIntro(*req.Intro)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		fields["intro"] = intro
 	}
 	if req.Avatar != nil && *req.Avatar != "" {
 		avatar := strings.TrimSpace(*req.Avatar)
@@ -204,6 +220,45 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		h.issueSession(c, uid)
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// 资料字段限制。
+const (
+	profileIntroMaxRunes = 200
+	profileAgeMaxRunes   = 32
+)
+
+var (
+	errProfileIntroTooLong  = errors.New("简介不能超过200字")
+	errProfileGenderInvalid = errors.New("性别取值无效")
+	errProfileAgeTooLong    = errors.New("年龄不能超过32个字符")
+)
+
+// validateProfileIntro 归一化简介：去首尾空白，超过 200 字报错。
+func validateProfileIntro(raw string) (string, error) {
+	intro := strings.TrimSpace(raw)
+	if utf8.RuneCountInString(intro) > profileIntroMaxRunes {
+		return "", errProfileIntroTooLong
+	}
+	return intro, nil
+}
+
+// validateProfileGender 性别仅允许 0（未设置）/1/2。
+func validateProfileGender(gender int) error {
+	switch gender {
+	case 0, 1, 2:
+		return nil
+	default:
+		return errProfileGenderInvalid
+	}
+}
+
+// validateProfileAge 年龄为自由文本，长度最多 32 个字符。
+func validateProfileAge(raw string) (string, error) {
+	if utf8.RuneCountInString(raw) > profileAgeMaxRunes {
+		return "", errProfileAgeTooLong
+	}
+	return raw, nil
 }
 
 // validAvatarURL 校验头像地址：允许站内相对路径或 http/https；拒绝 data/javascript/svg 等危险形态。

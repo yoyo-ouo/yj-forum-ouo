@@ -203,16 +203,21 @@ func pingS3WithRetry(ctx context.Context, p *storage.S3Provider) error {
 	return err
 }
 
-// checkAltchaAppSecret 校验 APP 专用验证通道配置：留空 = 关闭通道；配了就必须是强密钥且与 ALTCHA_HMAC_KEY 隔离。
-// 直接把非法配置当启动失败，避免「app_enabled=true 但签名永远不匹配」的静默失效。
+// checkAltchaAppSecret 校验 APP 专用验证通道配置，并打印零 PoW 通道的启动诊断。
+// 留空 = 关闭通道：APP 不会本地求解，登录/评论会提示「人机验证暂不可用」；
+// 配了就必须是强密钥且与 ALTCHA_HMAC_KEY 隔离，避免「app_enabled=true 但签名永远不匹配」的静默失效。
 func checkAltchaAppSecret(cfg *config.Config) {
 	secret := strings.TrimSpace(cfg.AltchaAppSecret)
-	if secret == "" {
-		log.Println("[ALTCHA] APP 专用通道未配置（ALTCHA_APP_SECRET 为空），客户端将回退本地求解")
+	if !cfg.AltchaEnabled {
+		if secret != "" {
+			log.Println("[WARN] ALTCHA_APP_SECRET 已配置但 ALTCHA_ENABLED=false，零 PoW 通道不会生效")
+		}
+		log.Println("[ALTCHA] ALTCHA_ENABLED=false，人机验证整体关闭（/captcha/* 与 /captcha/app/* 一律 404 CAPTCHA_DISABLED）")
 		return
 	}
-	if !cfg.AltchaEnabled {
-		log.Println("[WARN] ALTCHA_APP_SECRET 已配置但 ALTCHA_ENABLED=false，通道不会生效")
+	if secret == "" {
+		// 关键告警：APP 端没有本地 PoW 求解器，通道缺失等同于 APP 无法完成人机验证。
+		log.Println("[WARN] ALTCHA_ENABLED=true 但 ALTCHA_APP_SECRET 为空：/captcha/app/* 将返回 404 CAPTCHA_DISABLED，APP 登录/评论将无法通过人机验证（APP 不会本地求解，将提示「人机验证暂不可用」）")
 		return
 	}
 	if len(secret) < 32 {
@@ -221,7 +226,12 @@ func checkAltchaAppSecret(cfg *config.Config) {
 	if secret == strings.TrimSpace(cfg.AltchaHMACKey) {
 		log.Fatalf("[FATAL] ALTCHA_APP_SECRET 不能与 ALTCHA_HMAC_KEY 相同（轮换会互相影响）")
 	}
-	log.Println("[ALTCHA] APP 专用零 PoW 通道已开启（/captcha/app/*）")
+	if strings.TrimSpace(cfg.AltchaHMACKey) == "" {
+		// 主密钥缺失时 AppEnabled() 恒为 false：即使配了 APP 密钥，两个端点仍 404。
+		log.Println("[WARN] ALTCHA_ENABLED=true 但 ALTCHA_HMAC_KEY 为空：challenge/grant 无法签发，/captcha/* 与 /captcha/app/* 均不可用（fail-closed）")
+		return
+	}
+	log.Println("[ALTCHA] APP 零 PoW 通道已开启（/captcha/app/*）")
 }
 
 // checkAvatarDir 检查旧头像目录是否可读；缺失只告警，不影响新头像（媒体服务）启动。

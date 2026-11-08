@@ -1,6 +1,8 @@
 # ouo API 端点索引（自动生成）
 
-> 由 `server/internal/handler/router.go` 提取；唯一 API 前缀为 `/ov2/api`。旧 `/api/v1` 别名与 `/api/*` 兼容层已于 2026-11-07 移除。
+> 由 `server/internal/handler/router.go` 与 `server/internal/handler/captcha.go`（`RegisterCaptchaRoutes`）提取；唯一 API 前缀为 `/ov2/api`。旧 `/api/v1` 别名与 `/api/*` 兼容层已于 2026-11-07 移除。
+>
+> 人机验证端点限流（按 IP）：`/captcha/challenge` 60 次/分、`/captcha/verify` 20 次/分；`/captcha/app/challenge` 30 次/分、`/captcha/app/verify` 12 次/分。两个 challenge 响应均带 `Cache-Control: no-store`。
 >
 > 用户列表分页：`GET /ov2/api/users/:id/posts`、`GET /ov2/api/users/:id/favorites`、`GET /ov2/api/users/:id/comments` 均返回 `has_more`（帖子/收藏为多取一条探测，评论由 `total` 计算）；字段与可见性说明见 `docs/api.md`「用户 Users」。
 
@@ -88,6 +90,11 @@
 | GET | `/ov2/api/easter-egg` | easter-egg |
 | POST | `/ov2/api/users/me/avatar` | users |
 | GET | `/ov2/api/avatar/:filename` | avatar |
+| GET | `/ov2/api/captcha/config` | captcha |
+| GET | `/ov2/api/captcha/challenge` | captcha |
+| POST | `/ov2/api/captcha/verify` | captcha |
+| GET | `/ov2/api/captcha/app/challenge` | captcha |
+| POST | `/ov2/api/captcha/app/verify` | captcha |
 | POST | `/api/login` | compat |
 | POST | `/api/register` | compat |
 | POST | `/api/logout` | compat |

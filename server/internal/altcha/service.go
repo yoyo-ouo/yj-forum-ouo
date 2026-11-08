@@ -312,7 +312,7 @@ func (s *Service) VerifyGrant(token string, ip ...string) bool {
 }
 
 // AppEnabled APP 专用验证通道是否可用：ALTCHA 已启用、HMAC 密钥已配置且配置了独立的 APP 密钥。
-// 通道关闭时两个端点统一返回 404 CAPTCHA_DISABLED，客户端据此回退 ALTCHA 求解。
+// 通道关闭时两个端点统一返回 404 CAPTCHA_DISABLED；APP 应提示「人机验证暂不可用」，不做本地求解。
 func (s *Service) AppEnabled() bool {
 	return s != nil && s.enabled && s.configured() && s.appSecret != ""
 }

@@ -210,3 +210,120 @@ func TestWorldDBCleanupKeepsNewest(t *testing.T) {
 		t.Fatalf("second cleanup deleted = %d, want 0", deleted)
 	}
 }
+
+// 创建消息时校验引用父消息：不存在或已删（status != 1）一律拒绝。
+func TestWorldDBCreateValidatesParent(t *testing.T) {
+	db := testDB(t)
+	resetWorldMessages(t, db)
+	author := newTestUser(t, db)
+	ctx := context.Background()
+
+	missing := int64(9_000_000_000)
+	if _, err := db.CreateWorldMessage(ctx, author, "<p>child</p>", "html", &missing); !errors.Is(err, ErrWorldParentNotFound) {
+		t.Fatalf("父消息不存在 err = %v, want ErrWorldParentNotFound", err)
+	}
+
+	// 直接插入父消息（绕过 2 秒发言限流），合法引用可发布。
+	var parentID int64
+	if err := db.QueryRow(ctx, `INSERT INTO world_messages (sender_id, sender_name, content, content_format)
+		VALUES ($1, $2, '<p>父</p>', 'html') RETURNING id`, author, author).Scan(&parentID); err != nil {
+		t.Fatalf("insert parent: %v", err)
+	}
+	sender := newTestUser(t, db) // 新用户避开 2 秒限流
+	childID, err := db.CreateWorldMessage(ctx, sender, "<p>子</p>", "html", &parentID)
+	if err != nil || childID == 0 {
+		t.Fatalf("合法引用创建失败: id=%d err=%v", childID, err)
+	}
+
+	// 父消息软删（status=0）后不可再被引用。
+	if _, err := db.Exec(ctx, `UPDATE world_messages SET status = 0 WHERE id = $1`, parentID); err != nil {
+		t.Fatalf("soft delete parent: %v", err)
+	}
+	another := newTestUser(t, db)
+	if _, err := db.CreateWorldMessage(ctx, another, "<p>子2</p>", "html", &parentID); !errors.Is(err, ErrWorldParentNotFound) {
+		t.Fatalf("父消息已删 err = %v, want ErrWorldParentNotFound", err)
+	}
+}
+
+// 列表与增量查询都批量附加 parent 摘要；父消息已删或不存在时保持 nil。
+func TestWorldDBListAttachesParents(t *testing.T) {
+	db := testDB(t)
+	resetWorldMessages(t, db)
+	uid := newTestUser(t, db)
+	ctx := context.Background()
+
+	insert := func(content string, parent *int64, status int) int64 {
+		t.Helper()
+		var id int64
+		if err := db.QueryRow(ctx, `INSERT INTO world_messages
+			(sender_id, sender_name, sender_avatar, content, content_format, parent_id, status)
+			VALUES ($1, '张三', '/avatar/z.png', $2, 'html', $3, $4) RETURNING id`,
+			uid, content, parent, status).Scan(&id); err != nil {
+			t.Fatalf("insert message: %v", err)
+		}
+		return id
+	}
+	parentID := insert("<p>父消息</p>", nil, 1)
+	childID := insert("<p>子消息</p>", &parentID, 1)
+	deletedParentID := insert("<p>已删父</p>", nil, 0)
+	orphanChildID := insert("<p>引用已删</p>", &deletedParentID, 1)
+	plainID := insert("<p>无引用</p>", nil, 1)
+
+	items, _, err := db.ListWorldMessages(ctx, 0, 0, 50)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	byID := make(map[int64]WorldMessage, len(items))
+	for _, m := range items {
+		byID[m.ID] = m
+	}
+	child, ok := byID[childID]
+	if !ok {
+		t.Fatalf("列表缺少子消息 %d", childID)
+	}
+	if child.Parent == nil {
+		t.Fatalf("子消息应附加 parent 摘要: %+v", child)
+	}
+	p := child.Parent
+	if p.ID != parentID || p.SenderName != "张三" || p.SenderAvatar != "/avatar/z.png" ||
+		p.Content != "<p>父消息</p>" || p.ContentFormat != "html" || p.CreatedAt.IsZero() {
+		t.Fatalf("parent 摘要 = %+v", p)
+	}
+	if byID[orphanChildID].Parent != nil {
+		t.Fatalf("父消息已删时 parent 应为 nil: %+v", byID[orphanChildID].Parent)
+	}
+	if byID[plainID].Parent != nil {
+		t.Fatalf("无引用时 parent 应为 nil: %+v", byID[plainID].Parent)
+	}
+
+	// 增量查询（SSE 首包/补发与 poller 广播链路复用）同样附加 parent。
+	after, err := db.ListWorldAfterID(ctx, parentID, 50)
+	if err != nil {
+		t.Fatalf("list after: %v", err)
+	}
+	var found bool
+	for _, m := range after {
+		if m.ID != childID {
+			continue
+		}
+		found = true
+		if m.Parent == nil || m.Parent.ID != parentID {
+			t.Fatalf("增量查询未附加 parent: %+v", m.Parent)
+		}
+	}
+	if !found {
+		t.Fatalf("增量查询缺少子消息 %d", childID)
+	}
+
+	// 批量读取去重 + 过滤已删/非法 id。
+	parents, err := db.GetWorldMessageParents(ctx, []int64{parentID, parentID, deletedParentID, 0, 9_000_000_000})
+	if err != nil {
+		t.Fatalf("get parents: %v", err)
+	}
+	if len(parents) != 1 {
+		t.Fatalf("父消息 map 应只含 1 条，got %+v", parents)
+	}
+	if got, ok := parents[parentID]; !ok || got.SenderName != "张三" {
+		t.Fatalf("parent 摘要 = %+v ok=%v", got, ok)
+	}
+}

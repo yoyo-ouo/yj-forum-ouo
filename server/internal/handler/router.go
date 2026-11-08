@@ -156,13 +156,14 @@ func registerAPIRoutes(api *gin.RouterGroup, h apiHandlers) {
 	api.POST("/users/me/sign-in", authH.AuthRequired(), authH.SignIn)
 	api.GET("/users/me/replies", authH.AuthRequired(), authH.MyReplies)
 	api.GET("/users/me/likes", authH.AuthRequired(), authH.MyLikes)
-	api.POST("/users/me/verify-email", authH.AuthRequired(), miscH.SendVerifyEmailCode)
+	api.POST("/users/me/verify-email", authH.AuthRequired(), middleware.RateLimit("verify_email_send", 5, 10*time.Minute), miscH.SendVerifyEmailCode)
 	api.POST("/users/me/verify-email/confirm", middleware.RateLimit("verify_email", 10, 5*time.Minute), authH.AuthRequired(), miscH.VerifyCodeEmail)
 	api.POST("/users/me/delete", middleware.RateLimit("account_delete", 5, 300*time.Second), authH.AuthRequired(), accountH.DeleteAccount)
-	api.POST("/users/me/email-change/code", middleware.RateLimit("email_change_code", 10, 10*time.Minute), authH.AuthRequired(), accountH.SendEmailChangeOldCode)
-	api.POST("/users/me/email-change/verify-old", h.emailChangeVerifyLimit, authH.AuthRequired(), accountH.VerifyEmailChangeOld)
-	api.POST("/users/me/email-change/new-code", middleware.RateLimit("email_change_new", 10, 10*time.Minute), authH.AuthRequired(), accountH.SendEmailChangeNewCode)
-	api.POST("/users/me/email-change/confirm", h.emailChangeVerifyLimit, authH.AuthRequired(), accountH.ConfirmEmailChange)
+	// 邮箱换绑：限流必须在 AuthRequired 之后，才能拿到 userID 按用户分桶（否则 NAT 下多人共享 IP 桶）。
+	api.POST("/users/me/email-change/code", authH.AuthRequired(), middleware.RateLimit("email_change_code", 10, 10*time.Minute), accountH.SendEmailChangeOldCode)
+	api.POST("/users/me/email-change/verify-old", authH.AuthRequired(), h.emailChangeVerifyLimit, accountH.VerifyEmailChangeOld)
+	api.POST("/users/me/email-change/new-code", authH.AuthRequired(), middleware.RateLimit("email_change_new", 10, 10*time.Minute), accountH.SendEmailChangeNewCode)
+	api.POST("/users/me/email-change/confirm", authH.AuthRequired(), h.emailChangeVerifyLimit, accountH.ConfirmEmailChange)
 	api.GET("/users/:id", authH.UserProfile)
 	api.GET("/users/:id/posts", authH.UserPosts)
 	api.GET("/users/:id/comments", authH.UserComments)
@@ -188,7 +189,7 @@ func registerAPIRoutes(api *gin.RouterGroup, h apiHandlers) {
 	api.POST("/posts/:id/like", postsH.AuthRequired(), postsH.Like)
 	api.POST("/posts/:id/favorite", postsH.AuthRequired(), postsH.Favorite)
 	api.POST("/posts/:id/delete", postsH.AuthRequired(), postsH.Delete)
-	api.POST("/posts/:id/report", postsH.AuthRequired(), postsH.Report)
+	api.POST("/posts/:id/report", postsH.AuthRequired(), middleware.RateLimit("post_report", 10, time.Hour), postsH.Report)
 
 	// ---- 评论 ----
 	api.GET("/posts/:id/comments", postsH.Comments)

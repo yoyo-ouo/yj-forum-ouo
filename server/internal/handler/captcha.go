@@ -50,6 +50,8 @@ func (h *CaptchaHandler) Challenge(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "CAPTCHA_UNAVAILABLE"})
 		return
 	}
+	// 挑战是一次性凭据（solution 与 challenge 绑定），不允许任何中间层/浏览器缓存。
+	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, challenge)
 }
 
@@ -84,7 +86,8 @@ func (h *CaptchaHandler) Verify(c *gin.Context) {
 }
 
 // AppChallenge GET /captcha/app/challenge：APP 专用挑战（零 PoW，仅需一次 HMAC）。
-// 通道未开启（未配置 ALTCHA_APP_SECRET）时返回 404 CAPTCHA_DISABLED，客户端据此回退 ALTCHA。
+// 通道未开启（未配置 ALTCHA_APP_SECRET）时返回 404 CAPTCHA_DISABLED；APP 没有本地求解器，
+// 应提示「人机验证暂不可用」，不能自行降级。
 func (h *CaptchaHandler) AppChallenge(c *gin.Context) {
 	if h == nil || h.Altcha == nil || !h.Altcha.AppEnabled() {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "CAPTCHA_DISABLED"})
@@ -178,8 +181,9 @@ func RegisterCaptchaRoutes(api *gin.RouterGroup, h *CaptchaHandler) {
 		h = &CaptchaHandler{}
 	}
 	api.GET("/captcha/config", h.Config)
-	api.GET("/captcha/challenge", h.Challenge)
-	api.POST("/captcha/verify", h.Verify)
+	// 标准 PoW 通道：求解成本高，挑战响应不可缓存；限流避免被当成 PoW 计算放大器刷。
+	api.GET("/captcha/challenge", middleware.RateLimit("captcha_challenge", 60, time.Minute), h.Challenge)
+	api.POST("/captcha/verify", middleware.RateLimit("captcha_verify", 20, time.Minute), h.Verify)
 	// APP 专用零 PoW 通道：挑战/校验都限流（verified 会写一行 altcha_used，必须控量），
 	// 正常客户端 5 分钟内至多几次，额度按 CGNAT 共享 IP 留余量。
 	api.GET("/captcha/app/challenge", middleware.RateLimit("captcha_app_challenge", 30, time.Minute), h.AppChallenge)

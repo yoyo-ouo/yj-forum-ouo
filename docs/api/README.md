@@ -28,8 +28,10 @@
 ## 3. 认证与 ALTCHA
 
 - 登录/注册/注册发码/忘记密码/重置提交/Bug 提交在 ALTCHA 启用时接受 `altcha`（Base64 payload）或 `grant`。
-- Android 客户端可走 APP 专用零 PoW 通道（`/captcha/app/challenge` + `/captcha/app/verify`，一次 HMAC 换 `grant`）；服务端未配置 `ALTCHA_APP_SECRET` 时该通道 404，客户端自动回退 ALTCHA 求解。详见 [auth.md](./auth.md)。
-- `GET /captcha/config` 返回是否启用；`GET /captcha/challenge` 返回官方 challenge；`POST /captcha/verify` 返回 5 分钟 grant。
+- Android 客户端走 APP 专用零 PoW 通道（`/captcha/app/challenge` + `/captcha/app/verify`，一次 HMAC 换 `grant`）；服务端未配置 `ALTCHA_APP_SECRET` 时该通道 404 `CAPTCHA_DISABLED`，**APP 不会本地求解，也不回退标准 ALTCHA，应提示「人机验证暂不可用」**。详见 [auth.md](./auth.md)。
+- `GET /captcha/config` 返回 `enabled` / `app_enabled`；`GET /captcha/challenge` 返回官方 challenge（`Cache-Control: no-store`）；`POST /captcha/verify` 返回 5 分钟 grant。
+- 限流：标准 challenge 60 次/分钟/IP、verify 20 次/分钟/IP；APP challenge 30 次/分钟/IP、verify 12 次/分钟/IP，超限 429。
+- 部署所需的 `ALTCHA_ENABLED` / `ALTCHA_HMAC_KEY` / `ALTCHA_APP_SECRET`（≥32 字符、与 APK 一致）与检查清单见 [deploy/README.md](../../deploy/README.md)。
 - 注册发码与注册提交都检查邮箱黑名单；命中返回 400 `{"success":false,"message":"邮箱异样"}`。
 
 ## 4. SSE

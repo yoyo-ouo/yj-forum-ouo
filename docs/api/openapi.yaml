@@ -16,6 +16,8 @@ tags:
   -
     name: "avatar"
   -
+    name: "captcha"
+  -
     name: "comments"
   -
     name: "compat"
@@ -3610,6 +3612,111 @@ paths:
       security:
         -
           legacyCookie:
+
+  /ov2/api/captcha/config:
+    get:
+      tags:
+        - "captcha"
+      summary: "GET /ov2/api/captcha/config"
+      operationId: "get_ov2_api_captcha_config"
+      responses:
+        200:
+          description: "OK（{success,enabled,app_enabled,algorithm,cost}）"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Unauthorized"
+        404:
+          description: "Not Found"
+        429:
+          description: "Too Many Requests"
+        500:
+          description: "Internal Server Error"
+      security:
+
+  /ov2/api/captcha/challenge:
+    get:
+      tags:
+        - "captcha"
+      summary: "GET /ov2/api/captcha/challenge"
+      operationId: "get_ov2_api_captcha_challenge"
+      responses:
+        200:
+          description: "OK（ALTCHA 官方 Challenge JSON，不包 success；Cache-Control: no-store）"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Unauthorized"
+        404:
+          description: "Not Found（CAPTCHA_DISABLED：ALTCHA 未启用）"
+        429:
+          description: "Too Many Requests（60 次/分钟/IP）"
+        500:
+          description: "Internal Server Error"
+      security:
+
+  /ov2/api/captcha/verify:
+    post:
+      tags:
+        - "captcha"
+      summary: "POST /ov2/api/captcha/verify"
+      operationId: "post_ov2_api_captcha_verify"
+      responses:
+        200:
+          description: "OK（{success,grant,expires_in:300}）"
+        400:
+          description: "Bad Request（CAPTCHA_REQUIRED）"
+        401:
+          description: "Unauthorized"
+        404:
+          description: "Not Found（CAPTCHA_DISABLED）"
+        429:
+          description: "Too Many Requests（20 次/分钟/IP）"
+        500:
+          description: "Internal Server Error"
+      security:
+
+  /ov2/api/captcha/app/challenge:
+    get:
+      tags:
+        - "captcha"
+      summary: "GET /ov2/api/captcha/app/challenge"
+      operationId: "get_ov2_api_captcha_app_challenge"
+      responses:
+        200:
+          description: "OK（{success,challenge(32 位 hex),timestamp,expires_in:120}；Cache-Control: no-store）"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Unauthorized"
+        404:
+          description: "Not Found（CAPTCHA_DISABLED：未配置 ALTCHA_APP_SECRET）"
+        429:
+          description: "Too Many Requests（30 次/分钟/IP）"
+        500:
+          description: "Internal Server Error"
+      security:
+
+  /ov2/api/captcha/app/verify:
+    post:
+      tags:
+        - "captcha"
+      summary: "POST /ov2/api/captcha/app/verify"
+      operationId: "post_ov2_api_captcha_app_verify"
+      responses:
+        200:
+          description: "OK（{success,grant,expires_in:300}）"
+        400:
+          description: "Bad Request（CAPTCHA_REQUIRED：签名错误/时间戳超窗/重放）"
+        401:
+          description: "Unauthorized"
+        404:
+          description: "Not Found（CAPTCHA_DISABLED）"
+        429:
+          description: "Too Many Requests（12 次/分钟/IP）"
+        500:
+          description: "Internal Server Error"
+      security:
 
 components:
   securitySchemes:

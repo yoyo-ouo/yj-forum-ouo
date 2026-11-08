@@ -422,3 +422,57 @@ func TestNilServiceAppChannel(t *testing.T) {
 		t.Fatalf("nil VerifyAppProof() = %v, %v, want false/ErrDisabled", ok, err)
 	}
 }
+
+// TestAppProofToGrantEndToEnd APP 零 PoW 通道端到端：挑战 → 一次 HMAC → 一次性 nonce → grant → 复用。
+func TestAppProofToGrantEndToEnd(t *testing.T) {
+	const secret = "app-e2e-secret-0123456789abcdef"
+	svc := newAppTestService(secret)
+	ctx := context.Background()
+
+	challenge, timestamp, err := svc.AppChallenge()
+	if err != nil {
+		t.Fatalf("AppChallenge() error = %v", err)
+	}
+	if len(challenge) != 32 {
+		t.Fatalf("challenge length = %d, want 32", len(challenge))
+	}
+
+	// 与 APK 相同的签名：hex(HMAC-SHA256(secret, "app-captcha:v1:<challenge>:<timestamp>"))。
+	sig := appProofSignature(secret, challenge, timestamp)
+	ok, err := svc.VerifyAppProof(ctx, challenge, timestamp, sig)
+	if err != nil || !ok {
+		t.Fatalf("VerifyAppProof() = %v, %v; want true, nil", ok, err)
+	}
+
+	// 通过后签发的 grant 与标准 ALTCHA 通道完全一致：绑定 IP、5 分钟有效。
+	grant, err := svc.Grant("203.0.113.7")
+	if err != nil {
+		t.Fatalf("Grant() error = %v", err)
+	}
+	if !svc.VerifyGrant(grant, "203.0.113.7") {
+		t.Fatal("grant must verify for the issuing IP")
+	}
+	if svc.VerifyGrant(grant, "198.51.100.9") {
+		t.Fatal("grant must be bound to the issuing IP")
+	}
+
+	// 同一 nonce 重放（签名依旧正确）必须失败。
+	if ok, err := svc.VerifyAppProof(ctx, challenge, timestamp, sig); ok || err != nil {
+		t.Fatalf("replay VerifyAppProof() = %v, %v; want false, nil", ok, err)
+	}
+}
+
+// TestAppProofSecretMismatch 服务端与 APK 密钥不一致时签名校验必须失败（不能静默放行）。
+func TestAppProofSecretMismatch(t *testing.T) {
+	svc := newAppTestService("server-side-secret-0123456789abcdef")
+	challenge, timestamp, err := svc.AppChallenge()
+	if err != nil {
+		t.Fatalf("AppChallenge() error = %v", err)
+	}
+	// 用另一个密钥（模拟 APK 内置的旧值）签名。
+	sig := appProofSignature("apk-side-secret-0123456789abcdef", challenge, timestamp)
+	ok, err := svc.VerifyAppProof(context.Background(), challenge, timestamp, sig)
+	if ok || err != nil {
+		t.Fatalf("VerifyAppProof() = %v, %v; want false, nil", ok, err)
+	}
+}

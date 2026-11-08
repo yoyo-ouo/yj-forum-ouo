@@ -11,9 +11,15 @@
 
 ## 1. ALTCHA v2 + 黑名单
 
-- `GET /captcha/config` → `{success,enabled,algorithm,cost}`。
-- `GET /captcha/challenge` → ALTCHA 官方 Challenge JSON（直接返回 library 的 challenge，不要包 success）。
-- `POST /captcha/verify` body `{altcha:"<base64 payload>"}` → `{success,grant:"<一次性 token>",expires_in:300}`；失败 400 `CAPTCHA_REQUIRED`。
+- `GET /captcha/config` → `{success,enabled,app_enabled,algorithm,cost}`。
+- `GET /captcha/challenge` → ALTCHA 官方 Challenge JSON（直接返回 library 的 challenge，不要包 success）；响应 `Cache-Control: no-store`；限流 60 次/分钟/IP。
+- `POST /captcha/verify` body `{altcha:"<base64 payload>"}` → `{success,grant:"<一次性 token>",expires_in:300}`；失败 400 `CAPTCHA_REQUIRED`；限流 20 次/分钟/IP。
+- APP 零 PoW 通道（协议冻结）：
+  - `GET /captcha/app/challenge` → `{success,challenge(32 位 hex),timestamp(Unix 秒),expires_in:120}`；限流 30 次/分钟/IP。
+  - `POST /captcha/app/verify` body `{challenge,timestamp,signature}` → `{success,grant,expires_in:300}`；限流 12 次/分钟/IP。
+  - `signature = hex(HMAC-SHA256(ALTCHA_APP_SECRET, "app-captcha:v1:<challenge>:<timestamp>"))`；±5 分钟时间窗；nonce 一次性（`altcha_used`，前缀 `app:`）。
+  - 未配置 `ALTCHA_APP_SECRET` 时两个端点 404 `CAPTCHA_DISABLED`；grant 与标准通道同构（5 分钟、绑定 IP、同一 `ALTCHA_HMAC_KEY`）。
+- 失败码：404 `CAPTCHA_DISABLED`（未启用/通道关闭）、400 `CAPTCHA_REQUIRED`（签名错/超窗/重放/缺字段）、429 限流、503 `CAPTCHA_UNAVAILABLE`（主密钥缺失或签发失败）。
 - 登录/注册/发码/忘记密码/重置提交/Bug 提交接受 `altcha` 或 `grant` 字段；兼容层跳过。
 - 黑名单命中：400 `{success:false,message:"邮箱异样"}`。
 

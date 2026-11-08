@@ -605,3 +605,14 @@ type EmbedCharacter struct {
 	Abilities   []string `json:"abilities"`
 	LikeCount   int      `json:"like_count"`
 }
+
+// WorldMessageParent 世界频道被引用消息的摘要（仅保留展示所需字段）。
+// 父消息已删除（status != 1）或不存在时，上层 parent 字段下发 null。
+type WorldMessageParent struct {
+	ID            int64     `json:"id"`
+	SenderName    string    `json:"sender_name"`
+	SenderAvatar  string    `json:"sender_avatar"`
+	Content       string    `json:"content"`
+	ContentFormat string    `json:"content_format"`
+	CreatedAt     time.Time `json:"created_at"`
+}

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"log"
 	"math/rand"
 	"net/http"
@@ -283,16 +284,22 @@ func (h *PostsHandler) awardPostSpirit(ctx context.Context, userID, postID strin
 // 供点赞/收藏/举报/评论等路径复用（GetPostPublishInfo 仅取发布状态，不含帖子正文）；
 // 软删帖与 Detail 行为一致，一律视为不可见，不能再评论/点赞/收藏/举报/读评论列表。
 func (h *PostsHandler) postVisible(c *gin.Context, postID, viewer string) bool {
+	_, ok := h.postAuthorVisible(c, postID, viewer)
+	return ok
+}
+
+// postAuthorVisible 同 postVisible，额外返回作者 id（举报需要判断是否自举报）。
+func (h *PostsHandler) postAuthorVisible(c *gin.Context, postID, viewer string) (string, bool) {
 	authorID, publishedAt, status, exists, err := h.DB.GetPostPublishInfo(c.Request.Context(), postID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
-		return false
+		return "", false
 	}
 	if !exists || status != 1 || (publishedAt.After(time.Now()) && viewer != authorID) {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "帖子不存在"})
-		return false
+		return "", false
 	}
-	return true
+	return authorID, true
 }
 
 // ProcessScheduledPublishes 定时补发任务：把到点的定时帖原子标记为已通知（每次至多 50 条），
@@ -516,8 +523,46 @@ func (h *PostsHandler) Delete(c *gin.Context) {
 // ---- POST /ov2/api/posts/:id/report ----
 
 type reportPostReq struct {
-	Reason string `json:"reason" binding:"required"`
+	// Reason 不做 binding 校验：空/非法值统一由 validateReportPayload 返回「举报原因无效」。
+	Reason string `json:"reason"`
 	Detail string `json:"detail"`
+}
+
+// maxReportDetailRunes 举报补充说明上限。
+const maxReportDetailRunes = 500
+
+// reportReasons 举报原因白名单（与前端选项一致）。
+var reportReasons = map[string]bool{
+	"spam":         true, // 垃圾广告
+	"abuse":        true, // 辱骂攻击
+	"porn":         true, // 色情低俗
+	"illegal":      true, // 违法违规
+	"infringement": true, // 侵权抄袭
+	"other":        true, // 其他
+}
+
+var (
+	errReportReasonInvalid = errors.New("举报原因无效")
+	errReportDetailTooLong = errors.New("详情不能超过500字")
+)
+
+// validateReportPayload 校验举报原因与补充说明：原因必须在白名单内，说明去首尾空白后不超过 500 字。
+// 返回归一化（去空白）后的原因与说明。
+func validateReportPayload(reason, detail string) (string, string, error) {
+	reason = strings.TrimSpace(reason)
+	if !reportReasons[reason] {
+		return "", "", errReportReasonInvalid
+	}
+	detail = strings.TrimSpace(detail)
+	if utf8.RuneCountInString(detail) > maxReportDetailRunes {
+		return "", "", errReportDetailTooLong
+	}
+	return reason, detail, nil
+}
+
+// isSelfReport 作者与举报人一致时视为自举报（禁止）。
+func isSelfReport(authorID, reporterID string) bool {
+	return authorID != "" && authorID == reporterID
 }
 
 // Report 举报帖子。
@@ -528,7 +573,8 @@ func (h *PostsHandler) Report(c *gin.Context) {
 		return
 	}
 	id := c.Param("id")
-	if !h.postVisible(c, id, uid) {
+	authorID, ok := h.postAuthorVisible(c, id, uid)
+	if !ok {
 		return
 	}
 	var req reportPostReq
@@ -536,11 +582,16 @@ func (h *PostsHandler) Report(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "参数错误"})
 		return
 	}
-	if len([]rune(req.Detail)) > 500 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "详情不能超过500字"})
+	reason, detail, err := validateReportPayload(req.Reason, req.Detail)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	if err := h.DB.ReportPost(c.Request.Context(), id, uid, req.Reason, req.Detail); err != nil {
+	if isSelfReport(authorID, uid) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "不能举报自己的帖子"})
+		return
+	}
+	if err := h.DB.ReportPost(c.Request.Context(), id, uid, reason, detail); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "举报失败"})
 		return
 	}

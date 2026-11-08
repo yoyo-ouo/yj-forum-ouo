@@ -92,6 +92,17 @@ func (h *MiscHandler) SendRegisterCode(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "验证码已发送"})
 }
 
+// verifyEmailResendCooldown 同一用户邮箱验证码重发冷却时间。
+const verifyEmailResendCooldown = 60 * time.Second
+
+// verifyEmailResendAllowed 上一条未使用验证码是否已过冷却期（last 为空表示从未发送）。
+func verifyEmailResendAllowed(last *time.Time, now time.Time) bool {
+	if last == nil || last.IsZero() {
+		return true
+	}
+	return now.Sub(*last) >= verifyEmailResendCooldown
+}
+
 // SendVerifyEmailCode 邮箱验证码（需登录）。
 func (h *MiscHandler) SendVerifyEmailCode(c *gin.Context) {
 	uid := h.userFromCookie(c)
@@ -102,6 +113,17 @@ func (h *MiscHandler) SendVerifyEmailCode(c *gin.Context) {
 	u, err := h.DB.GetUserByID(c.Request.Context(), uid)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "用户不存在"})
+		return
+	}
+	// 发送侧冷却：60 秒内已发过未使用的验证码则拒绝，避免重复点发或绕过邮件隐私限流。
+	last, err := h.DB.LastUnusedVerifyCodeAt(c.Request.Context(), u.Email, "email_verify")
+	if err != nil {
+		log.Printf("[CODE] email_verify last query failed (%s): %v", u.Email, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "服务器错误"})
+		return
+	}
+	if !verifyEmailResendAllowed(last, time.Now()) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"success": false, "message": "发送太频繁，请稍后再试"})
 		return
 	}
 	code := genCode(6)

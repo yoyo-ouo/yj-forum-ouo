@@ -94,6 +94,41 @@ systemctl status yj-forum
 > chown yoyo:yoyo /var/yj-forum/media   # 改为实际运行用户
 > ```
 
+## 二·五、人机验证（ALTCHA / APP 零 PoW 通道）
+
+登录/注册/发码/重置密码/Bug 提交在 `ALTCHA_ENABLED=true` 时都需要 `altcha` 或 `grant`。浏览器走标准 PoW；Android 走 APP 专用零 PoW 通道（一次 HMAC 换 grant）。
+
+### 环境变量（server/.env）
+
+| 变量 | 必填 | 说明 |
+|---|---|---|
+| `ALTCHA_ENABLED` | 是（启用时） | `true` 开启；`false` 时 `/captcha/*` 与 `/captcha/app/*` 全部 404 `CAPTCHA_DISABLED` |
+| `ALTCHA_HMAC_KEY` | 是 | 签发 challenge/grant 的主密钥；启用时不能为空（否则 challenge 返回 503 `CAPTCHA_UNAVAILABLE`） |
+| `ALTCHA_APP_SECRET` | APP 必需 | APP 通道密钥，**≥32 字符**、不能与 `ALTCHA_HMAC_KEY` 相同，且必须与 APK 内置值一致；生成：`openssl rand -hex 32` |
+| `ALTCHA_ALGORITHM` / `ALTCHA_COST` / `ALTCHA_EXPIRES_SECONDS` | 否 | 标准通道参数，默认 `PBKDF2/SHA-256` / `5000` / `600` |
+
+> 密钥写成无引号、无空白、无 `$` 的纯 ASCII：同一份 `.env` 同时被 godotenv 与 systemd `EnvironmentFile` 解析。改完必须 `systemctl restart yj-forum`。
+
+### 部署检查清单
+
+1. **服务端先行**：先上代码 + `server/.env`，再发 APK；旧 APK 不受影响（走标准通道）。
+2. **启动日志**：
+   - 正常：`[ALTCHA] APP 零 PoW 通道已开启（/captcha/app/*）`
+   - 启用但缺 APP 密钥：`[WARN] ALTCHA_ENABLED=true 但 ALTCHA_APP_SECRET 为空：/captcha/app/* 将返回 404 CAPTCHA_DISABLED，APP 登录/评论将无法通过人机验证（APP 不会本地求解，将提示「人机验证暂不可用」）`
+   - 启用但缺主密钥：`[WARN] ALTCHA_ENABLED=true 但 ALTCHA_HMAC_KEY 为空：challenge/grant 无法签发，/captcha/* 与 /captcha/app/* 均不可用（fail-closed）`
+   - 密钥过短/与主密钥相同：启动直接 `[FATAL]` 退出（避免「challenge 200、verify 400」的静默失效）
+   - 未启用：`[ALTCHA] ALTCHA_ENABLED=false，人机验证整体关闭（... 一律 404 CAPTCHA_DISABLED）`
+3. **接口自检**：
+   ```bash
+   curl -s https://<域名>/ov2/api/captcha/config
+   # 期望 {"success":true,"enabled":true,"app_enabled":true,...}
+   curl -s -D- -o /dev/null https://<域名>/ov2/api/captcha/app/challenge
+   # 期望 200 + cache-control: no-store，body 含 32 位 hex challenge 与 timestamp
+   ```
+4. **密钥一致性**：GitHub Actions Secrets 的 `ALTCHA_APP_SECRET` 与生产 `server/.env` 必须一致（APK 构建时注入）。不一致的表现：challenge 200、verify 400 `CAPTCHA_REQUIRED`。
+5. **关闭通道**：清空 `ALTCHA_APP_SECRET` 并重启（无需发版）；此后 APP 侧人机验证不可用，**不会本地求解/回退标准 PoW**。
+6. **限流**：标准 challenge 60 次/分/IP、verify 20 次/分/IP；APP challenge 30 次/分/IP、verify 12 次/分/IP（超限 429）。
+
 ## 三、前端部署（Next.js）
 
 ```bash
@@ -157,8 +192,8 @@ curl -I http://127.0.0.1:3000/
 | `AVATAR_DIR` | server/.env | 头像存储目录 |
 | `MEDIA_DIR` | server/.env | 旧用户媒体存储目录（S3 未启用时新上传也落此）；默认 `/var/yj-forum/media`；需可写 |
 | `S3_ENABLED` / `S3_ENDPOINT` / `S3_BUCKET` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` | server/.env（ouo + admin） | SeaweedFS S3；新上传写 S3；未启用回退本地/GridFS |
-| `ALTCHA_ENABLED` / `ALTCHA_HMAC_KEY` | server/.env | ALTCHA v2；启用时登录/注册/发码/重置/Bug 提交需要 challenge/grant |
-| `ALTCHA_APP_SECRET` | server/.env | APP 专用零 PoW 通道密钥（与 `ALTCHA_HMAC_KEY` 隔离）；留空则 `/captcha/app/*` 返回 404，客户端回退 ALTCHA 求解 |
+| `ALTCHA_ENABLED` / `ALTCHA_HMAC_KEY` | server/.env | ALTCHA v2；启用时登录/注册/发码/重置/Bug 提交需要 challenge/grant；`ALTCHA_HMAC_KEY` 启用时必填 |
+| `ALTCHA_APP_SECRET` | server/.env | APP 专用零 PoW 通道密钥（≥32 字符、与 `ALTCHA_HMAC_KEY` 不同且与 APK 内置值一致）；留空则 `/captcha/app/*` 返回 404，APP 不会本地求解，会提示「人机验证暂不可用」（详见「二·五」） |
 | `GITHUB_TOKEN` | server/.env | 下载页 GitHub Releases 可选 token（提高限额） |
 | `PUBLIC_BASE_URL` | server/.env | 邮件中链接的站点地址 |
 | `API_TARGET` | web/.env | Next rewrites 的 Go 地址（构建时写进路由清单）兼服务端 SSR/SEO 直连地址（运行期读取；生产由 Nginx 分发 API） |
