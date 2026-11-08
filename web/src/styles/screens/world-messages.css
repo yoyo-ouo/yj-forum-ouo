@@ -643,7 +643,7 @@ span.wd-name { cursor: default; }
 
 .ms-icon--team {
   background: var(--color-bg-icon);
-  color: var(--color-primary);
+  color: var(--m-accent-ink);
 }
 
 .ms-item-body {

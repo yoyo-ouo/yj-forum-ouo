@@ -190,6 +190,24 @@
   font-size: 11px;
   color: var(--color-text-tertiary);
 }
+/* 帖子所在会馆（空间）标签：带房子图标，与作者身份 chip 区分 */
+.feed-space {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 116px;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.feed-space svg { flex: 0 0 auto; opacity: .85; }
 .feed-card-title {
   margin: 10px 0 0;
   font-size: 15.5px;

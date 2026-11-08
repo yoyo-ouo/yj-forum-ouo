@@ -27,6 +27,9 @@ function FeedCard({ post }: { post: Post }) {
   const author = post.user_name || post.author_name || "论坛用户";
   const summary = post.summary || stripHtml(post.content || "");
   const color = categoryColor(post.category);
+  const spaceName = post.guild_name || "";
+  // 作者所属会馆与帖子所在会馆相同时，只展示一次，避免两个同名 chip
+  const authorGuild = post.user_guild_name && post.user_guild_name !== spaceName ? post.user_guild_name : "";
   const open = () => push("post", { id: post.id });
 
   return (
@@ -47,8 +50,8 @@ function FeedCard({ post }: { post: Post }) {
         <Avatar src={post.user_avatar || post.author_avatar} name={author} size={36} />
         <div className="feed-card-who">
           <span className="feed-card-name">{author}</span>
-          {post.user_guild_name ? (
-            <span className="feed-guild" style={guildTint(post.user_guild_theme_color)}>{post.user_guild_name}</span>
+          {authorGuild ? (
+            <span className="feed-guild" style={guildTint(post.user_guild_theme_color)}>{authorGuild}</span>
           ) : null}
         </div>
         <span className="feed-card-time">{timeAgo(post.published_at || post.created_at)}</span>
@@ -59,6 +62,12 @@ function FeedCard({ post }: { post: Post }) {
         <span className="feed-cat" style={{ background: color, color: contrastText(color) }}>
           {CATEGORY_LABELS[post.category || ""] || "综合"}
         </span>
+        {spaceName ? (
+          <span className="feed-space" style={guildTint(post.guild_theme_color)}>
+            <Icon name="home" size={11} />
+            {spaceName}
+          </span>
+        ) : null}
         <span className="feed-stats">
           <span><Icon name="eye" size={12} />{post.views ?? 0}</span>
           <span><Icon name="like" size={12} />{post.likes ?? 0}</span>

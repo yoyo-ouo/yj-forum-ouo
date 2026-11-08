@@ -185,7 +185,7 @@
   display: grid;
   place-items: center;
   background: var(--color-bg-icon);
-  color: var(--color-primary);
+  color: var(--m-accent-ink);
 }
 .me-quick-label {
   font-size: 12px;
@@ -257,7 +257,7 @@
   place-items: center;
   border-radius: 10px;
   background: var(--color-bg-icon);
-  color: var(--color-primary);
+  color: var(--m-accent-ink);
 }
 .st-row-label {
   flex: 1 1 auto;
