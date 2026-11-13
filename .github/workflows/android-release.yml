@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'Android-V*'
+  release:
+    types:
+      - published
   workflow_dispatch:
 
 permissions:
