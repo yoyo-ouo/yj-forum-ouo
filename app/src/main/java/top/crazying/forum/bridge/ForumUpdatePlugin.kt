@@ -172,7 +172,7 @@ class ForumUpdatePlugin : Plugin() {
     }
 
     private fun githubCheck(current: String): JSObject? {
-        // 客户端安装包统一发布在 NSH 仓库；tag 固定为 Android-V<versionName>
+        // 客户端安装包统一发布在 NSH 仓库：tag 只放版本号，平台由附件名区分
         val response = client.absoluteGet(
             "https://api.github.com/repos/yoyo-ouo/yj-forum-nsh/releases?per_page=30",
             mapOf("X-GitHub-Api-Version" to "2022-11-28"),
@@ -181,16 +181,13 @@ class ForumUpdatePlugin : Plugin() {
         for (i in 0 until array.length()) {
             val release = array.optJSONObject(i) ?: continue
             if (release.optBoolean("draft")) continue
-            val tag = release.optString("tag_name").trim()
-            val prefix = "Android-V"
-            if (!tag.startsWith(prefix, ignoreCase = true)) continue
-            val version = tag.substring(prefix.length).trim()
-            if (version.isEmpty() || VersionCompare.compare(version, current) <= 0) continue
+            val version = parseVersionTag(release.optString("tag_name")) ?: continue
+            if (VersionCompare.compare(version, current) <= 0) continue
             val assets = release.optJSONArray("assets") ?: continue
             for (j in 0 until assets.length()) {
                 val asset = assets.optJSONObject(j) ?: continue
                 val name = asset.optString("name")
-                if (!name.endsWith(".apk", ignoreCase = true)) continue
+                if (!isAndroidAsset(name)) continue
                 val digest = asset.optString("digest").removePrefix("sha256:")
                 val notes = release.optString("body").lineSequence()
                     .map(String::trim)
@@ -215,6 +212,18 @@ class ForumUpdatePlugin : Plugin() {
             }
         }
         return null
+    }
+
+    // tag 只放版本号：v1.3.18 / 1.3.18 / v1.4.0-beta
+    private val versionTagRegex = Regex("^[vV]?(\\d+(?:\\.\\d+)*)")
+
+    private fun parseVersionTag(tag: String): String? =
+        versionTagRegex.find(tag.trim())?.groupValues?.get(1)?.takeIf { it.isNotEmpty() }
+
+    // Android 安装包：文件名含 android 或以 .apk 结尾（NSH 一次构建多平台）
+    private fun isAndroidAsset(name: String): Boolean {
+        val lower = name.lowercase()
+        return lower.contains("android") || lower.endsWith(".apk")
     }
 
     private fun notifyProgress(received: Long, total: Long, percent: Int, url: String) {
