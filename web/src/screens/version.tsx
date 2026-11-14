@@ -90,12 +90,21 @@ export function VersionScreen() {
       setPercent(Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0);
     });
     try {
+      // 公共镜像：服务端下发前缀，拼 GitHub 直链作为备用下载候选（原生插件会逐个重试）
+      const mirrors = await api
+        .downloadsMirrors()
+        .then((data) =>
+          (data?.items || [])
+            .map((item) => `${String(item.prefix).replace(/\/+$/, "")}/${String(release.url).replace(/^\/+/, "")}`)
+            .filter((url) => Boolean(release.url)),
+        )
+        .catch(() => [] as string[]);
       const res = await downloadUpdate({
         url: release.url,
         filename: release.filename,
         size: release.size,
         sha256: release.sha256,
-        mirrors: [],
+        mirrors,
       });
       setPath(res.path);
       setPercent(100);

@@ -385,6 +385,10 @@ export const api = {
   downloadsReleases(page = 1, pageSize = 20) {
     return request<any>("GET", "/downloads/releases", { platform: "android", page, page_size: pageSize });
   },
+  /** 公共镜像前缀（服务端可配置） */
+  downloadsMirrors() {
+    return request<{ success: boolean; items: { name: string; prefix: string }[] }>("GET", "/downloads/mirrors");
+  },
 
   /* ---------------- 帖子草稿（全部需登录，服务端按 user_id 隔离） ---------------- */
 

@@ -172,18 +172,20 @@ class ForumUpdatePlugin : Plugin() {
     }
 
     private fun githubCheck(current: String): JSObject? {
+        // 客户端安装包统一发布在 NSH 仓库；tag 固定为 Android-V<versionName>
         val response = client.absoluteGet(
-            "https://api.github.com/repos/yoyo-uo0/yj-forum-ouo/releases?per_page=30",
+            "https://api.github.com/repos/yoyo-ouo/yj-forum-nsh/releases?per_page=30",
             mapOf("X-GitHub-Api-Version" to "2022-11-28"),
         )
         val array = response.data as? JSONArray ?: return null
         for (i in 0 until array.length()) {
             val release = array.optJSONObject(i) ?: continue
             if (release.optBoolean("draft")) continue
-            val tag = release.optString("tag_name")
-            if (!tag.startsWith("Android-V")) continue
-            val version = tag.removePrefix("Android-V")
-            if (VersionCompare.compare(version, current) <= 0) continue
+            val tag = release.optString("tag_name").trim()
+            val prefix = "Android-V"
+            if (!tag.startsWith(prefix, ignoreCase = true)) continue
+            val version = tag.substring(prefix.length).trim()
+            if (version.isEmpty() || VersionCompare.compare(version, current) <= 0) continue
             val assets = release.optJSONArray("assets") ?: continue
             for (j in 0 until assets.length()) {
                 val asset = assets.optJSONObject(j) ?: continue
