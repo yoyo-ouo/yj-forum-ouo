@@ -49,12 +49,13 @@ func TestParseGitHubReleases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	if result.Total != 4 || len(result.Items) != 4 {
-		t.Fatalf("total=%d items=%d, want 4/4", result.Total, len(result.Items))
+	// 每个 Release 按平台拆成多条：1.4.0-beta 三平台 + 1.3.18 三平台 + 1.0.16 + 1.0.0
+	if result.Total != 8 || len(result.Items) != 8 {
+		t.Fatalf("total=%d items=%d, want 8/8", result.Total, len(result.Items))
 	}
-	// 按发布时间降序：beta → windows stable → android → linux
-	if result.Items[0].Version != "1.4.0" || result.Items[0].Channel != "beta" {
-		t.Errorf("first = %s/%s, want 1.4.0/beta", result.Items[0].Version, result.Items[0].Channel)
+	// 按发布时间降序；同一 Release 内按首选附件名排序（android < linux < windows）
+	if result.Items[0].Version != "1.4.0" || result.Items[0].Channel != "beta" || result.Items[0].Platform != PlatformAndroid {
+		t.Errorf("first = %s/%s/%s, want 1.4.0/beta/android", result.Items[0].Version, result.Items[0].Channel, result.Items[0].Platform)
 	}
 
 	var win *Release
@@ -75,10 +76,10 @@ func TestParseGitHubReleases(t *testing.T) {
 	if win.Size != 158186366 {
 		t.Errorf("size = %d", win.Size)
 	}
-	if win.Filename != "forum_setup.exe" {
+	if win.Filename != "yj-forum-windows.zip" {
 		t.Errorf("filename = %q", win.Filename)
 	}
-	if win.URL != "https://github.com/crazying-dev/forum/releases/download/Windows-V1.3.18/forum_setup.exe" {
+	if win.URL != "https://github.com/yoyo-ouo/yj-forum-nsh/releases/download/v1.3.18/yj-forum-windows.zip" {
 		t.Errorf("url = %q", win.URL)
 	}
 	if win.SHA256 != "1a78cd3930a7ebe7f3f28bb48689131a33e4762a7a304a159b67af2710e6e672" {
@@ -101,8 +102,12 @@ func TestParseGitHubReleases(t *testing.T) {
 			android = &result.Items[i]
 		}
 	}
-	if android == nil || android.Version != "1.0.16" || android.Filename != "forum-android-1.0.16.apk" {
+	if android == nil || android.Version != "1.0.16" || android.Filename != "yj-forum-android-1.0.16.apk" {
 		t.Errorf("android = %#v", android)
+	}
+	// 同一 Release 的其它平台资产不应混入 android 条目
+	if android != nil && len(android.assets) != 1 {
+		t.Errorf("android assets = %d, want 1", len(android.assets))
 	}
 }
 
@@ -113,17 +118,17 @@ func TestListPagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r1.Total != 4 || len(r1.Items) != 2 || r1.Page != 1 || r1.PageSize != 2 {
+	if r1.Total != 8 || len(r1.Items) != 2 || r1.Page != 1 || r1.PageSize != 2 {
 		t.Fatalf("page1 = %+v", r1)
 	}
 	r2, err := svc.List(2, 2, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r2.Items) != 2 || r2.Items[0].Platform != PlatformAndroid {
+	if len(r2.Items) != 2 || r2.Items[0].Platform != PlatformWindows || r2.Items[0].Version != "1.4.0" {
 		t.Fatalf("page2 = %+v", r2.Items)
 	}
-	r3, err := svc.List(3, 2, "")
+	r3, err := svc.List(5, 2, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,6 +142,13 @@ func TestListPagination(t *testing.T) {
 	}
 	if win.Total != 2 || len(win.Items) != 2 {
 		t.Fatalf("windows total=%d len=%d", win.Total, len(win.Items))
+	}
+	androidList, err := svc.List(1, 20, "android")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if androidList.Total != 3 {
+		t.Fatalf("android total=%d, want 3", androidList.Total)
 	}
 
 	// page/pageSize 非法时回默认值
@@ -223,24 +235,24 @@ func TestCheck426Fields(t *testing.T) {
 func TestFindAsset(t *testing.T) {
 	svc, _ := newTestService(t, fixture(t), http.StatusOK)
 
-	asset, err := svc.FindAsset(PlatformWindows, "forum_setup.exe")
+	asset, err := svc.FindAsset(PlatformWindows, "yj-forum-windows.zip")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// 同名文件存在 beta 与 stable：优先 stable 1.3.18
-	if asset.Version != "1.3.18" || !strings.Contains(asset.URL, "Windows-V1.3.18") {
+	if asset.Version != "1.3.18" || !strings.Contains(asset.URL, "v1.3.18") {
 		t.Fatalf("asset = %+v", asset)
 	}
 	if asset.Size != 158186366 || asset.SHA256 == "" {
 		t.Errorf("asset size/sha = %d/%q", asset.Size, asset.SHA256)
 	}
 
-	portable, err := svc.FindAsset(PlatformWindows, "forum-windows-portable.zip")
+	portable, err := svc.FindAsset(PlatformWindows, "yj-forum-windows-portable.zip")
 	if err != nil || portable.Version != "1.3.18" {
 		t.Fatalf("portable = %+v err=%v", portable, err)
 	}
 
-	if _, err := svc.FindAsset(PlatformAndroid, "forum_setup.exe"); !errors.Is(err, ErrAssetNotFound) {
+	if _, err := svc.FindAsset(PlatformAndroid, "yj-forum-windows.zip"); !errors.Is(err, ErrAssetNotFound) {
 		t.Fatalf("wrong platform err = %v", err)
 	}
 	if _, err := svc.FindAsset(PlatformWindows, "../../etc/passwd"); !errors.Is(err, ErrAssetNotFound) {
@@ -278,26 +290,44 @@ func TestFetchErrorReturnsError(t *testing.T) {
 	}
 }
 
-func TestParseTagAndVersions(t *testing.T) {
+func TestParseVersionTagAndAssetPlatform(t *testing.T) {
 	cases := []struct {
-		tag      string
-		platform string
-		version  string
-		ok       bool
+		tag     string
+		version string
+		ok      bool
 	}{
-		{"Windows-V1.3.18", PlatformWindows, "1.3.18", true},
-		{"Android-V1.0.16", PlatformAndroid, "1.0.16", true},
-		{"macOS-V2.0.0", PlatformMacOS, "2.0.0", true},
-		{"Linux-v0.9", PlatformLinux, "0.9", true},
-		{"Windows-V1.4.0-beta", PlatformWindows, "1.4.0", true},
-		{"Docs-2026", "", "", false},
-		{"Windows-1.3.18", PlatformWindows, "1.3.18", true},
-		{"", "", "", false},
+		{"v1.3.18", "1.3.18", true},
+		{"1.0.16", "1.0.16", true},
+		{"V2.0.0", "2.0.0", true},
+		{"v1.4.0-beta", "1.4.0", true},
+		{"v2.0.0+build.5", "2.0.0", true},
+		{"Windows-V1.3.18", "", false}, // 旧式平台前缀标签不再支持
+		{"Docs-2026", "", false},
+		{"", "", false},
 	}
 	for _, tc := range cases {
-		platform, version, ok := parseTag(tc.tag)
-		if ok != tc.ok || platform != tc.platform || version != tc.version {
-			t.Errorf("parseTag(%q) = %q/%q/%v, want %q/%q/%v", tc.tag, platform, version, ok, tc.platform, tc.version, tc.ok)
+		version, ok := parseVersionTag(tc.tag)
+		if ok != tc.ok || version != tc.version {
+			t.Errorf("parseVersionTag(%q) = %q/%v, want %q/%v", tc.tag, version, ok, tc.version, tc.ok)
+		}
+	}
+
+	platforms := []struct {
+		name     string
+		platform string
+	}{
+		{"yj-forum-windows-1.2.0.zip", PlatformWindows},
+		{"yj-forum-android-1.2.0.apk", PlatformAndroid},
+		{"yj-forum-linux-1.2.0.tar.gz", PlatformLinux},
+		{"yj-forum-macos-1.2.0.dmg", PlatformMacOS},
+		{"setup.exe", PlatformWindows},
+		{"app.apk", PlatformAndroid},
+		{"latest.json", ""},
+		{"checksums.sha256", ""},
+	}
+	for _, tc := range platforms {
+		if got := assetPlatform(tc.name); got != tc.platform {
+			t.Errorf("assetPlatform(%q) = %q, want %q", tc.name, got, tc.platform)
 		}
 	}
 

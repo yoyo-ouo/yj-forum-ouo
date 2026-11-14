@@ -13,28 +13,36 @@ import (
 
 const downloadsFixture = `[
   {
-    "tag_name": "Windows-V1.3.18",
+    "tag_name": "v1.3.18",
     "body": "- 修复 A",
     "draft": false,
     "prerelease": false,
     "published_at": "2026-10-10T08:00:00Z",
-    "assets": [{
-      "name": "forum_setup.exe",
-      "size": 158186366,
-      "browser_download_url": "https://github.com/crazying-dev/forum/releases/download/Windows-V1.3.18/forum_setup.exe",
-      "digest": "sha256:1a78cd3930a7ebe7f3f28bb48689131a33e4762a7a304a159b67af2710e6e672"
-    }]
+    "assets": [
+      {
+        "name": "yj-forum-windows.zip",
+        "size": 158186366,
+        "browser_download_url": "https://github.com/yoyo-ouo/yj-forum-nsh/releases/download/v1.3.18/yj-forum-windows.zip",
+        "digest": "sha256:1a78cd3930a7ebe7f3f28bb48689131a33e4762a7a304a159b67af2710e6e672"
+      },
+      {
+        "name": "yj-forum-android-1.3.18.apk",
+        "size": 8152504,
+        "browser_download_url": "https://github.com/yoyo-ouo/yj-forum-nsh/releases/download/v1.3.18/yj-forum-android-1.3.18.apk",
+        "digest": "sha256:1bedfc7f3e29a616d217762a9907f846f2d17cf1eb843cf90fd041010b2cdd61"
+      }
+    ]
   },
   {
-    "tag_name": "Android-V1.0.16",
+    "tag_name": "v1.0.16",
     "body": "- 修复 B",
     "draft": false,
     "prerelease": false,
     "published_at": "2026-10-09T08:00:00Z",
     "assets": [{
-      "name": "forum-android-1.0.16.apk",
+      "name": "yj-forum-android-1.0.16.apk",
       "size": 8152504,
-      "browser_download_url": "https://github.com/crazying-dev/forum/releases/download/Android-V1.0.16/forum-android-1.0.16.apk",
+      "browser_download_url": "https://github.com/yoyo-ouo/yj-forum-nsh/releases/download/v1.0.16/yj-forum-android-1.0.16.apk",
       "digest": "sha256:1bedfc7f3e29a616d217762a9907f846f2d17cf1eb843cf90fd041010b2cdd61"
     }]
   }
@@ -82,7 +90,7 @@ func TestDownloadsCheckFields(t *testing.T) {
 	if body.Current != "1.3.0" || body.Latest != "1.3.18" || body.MinVersion != "1.3.18" {
 		t.Errorf("current/latest/min = %q/%q/%q", body.Current, body.Latest, body.MinVersion)
 	}
-	if body.Release == nil || body.Release.Filename != "forum_setup.exe" {
+	if body.Release == nil || body.Release.Filename != "yj-forum-windows.zip" {
 		t.Errorf("release = %#v", body.Release)
 	}
 	if body.DownloadURL == "" {

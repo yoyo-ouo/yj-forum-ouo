@@ -387,18 +387,48 @@ func (s *Service) fetchPage(page int) ([]githubRelease, error) {
 	return raw, nil
 }
 
-// tagRe 解析平台标签：Windows-V1.3.18 / Android-V1.0.16（允许 beta 等后缀）。
-var tagRe = regexp.MustCompile(`(?i)^(windows|android|linux|macos)-v?(\d+(?:\.\d+)*)(?:[-+][0-9A-Za-z._-]+)?$`)
+// versionTagRe 解析版本标签：v1.3.18 / 1.3.18 / v1.4.0-beta。
+//
+// NSH 一次构建多平台，一个 Release 里同时带 Windows/Android/Linux 安装包，
+// 因此 tag 只放版本号，平台由附件名识别（见 assetPlatform）。
+var versionTagRe = regexp.MustCompile(`(?i)^v?(\d+(?:\.\d+)*)(?:[-+][0-9A-Za-z._-]+)?$`)
 
 // assetNameRe 附件名白名单（防目录穿越）。
 var assetNameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
-func parseTag(tag string) (platform, version string, ok bool) {
-	m := tagRe.FindStringSubmatch(strings.TrimSpace(tag))
+func parseVersionTag(tag string) (version string, ok bool) {
+	m := versionTagRe.FindStringSubmatch(strings.TrimSpace(tag))
 	if m == nil {
-		return "", "", false
+		return "", false
 	}
-	return strings.ToLower(m[1]), m[2], true
+	return m[1], true
+}
+
+// assetPlatform 按附件名判断平台：文件名关键词优先，扩展名兜底。
+//
+// 文件名示例：yj-forum-windows-1.2.0.zip / yj-forum-android-1.2.0.apk /
+// yj-forum-linux-1.2.0.tar.gz。无关键词的裸 .zip 按 Windows 处理。
+func assetPlatform(name string) string {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if lower == "" {
+		return ""
+	}
+	switch {
+	case strings.Contains(lower, "android"), strings.HasSuffix(lower, ".apk"), strings.HasSuffix(lower, ".aab"):
+		return PlatformAndroid
+	case strings.Contains(lower, "windows"), strings.HasSuffix(lower, ".exe"), strings.HasSuffix(lower, ".msi"):
+		return PlatformWindows
+	case strings.Contains(lower, "linux"), strings.HasSuffix(lower, ".appimage"),
+		strings.HasSuffix(lower, ".deb"), strings.HasSuffix(lower, ".rpm"), strings.HasSuffix(lower, ".tar.gz"):
+		return PlatformLinux
+	case strings.Contains(lower, "macos"), strings.Contains(lower, "darwin"),
+		strings.HasSuffix(lower, ".dmg"), strings.HasSuffix(lower, ".pkg"):
+		return PlatformMacOS
+	case strings.HasSuffix(lower, ".zip"):
+		// 无平台关键词的裸 zip：NSH 的 Windows 产物是 zip
+		return PlatformWindows
+	}
+	return ""
 }
 
 func parseReleases(raw []githubRelease) []Release {
@@ -407,15 +437,14 @@ func parseReleases(raw []githubRelease) []Release {
 		if gr.Draft {
 			continue
 		}
-		platform, version, ok := parseTag(gr.TagName)
+		version, ok := parseVersionTag(gr.TagName)
 		if !ok {
 			continue
 		}
-		assets := parseAssets(platform, version, gr.Assets)
-		if len(assets) == 0 {
+		grouped := groupAssetsByPlatform(version, gr.Assets)
+		if len(grouped) == 0 {
 			continue
 		}
-		primary := pickPrimaryAsset(platform, assets)
 		channel := "stable"
 		if gr.Prerelease {
 			channel = "beta"
@@ -424,20 +453,25 @@ func parseReleases(raw []githubRelease) []Release {
 		if !gr.PublishedAt.IsZero() {
 			date = gr.PublishedAt.UTC().Format("2006-01-02")
 		}
-		out = append(out, Release{
-			Version:       version,
-			Channel:       channel,
-			Date:          date,
-			Size:          primary.Size,
-			URL:           primary.URL,
-			Filename:      primary.Filename,
-			SHA256:        primary.SHA256,
-			Notes:         parseNotes(gr.Body),
-			NotesMarkdown: gr.Body,
-			Platform:      platform,
-			PublishedAt:   gr.PublishedAt,
-			assets:        assets,
-		})
+		notes := parseNotes(gr.Body)
+		// 同一个 Release 按平台拆成多条，各平台共用版本/日期/更新说明
+		for platform, assets := range grouped {
+			primary := pickPrimaryAsset(platform, assets)
+			out = append(out, Release{
+				Version:       version,
+				Channel:       channel,
+				Date:          date,
+				Size:          primary.Size,
+				URL:           primary.URL,
+				Filename:      primary.Filename,
+				SHA256:        primary.SHA256,
+				Notes:         notes,
+				NotesMarkdown: gr.Body,
+				Platform:      platform,
+				PublishedAt:   gr.PublishedAt,
+				assets:        assets,
+			})
+		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if !out[i].PublishedAt.Equal(out[j].PublishedAt) {
@@ -451,15 +485,21 @@ func parseReleases(raw []githubRelease) []Release {
 	return out
 }
 
-func parseAssets(platform, version string, raw []githubAsset) []Asset {
-	assets := make([]Asset, 0, len(raw))
+// groupAssetsByPlatform 把同一 Release 的附件按平台分组（NSH 一次构建多平台）。
+// 无法识别的附件（如 latest.json、.sha256）会被忽略。
+func groupAssetsByPlatform(version string, raw []githubAsset) map[string][]Asset {
+	grouped := make(map[string][]Asset)
 	for _, ga := range raw {
 		name := strings.TrimSpace(ga.Name)
 		url := strings.TrimSpace(ga.BrowserDownloadURL)
 		if name == "" || url == "" {
 			continue
 		}
-		assets = append(assets, Asset{
+		platform := assetPlatform(name)
+		if platform == "" {
+			continue
+		}
+		grouped[platform] = append(grouped[platform], Asset{
 			Platform: platform,
 			Version:  version,
 			Filename: name,
@@ -468,7 +508,7 @@ func parseAssets(platform, version string, raw []githubAsset) []Asset {
 			SHA256:   normalizeDigest(ga.Digest),
 		})
 	}
-	return assets
+	return grouped
 }
 
 func normalizeDigest(digest string) string {

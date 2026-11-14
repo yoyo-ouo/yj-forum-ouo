@@ -1,6 +1,19 @@
 # 下载客户端 / 版本检查
 
-数据源：GitHub Releases `yoyo-ouo/yj-forum-nsh`（客户端安装包统一发布在该仓库；服务端 10 分钟缓存，可选 `GITHUB_TOKEN`，仓库可用 `GITHUB_RELEASES_REPO` 覆盖）。平台由 tag 前缀识别：`Windows-V*` / `Android-V*` / `Linux-V*` / `macOS-V*`。GitHub 读不到时：`/downloads/*` 返回 502；`/api/app/releases` 与版本闸门返回空清单（无平台、无 min_versions，不展示发布、不强制升级）。不回退内置清单。
+数据源：GitHub Releases `yoyo-ouo/yj-forum-nsh`（客户端安装包统一发布在该仓库；服务端 10 分钟缓存，可选 `GITHUB_TOKEN`，仓库可用 `GITHUB_RELEASES_REPO` 覆盖）。
+
+NSH 一次构建多平台：**一个 Release 对应一个版本，tag 只放版本号**（`v1.2.0` / `1.2.0` / `v1.2.0-beta`），同一 Release 里同时上传各平台安装包；平台由**附件名**识别（文件名关键词优先，扩展名兜底）：
+
+| 平台 | 识别规则 |
+| --- | --- |
+| android | 含 `android`，或 `.apk` / `.aab` |
+| windows | 含 `windows`，或 `.exe` / `.msi`；无关键词的裸 `.zip` |
+| linux | 含 `linux`，或 `.appimage` / `.deb` / `.rpm` / `.tar.gz` |
+| macos | 含 `macos` / `darwin`，或 `.dmg` / `.pkg` |
+
+无法识别的附件（`latest.json`、校验文件等）不参与平台列表；某平台在该版本没有安装包时，该平台不出现此版本。
+
+GitHub 读不到时：`/downloads/*` 返回 502；`/api/app/releases` 与版本闸门返回空清单（无平台、无 min_versions，不展示发布、不强制升级）。不回退内置清单。
 
 ## 列表
 
