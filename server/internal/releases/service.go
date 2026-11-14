@@ -1,6 +1,7 @@
 // Package releases 读取 GitHub Releases 并提供下载页/客户端更新所需的清单与版本检查。
 //
-// 唯一数据源是 GitHub（yoyo-ouo/yj-forum-ouo），读不到时返回 error，不回退内置清单。
+// 唯一数据源是 GitHub（默认 yoyo-ouo/yj-forum-nsh，即跨平台客户端的聚合发布仓库），
+// 读不到时返回 error，不回退内置清单。
 package releases
 
 import (
@@ -18,8 +19,8 @@ import (
 )
 
 const (
-	// DefaultRepo GitHub 仓库（owner/name）。
-	DefaultRepo = "yoyo-ouo/yj-forum-ouo"
+	// DefaultRepo GitHub 仓库（owner/name）：客户端安装包统一发布在 NSH 仓库。
+	DefaultRepo = "yoyo-ouo/yj-forum-nsh"
 
 	defaultAPIBase   = "https://api.github.com"
 	defaultCacheTTL  = 10 * time.Minute
@@ -120,6 +121,15 @@ func WithHTTPClient(client *http.Client) Option {
 	return func(s *Service) {
 		if client != nil {
 			s.client = client
+		}
+	}
+}
+
+// WithRepo 自定义发布仓库（owner/name），为空时保持 DefaultRepo。
+func WithRepo(repo string) Option {
+	return func(s *Service) {
+		if v := strings.TrimSpace(repo); v != "" {
+			s.repo = strings.Trim(v, "/")
 		}
 	}
 }

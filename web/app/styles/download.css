@@ -443,6 +443,63 @@
     color: var(--color-primary);
 }
 
+/* ---- 公共镜像菜单（details 下拉） ---- */
+.download-mirror-menu {
+    position: relative;
+    display: inline-flex;
+}
+
+.download-mirror-menu > summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+}
+
+.download-mirror-menu > summary::-webkit-details-marker {
+    display: none;
+}
+
+.download-mirror-menu[open] > summary {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: var(--color-bg-item-hover);
+}
+
+.download-mirror-pop {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 6px);
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 180px;
+    padding: 6px;
+    border: 1px solid var(--color-border-card);
+    border-radius: 12px;
+    background: var(--color-bg-card);
+    box-shadow: 0 8px 24px var(--color-shadow-card);
+}
+
+.download-mirror-pop a {
+    padding: 8px 10px;
+    border-radius: 8px;
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    line-height: 1.4;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.download-mirror-pop a:hover {
+    background: var(--color-bg-item-hover);
+    color: var(--color-primary);
+}
+
+.download-mirror-menu-inline .download-mirror-pop {
+    right: 0;
+    left: auto;
+}
+
 .download-hint {
     margin: 12px 0 0;
     color: var(--color-text-tertiary);

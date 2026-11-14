@@ -100,7 +100,11 @@ func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth
 	messagesH := &MessageHandler{DB: db, Sessions: sessions}
 	worldH := &WorldHandler{DB: db, Cfg: cfg, Hub: hub, Sessions: sessions}
 	captchaH := NewCaptchaHandler(altchaSvc)
-	siteFeatureH := NewSiteFeatureHandlers(db, releases.NewService(cfg.GitHubToken))
+	siteFeatureH := NewSiteFeatureHandlers(db, releases.NewService(
+		cfg.GitHubToken,
+		releases.WithRepo(cfg.GitHubReleasesRepo),
+	))
+	siteFeatureH.DownloadMirrors = cfg.DownloadMirrors
 
 	h := apiHandlers{
 		authH: authH, postsH: postsH, miscH: miscH, accountH: accountH,

@@ -148,3 +148,36 @@ func TestMirrorHostWhitelist(t *testing.T) {
 		}
 	}
 }
+
+func TestDownloadsMirrorList(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := &DownloadsHandler{Mirrors: []string{
+		"https://ghproxy.net/",
+		" https://gh-proxy.com// ",
+		"",
+	}}
+	r := gin.New()
+	r.GET("/downloads/mirrors", h.MirrorList)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/downloads/mirrors", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	var body struct {
+		Success bool          `json:"success"`
+		Items   []MirrorEntry `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !body.Success || len(body.Items) != 2 {
+		t.Fatalf("unexpected body: %s", w.Body.String())
+	}
+	if body.Items[0].Name != "ghproxy.net" || body.Items[0].Prefix != "https://ghproxy.net/" {
+		t.Errorf("item[0] = %+v", body.Items[0])
+	}
+	if body.Items[1].Name != "gh-proxy.com" {
+		t.Errorf("item[1] = %+v", body.Items[1])
+	}
+}

@@ -65,8 +65,26 @@ export interface ReleaseListResult {
   page_size: number;
 }
 
-/** GitHub Releases 页面（后端 GitHub 读取失败时的直链） */
-export const GITHUB_RELEASES_URL = "https://github.com/yoyo-ouo/yj-forum-ouo/releases";
+/** GitHub Releases 页面（客户端安装包统一发布在 NSH 仓库，后端读取失败时的直链） */
+export const GITHUB_RELEASES_URL = "https://github.com/yoyo-ouo/yj-forum-nsh/releases";
+
+/** 公共镜像源（后端 /downloads/mirrors 下发，失败时用内置默认） */
+export interface MirrorEntry {
+  name: string;
+  prefix: string;
+}
+
+export const DEFAULT_MIRRORS: MirrorEntry[] = [
+  { name: "ghproxy.net", prefix: "https://ghproxy.net/" },
+  { name: "gh-proxy.com", prefix: "https://gh-proxy.com/" },
+  { name: "ghfast.top", prefix: "https://ghfast.top/" },
+];
+
+/** 拼公共镜像下载地址：前缀 + 原始 GitHub 直链 */
+export function mirrorHref(prefix: string, githubUrl: string): string {
+  if (!prefix || !githubUrl) return "";
+  return `${prefix.replace(/\/+$/, "")}/${githubUrl.replace(/^\/+/, "")}`;
+}
 
 export const downloadApi = {
   list: (platform: string, page = 1, pageSize = 20) =>
@@ -78,4 +96,6 @@ export const downloadApi = {
   /** 本站镜像下载地址（后端流式反代 GitHub 资产，支持 Range） */
   mirrorUrl: (platform: string, filename: string) =>
     apiUrl(`/downloads/mirror/${encodeURIComponent(platform)}/${encodeURIComponent(filename)}`),
+  /** 公共镜像源列表（服务端可配置，切换镜像无需发版） */
+  mirrors: () => request<{ success: boolean; items: MirrorEntry[] }>("/downloads/mirrors"),
 };

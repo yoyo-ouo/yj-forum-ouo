@@ -67,6 +67,10 @@ type Config struct {
 
 	// 下载页 GitHub Releases
 	GitHubToken string
+	// GitHubReleasesRepo 发布仓库（owner/name），客户端安装包统一发在 NSH 仓库
+	GitHubReleasesRepo string
+	// DownloadMirrors 公共镜像前缀（逗号分隔，形如 https://ghproxy.net/）
+	DownloadMirrors []string
 
 	// BenchDebug 基准测试调试开关：为 true 时挂载 /debug/metrics、/debug/pprof
 	// 并旁路 IP 限流。仅在非生产环境生效（生产强制关闭）。
@@ -117,7 +121,9 @@ func Load() *Config {
 		AltchaExpires:   time.Duration(getEnvInt("ALTCHA_EXPIRES_SECONDS", 600)) * time.Second,
 		AltchaAppSecret: getEnv("ALTCHA_APP_SECRET", ""),
 
-		GitHubToken: getEnv("GITHUB_TOKEN", ""),
+		GitHubToken:        getEnv("GITHUB_TOKEN", ""),
+		GitHubReleasesRepo: getEnv("GITHUB_RELEASES_REPO", "yoyo-ouo/yj-forum-nsh"),
+		DownloadMirrors:    splitMirrorPrefixes(getEnv("DOWNLOAD_MIRRORS", "https://ghproxy.net/,https://gh-proxy.com/,https://ghfast.top/")),
 
 		BenchDebug: getEnvBool("BENCH_DEBUG", false),
 	}
@@ -168,6 +174,20 @@ func getEnvBool(key string, def bool) bool {
 		}
 	}
 	return def
+}
+
+// splitMirrorPrefixes 解析公共镜像前缀列表：去空白、去尾部重复斜杠、补单个斜杠。
+func splitMirrorPrefixes(s string) []string {
+	var out []string
+	for _, item := range splitComma(s) {
+		v := strings.TrimSpace(item)
+		if v == "" {
+			continue
+		}
+		v = strings.TrimRight(v, "/") + "/"
+		out = append(out, v)
+	}
+	return out
 }
 
 func splitComma(s string) []string {

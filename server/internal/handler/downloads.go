@@ -19,6 +19,14 @@ import (
 type DownloadsHandler struct {
 	Releases *releases.Service
 	Client   *http.Client // 可选：mirror 上游客户端（测试注入）
+	// Mirrors 公共镜像前缀（如 https://ghproxy.net/），下载页据此拼 GitHub 直链。
+	Mirrors []string
+}
+
+// MirrorEntry 公共镜像源。
+type MirrorEntry struct {
+	Name   string `json:"name"`
+	Prefix string `json:"prefix"`
 }
 
 // mirrorHosts 允许反代的 GitHub 域名（含子域）。
@@ -106,6 +114,31 @@ func (h *DownloadsHandler) Latest(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "item": item})
+}
+
+// ---- GET /downloads/mirrors ----
+
+// MirrorList 公共镜像源列表（前端拼 `前缀 + GitHub 资产直链`）。
+func (h *DownloadsHandler) MirrorList(c *gin.Context) {
+	items := make([]MirrorEntry, 0, len(h.Mirrors))
+	for _, prefix := range h.Mirrors {
+		p := strings.TrimSpace(prefix)
+		if p == "" {
+			continue
+		}
+		items = append(items, MirrorEntry{Name: mirrorHost(p), Prefix: p})
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "items": items})
+}
+
+// mirrorHost 从镜像前缀取可读名称（主机名）。
+func mirrorHost(prefix string) string {
+	host := strings.TrimPrefix(strings.TrimPrefix(prefix, "https://"), "http://")
+	host = strings.TrimRight(host, "/")
+	if i := strings.Index(host, "/"); i >= 0 {
+		host = host[:i]
+	}
+	return host
 }
 
 // ---- GET /downloads/check ----

@@ -35,6 +35,9 @@ type SiteFeatureHandlers struct {
 	QuoteURL     string
 	QuoteTimeout time.Duration
 
+	// DownloadMirrors 公共镜像前缀（如 https://ghproxy.net/），供下载页拼 GitHub 直链。
+	DownloadMirrors []string
+
 	quoteMu     sync.Mutex
 	quoteAt     time.Time
 	quoteText   string
@@ -52,7 +55,7 @@ func RegisterSiteFeatureRoutes(api *gin.RouterGroup, h *SiteFeatureHandlers) {
 		return
 	}
 	changelogs := &ChangelogHandler{DB: h.DB}
-	downloads := &DownloadsHandler{Releases: h.Releases}
+	downloads := &DownloadsHandler{Releases: h.Releases, Mirrors: h.DownloadMirrors}
 
 	api.GET("/changelogs", changelogs.List)
 	api.GET("/changelogs/:id", changelogs.Detail)
@@ -61,6 +64,7 @@ func RegisterSiteFeatureRoutes(api *gin.RouterGroup, h *SiteFeatureHandlers) {
 	api.GET("/downloads/latest", downloads.Latest)
 	api.GET("/downloads/check", downloads.Check)
 	api.GET("/downloads/mirror/:platform/:filename", downloads.Mirror)
+	api.GET("/downloads/mirrors", downloads.MirrorList)
 
 	api.GET("/site/daily-quote", h.DailyQuote)
 }

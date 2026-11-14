@@ -7,8 +7,11 @@ import OpenInAppButton from "@/components/OpenInAppButton";
 import { useToast } from "@/components/Toast";
 import { ApiException } from "@/lib/api";
 import {
+  DEFAULT_MIRRORS,
   downloadApi,
   GITHUB_RELEASES_URL,
+  mirrorHref,
+  type MirrorEntry,
   type ReleaseItem,
   type ReleasePlatform,
 } from "@/lib/api/site-features";
@@ -25,7 +28,7 @@ interface PlatformMeta {
 const PLATFORMS: PlatformMeta[] = [
   { key: "windows", name: "Windows", icon: "fa-windows", requirement: "Windows 10 / 11" },
   { key: "android", name: "Android", icon: "fa-android", requirement: "Android 8.0 及以上" },
-  { key: "linux", name: "Linux", icon: "fa-linux", requirement: "AppImage / deb / rpm" },
+  { key: "linux", name: "Linux", icon: "fa-linux", requirement: "tar.gz（GTK 4.14+）" },
 ];
 
 /** v 前缀归一（避免后端 version 已带 v 时出现 vv） */
@@ -71,6 +74,8 @@ export default function DownloadPage() {
   const { toast } = useToast();
   const [platform, setPlatform] = useState<ReleasePlatform>("windows");
 
+  const [mirrors, setMirrors] = useState<MirrorEntry[]>(DEFAULT_MIRRORS);
+
   const [latest, setLatest] = useState<ReleaseItem | null>(null);
   const [latestLoading, setLatestLoading] = useState(true);
   const [latestError, setLatestError] = useState("");
@@ -84,6 +89,22 @@ export default function DownloadPage() {
 
   const latestSeqRef = useRef(0);
   const historySeqRef = useRef(0);
+
+  // 公共镜像源由服务端下发（失败时保留内置默认）
+  useEffect(() => {
+    let alive = true;
+    downloadApi
+      .mirrors()
+      .then((data) => {
+        if (alive && data.items && data.items.length > 0) setMirrors(data.items);
+      })
+      .catch(() => {
+        /* 忽略：回退内置默认镜像 */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const loadLatest = useCallback(async (target: ReleasePlatform) => {
     const seq = ++latestSeqRef.current;
@@ -183,6 +204,33 @@ export default function DownloadPage() {
         toast("复制失败，请手动选择复制", "error");
       }
     }
+  };
+
+  // 公共镜像菜单：前缀 + GitHub 资产直链（无直链时不渲染）
+  const renderMirrorMenu = (githubUrl: string, variant: "button" | "link" = "button") => {
+    // 公共镜像只能加速 GitHub 资产；其它来源不提供（避免拼出无效地址）
+    if (!githubUrl || !/^https:\/\/github\.com\//i.test(githubUrl)) return null;
+    const items = mirrors.filter((m) => mirrorHref(m.prefix, githubUrl));
+    if (items.length === 0) return null;
+    return (
+      <details className={`download-mirror-menu${variant === "link" ? " download-mirror-menu-inline" : ""}`}>
+        <summary className={variant === "link" ? "download-link download-link-btn" : "download-btn download-btn-outline"}>
+          <i className="fa fa-cloud-download" aria-hidden="true"></i> 公共镜像
+        </summary>
+        <div className="download-mirror-pop">
+          {items.map((m) => (
+            <a
+              key={m.name}
+              href={mirrorHref(m.prefix, githubUrl)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {m.name}
+            </a>
+          ))}
+        </div>
+      </details>
+    );
   };
 
   const currentPlatform = PLATFORMS.find((p) => p.key === platform) || PLATFORMS[0];
@@ -363,17 +411,20 @@ export default function DownloadPage() {
                 <i className="fa fa-github" aria-hidden="true"></i> GitHub 直链
               </a>
             )}
+            {renderMirrorMenu(latest.url)}
             {latest.filename && (
               <button
                 type="button"
                 className="download-btn download-btn-outline"
-                onClick={() => void copyText(downloadApi.mirrorUrl(platform, latest.filename), "镜像链接")}
+                onClick={() => void copyText(downloadApi.mirrorUrl(platform, latest.filename), "站内链接")}
               >
-                <i className="fa fa-link" aria-hidden="true"></i> 复制镜像链接
+                <i className="fa fa-link" aria-hidden="true"></i> 复制站内链接
               </button>
             )}
           </div>
-          <p className="download-hint">下载由本站服务器中转（GitHub 反代，支持断点续传）；非本站来源请勿轻信。</p>
+          <p className="download-hint">
+            主按钮由本站服务器中转（GitHub 反代，支持断点续传）；「公共镜像」为第三方加速源，仅拼接 GitHub 直链，下载后请核对 SHA-256。
+          </p>
         </section>
       ) : (
         <section className="download-latest-card download-empty" id="download-latest-card">
@@ -458,18 +509,19 @@ export default function DownloadPage() {
                       </div>
                       <div className="download-release-actions">
                         <a className="download-link" href={mirror || item.url}>
-                          <i className="fa fa-download" aria-hidden="true"></i> 镜像下载
+                          <i className="fa fa-download" aria-hidden="true"></i> 站内下载
                         </a>
                         {item.url && (
                           <a className="download-link" href={item.url} target="_blank" rel="noopener noreferrer">
                             <i className="fa fa-github" aria-hidden="true"></i> GitHub
                           </a>
                         )}
+                        {renderMirrorMenu(item.url, "link")}
                         {item.filename && (
                           <button
                             type="button"
                             className="download-link download-link-btn"
-                            onClick={() => void copyText(downloadApi.mirrorUrl(platform, item.filename), "镜像链接")}
+                            onClick={() => void copyText(downloadApi.mirrorUrl(platform, item.filename), "站内链接")}
                           >
                             <i className="fa fa-link" aria-hidden="true"></i> 复制链接
                           </button>
