@@ -14,6 +14,7 @@ import { UserGuildChip } from "@/components/ui/UserGuildChip";
 import CategoryBadge from "@/components/ui/CategoryBadge";
 import SpaceBadge from "@/components/ui/SpaceBadge";
 import BackButton from "@/components/ui/BackButton";
+import OpenInAppButton from "@/components/OpenInAppButton";
 import { postApi, Comment, ApiException } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import { formatTime, isScheduledPost } from "@/lib/constants";
@@ -288,6 +289,12 @@ export default function PostDetailPage() {
                 <span className="post-action-label">删除</span>
               </button>
             )}
+            <OpenInAppButton
+              postId={post.id}
+              variant="action"
+              label="客户端"
+              showDownloadLink={false}
+            />
           </div>
         </article>
 

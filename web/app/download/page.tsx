@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "@/components/Markdown";
 import PwaInstallButton from "@/components/PwaInstallButton";
+import OpenInAppButton from "@/components/OpenInAppButton";
 import { useToast } from "@/components/Toast";
 import { ApiException } from "@/lib/api";
 import {
@@ -226,6 +227,11 @@ export default function DownloadPage() {
               <i className="fa fa-download" aria-hidden="true"></i> 下载 APP
             </button>
           )}
+          <OpenInAppButton
+            className="download-open-in-app"
+            label="已安装？直接打开"
+            showDownloadLink={false}
+          />
         </div>
       </header>
 

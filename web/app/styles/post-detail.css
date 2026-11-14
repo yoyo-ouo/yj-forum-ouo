@@ -297,3 +297,60 @@
         font-size: 12px;
     }
 }
+
+/* ---- 在客户端打开（移动端） ---- */
+
+/* 帖子操作栏里的「客户端」按钮：推到最右 */
+.open-in-app-action {
+    margin-left: auto;
+}
+
+.open-in-app {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 14px 0 2px;
+}
+
+.open-in-app-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 16px;
+    border: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+    color: var(--color-primary);
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.open-in-app-btn:hover {
+    background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+    transform: translateY(-1px);
+}
+
+.open-in-app-btn:active {
+    transform: none;
+    opacity: 0.8;
+}
+
+.open-in-app-btn i {
+    font-size: 16px;
+}
+
+.open-in-app-download {
+    font-size: 13px;
+    color: var(--color-text-tertiary);
+    text-decoration: none;
+}
+
+.open-in-app-download:hover {
+    color: var(--color-primary);
+    text-decoration: underline;
+}

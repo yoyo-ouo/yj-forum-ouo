@@ -55,6 +55,25 @@
     margin-top: 0;
 }
 
+/* 「已安装？直接打开」：在安装按钮组内独占一行，靠右 */
+.download-open-in-app {
+    flex-basis: 100%;
+    margin: 0;
+    justify-content: flex-end;
+}
+
+@media (max-width: 700px) {
+    .download-open-in-app {
+        width: 100%;
+    }
+
+    /* 移动端独占一行：按钮拉满 */
+    .download-open-in-app .open-in-app-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
 .download-app-btn {
     flex: 0 0 auto;
 }
