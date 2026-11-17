@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -38,8 +39,15 @@ func (h *PostsHandler) UploadAvatar(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": "请先登录"})
 		return
 	}
+	// 与 /media/images 对齐：先限请求体，避免无界 multipart 写入内存/临时文件
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxAvatarBytes+(1<<20))
 	file, err := c.FormFile("avatar")
 	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"success": false, "message": "头像不能超过10MB"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请选择图片文件"})
 		return
 	}

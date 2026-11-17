@@ -133,15 +133,36 @@ export default function GuildMembersPage() {
           <ListEmpty className="forum-empty" text="还没有成员" />
         ) : (
           <div className="guild-members-grid">
-            {gridMembers.map((m) => (
-              <Link key={m.id} className="guild-member-card" href={`/users/${m.id}`}>
-                <div className="guild-member-avatar">
-                  <UserAvatar src={m.avatar} alt={m.name} userId={m.id} />
-                </div>
-                <div className="guild-member-name Username">{m.name}</div>
-                <p className="guild-member-intro">{m.intro || "这个人很懒，什么都没留下~"}</p>
-              </Link>
-            ))}
+            {gridMembers.map((m) =>
+              m.kind === "character" ? (
+                <Link
+                  key={`char-${m.character_id}`}
+                  className="guild-member-card guild-member-card-character"
+                  href={`/character/${m.character_id}`}
+                  title={`${m.name} 的设定角色`}
+                >
+                  <span className="guild-member-char-badge">设定角色</span>
+                  <div className="guild-member-avatar">
+                    {m.avatar ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.avatar} alt={m.name} className="guild-member-avatar-img" />
+                    ) : (
+                      <span className="avatar-fallback">{(m.name || "?").slice(0, 1)}</span>
+                    )}
+                  </div>
+                  <div className="guild-member-name Username">{m.name}</div>
+                  <p className="guild-member-intro">{m.character_title || m.intro || "这是一个设定角色"}</p>
+                </Link>
+              ) : (
+                <Link key={m.id} className="guild-member-card" href={`/users/${m.id}`}>
+                  <div className="guild-member-avatar">
+                    <UserAvatar src={m.avatar} alt={m.name} userId={m.id} />
+                  </div>
+                  <div className="guild-member-name Username">{m.name}</div>
+                  <p className="guild-member-intro">{m.intro || "这个人很懒，什么都没留下~"}</p>
+                </Link>
+              )
+            )}
           </div>
         )}
       </div>

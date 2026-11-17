@@ -55,7 +55,7 @@ type WorldHandler struct {
 	Sessions *auth.SessionManager
 }
 
-// RegisterWorldRoutes 注册世界频道路由（由 router.go 在 /ov2/api 与 /api/v1 两个 group 各调用一次）。
+// RegisterWorldRoutes 注册世界频道路由（由 router.go 在 /ov2/api group 注册）。
 //
 //	GET  /world/messages  公开列表（before_id / after_id / limit）
 //	POST /world/messages  登录发布（content_html / parent_id?）
@@ -147,6 +147,9 @@ func (h *WorldHandler) CreateMessage(c *gin.Context) {
 
 	id, err := h.DB.CreateWorldMessage(c.Request.Context(), uid, content, "html", parentID)
 	switch {
+	case errors.Is(err, database.ErrWorldParentNotFound):
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "引用的消息不存在"})
+		return
 	case errors.Is(err, database.ErrWorldRateLimited):
 		c.JSON(http.StatusTooManyRequests, gin.H{"success": false, "message": "发言太快，请稍后再试"})
 		return
@@ -157,7 +160,16 @@ func (h *WorldHandler) CreateMessage(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "发送失败"})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"success": true, "id": id})
+	// 创建响应同样附带 parent 摘要（与列表/SSE 保持一致；无引用时为 null）。
+	resp := gin.H{"success": true, "id": id, "parent": nil}
+	if parentID != nil {
+		if parents, perr := h.DB.GetWorldMessageParents(c.Request.Context(), []int64{*parentID}); perr == nil {
+			if p, ok := parents[*parentID]; ok {
+				resp["parent"] = p
+			}
+		}
+	}
+	c.JSON(http.StatusCreated, resp)
 }
 
 // validateWorldContent 净化并校验消息正文，返回可入库的 HTML。

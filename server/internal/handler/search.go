@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ---- GET /api/v1/search ----
+// ---- GET /ov2/api/search ----
 
 // Search 搜索帖子/用户（缓存 120s）。
 func (h *PostsHandler) Search(c *gin.Context) {

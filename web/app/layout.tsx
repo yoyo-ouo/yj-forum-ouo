@@ -7,6 +7,7 @@ import { fetchApi, OG_IMAGE, SITE_DESCRIPTION, SITE_TITLE, siteUrl } from "@/lib
 import { DEFAULT_SITE_CONFIG, isFestivalActive, type SiteConfig } from "@/lib/site-config";
 import { CenterCardProvider } from "@/components/CenterCard";
 import { ToastProvider } from "@/components/Toast";
+import { CharacterSheetProvider } from "@/components/character/CharacterSheetProvider";
 import FestivalThemeSync from "@/components/FestivalThemeSync";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
@@ -83,12 +84,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <StoreProvider>
           <ToastProvider>
             <CenterCardProvider>
-              {/* 国庆主题客户端校正（无渲染输出） */}
-              <FestivalThemeSync />
-              {/* 全局导航栏：跨页面保持挂载，避免导航时品牌图等重载 */}
-              <Header />
-              <main className="app-main">{children}</main>
-              <Footer />
+              <CharacterSheetProvider>
+                {/* 国庆主题客户端校正（无渲染输出） */}
+                <FestivalThemeSync />
+                {/* 全局导航栏：跨页面保持挂载，避免导航时品牌图等重载 */}
+                <Header />
+                <main className="app-main">{children}</main>
+                <Footer />
+              </CharacterSheetProvider>
             </CenterCardProvider>
           </ToastProvider>
         </StoreProvider>

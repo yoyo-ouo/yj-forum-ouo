@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"time"
 
@@ -28,6 +29,7 @@ type apiHandlers struct {
 	mediaH                 *MediaHandler
 	embedsH                *EmbedsHandler
 	guidesH                *GuidesHandler
+	characterH             *CharacterSheetsHandler
 	captchaH               *CaptchaHandler
 	siteFeatureH           *SiteFeatureHandlers
 	messagesH              *MessageHandler
@@ -35,8 +37,8 @@ type apiHandlers struct {
 	emailChangeVerifyLimit gin.HandlerFunc
 }
 
-// Register 注册全部路由：/ov2/api 为 canonical；/api/v1 为新 shape 别名（一个版本周期）。
-// 旧 APP 兼容层 /api/* 由 legacy.RegisterRoutes 单独挂载（Step 6）。
+// Register 注册全部路由：/ov2/api 为唯一 API 前缀。
+// 原 /api/v1 别名与旧 APP 兼容层 /api/* 已移除；仅保留 /avatar/* 等静态资源兼容路由。
 func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth.SessionManager, mailer *email.Sender, mediaSvc *media.Service, cacheSet *CacheSet) *PostsHandler {
 	r.Use(middleware.Logger())
 	r.Use(middleware.SecurityHeaders())
@@ -80,6 +82,7 @@ func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth
 	altchaSvc := altcha.New(db, altcha.Config{
 		Enabled: cfg.AltchaEnabled, HMACKey: cfg.AltchaHMACKey,
 		Algorithm: cfg.AltchaAlgorithm, Cost: cfg.AltchaCost, Expires: cfg.AltchaExpires,
+		AppSecret: cfg.AltchaAppSecret,
 	})
 	authH := &AuthHandler{DB: db, Cfg: cfg, Sessions: sessions, Mailer: mailer, Altcha: altchaSvc}
 	postsH := &PostsHandler{DB: db, Cfg: cfg, Cache: cacheSet, Mailer: mailer, Sessions: sessions, Media: mediaSvc, Altcha: altchaSvc}
@@ -90,6 +93,7 @@ func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth
 	mediaH := &MediaHandler{DB: db, Cfg: cfg, Media: mediaSvc, Sessions: sessions}
 	embedsH := &EmbedsHandler{DB: db}
 	guidesH := &GuidesHandler{DB: db}
+	characterH := &CharacterSheetsHandler{DB: db, Sessions: sessions}
 
 	hub := sse.NewHub()
 	SetMessageHub(hub)
@@ -101,7 +105,8 @@ func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth
 	h := apiHandlers{
 		authH: authH, postsH: postsH, miscH: miscH, accountH: accountH,
 		siteH: siteH, guildsH: guildsH, mediaH: mediaH, embedsH: embedsH, guidesH: guidesH,
-		captchaH: captchaH, siteFeatureH: siteFeatureH, messagesH: messagesH, worldH: worldH,
+		characterH: characterH,
+		captchaH:   captchaH, siteFeatureH: siteFeatureH, messagesH: messagesH, worldH: worldH,
 		// 邮箱换绑两步验证共用同一 IP 频控桶（两侧使用同一实例才能共享计数）
 		emailChangeVerifyLimit: middleware.RateLimit("email_change_verify", 15, 5*time.Minute),
 	}
@@ -109,15 +114,16 @@ func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth
 	apiV2 := r.Group("/ov2/api")
 	registerAPIRoutes(apiV2, h)
 
-	apiV1 := r.Group("/api/v1")
-	apiV1.Use(func(c *gin.Context) {
-		c.Header("Deprecation", "true")
-		c.Next()
-	})
-	registerAPIRoutes(apiV1, h)
+	// 旧头像静态资源（非 API）：历史 /avatar/<uuid>.webp 仍可直接访问，
+	// 新头像已走媒体服务 /ov2/api/media/<id>。
+	r.GET("/avatar/:filename", postsH.ServeAvatar)
 
-	// 旧 APP 兼容层：/api/*（不含 /api/v1），独立 handler，显式跳过 CSRF
-	RegisterLegacyRoutes(r, cfg, db, sessions, mailer)
+	// 基准测试调试能力：仅在 BENCH_DEBUG=true 且非生产环境时启用（config 已做生产守卫）。
+	if cfg.BenchDebug && !cfg.IsProd() {
+		middleware.SetRateLimitBypass(true)
+		RegisterDebugRoutes(r, db, cacheSet)
+		log.Printf("[BENCH] 调试端点与 IP 限流旁路已开启（仅限非生产）：/debug/metrics、/debug/pprof")
+	}
 
 	return postsH
 }
@@ -125,6 +131,7 @@ func Register(r *gin.Engine, cfg *config.Config, db *database.DB, sessions *auth
 func registerAPIRoutes(api *gin.RouterGroup, h apiHandlers) {
 	authH, postsH, miscH, accountH := h.authH, h.postsH, h.miscH, h.accountH
 	siteH, guildsH, mediaH, embedsH, guidesH := h.siteH, h.guildsH, h.mediaH, h.embedsH, h.guidesH
+	characterH := h.characterH
 
 	api.GET("/healthz", func(c *gin.Context) {
 		c.JSON(200, gin.H{"ok": true, "service": "yj-forum"})
@@ -148,13 +155,15 @@ func registerAPIRoutes(api *gin.RouterGroup, h apiHandlers) {
 	api.PATCH("/users/me", authH.AuthRequired(), authH.UpdateMe)
 	api.POST("/users/me/sign-in", authH.AuthRequired(), authH.SignIn)
 	api.GET("/users/me/replies", authH.AuthRequired(), authH.MyReplies)
-	api.POST("/users/me/verify-email", authH.AuthRequired(), miscH.SendVerifyEmailCode)
+	api.GET("/users/me/likes", authH.AuthRequired(), authH.MyLikes)
+	api.POST("/users/me/verify-email", authH.AuthRequired(), middleware.RateLimit("verify_email_send", 5, 10*time.Minute), miscH.SendVerifyEmailCode)
 	api.POST("/users/me/verify-email/confirm", middleware.RateLimit("verify_email", 10, 5*time.Minute), authH.AuthRequired(), miscH.VerifyCodeEmail)
 	api.POST("/users/me/delete", middleware.RateLimit("account_delete", 5, 300*time.Second), authH.AuthRequired(), accountH.DeleteAccount)
-	api.POST("/users/me/email-change/code", middleware.RateLimit("email_change_code", 10, 10*time.Minute), authH.AuthRequired(), accountH.SendEmailChangeOldCode)
-	api.POST("/users/me/email-change/verify-old", h.emailChangeVerifyLimit, authH.AuthRequired(), accountH.VerifyEmailChangeOld)
-	api.POST("/users/me/email-change/new-code", middleware.RateLimit("email_change_new", 10, 10*time.Minute), authH.AuthRequired(), accountH.SendEmailChangeNewCode)
-	api.POST("/users/me/email-change/confirm", h.emailChangeVerifyLimit, authH.AuthRequired(), accountH.ConfirmEmailChange)
+	// 邮箱换绑：限流必须在 AuthRequired 之后，才能拿到 userID 按用户分桶（否则 NAT 下多人共享 IP 桶）。
+	api.POST("/users/me/email-change/code", authH.AuthRequired(), middleware.RateLimit("email_change_code", 10, 10*time.Minute), accountH.SendEmailChangeOldCode)
+	api.POST("/users/me/email-change/verify-old", authH.AuthRequired(), h.emailChangeVerifyLimit, accountH.VerifyEmailChangeOld)
+	api.POST("/users/me/email-change/new-code", authH.AuthRequired(), middleware.RateLimit("email_change_new", 10, 10*time.Minute), accountH.SendEmailChangeNewCode)
+	api.POST("/users/me/email-change/confirm", authH.AuthRequired(), h.emailChangeVerifyLimit, accountH.ConfirmEmailChange)
 	api.GET("/users/:id", authH.UserProfile)
 	api.GET("/users/:id/posts", authH.UserPosts)
 	api.GET("/users/:id/comments", authH.UserComments)
@@ -167,13 +176,20 @@ func registerAPIRoutes(api *gin.RouterGroup, h apiHandlers) {
 	// ---- 帖子 ----
 	api.GET("/posts", postsH.List)
 	api.GET("/posts/random", postsH.Random)
+	// 草稿路由必须在 /posts/:id 之前注册（静态段优先）
+	api.GET("/posts/drafts", postsH.AuthRequired(), postsH.ListDrafts)
+	api.POST("/posts/drafts", postsH.AuthRequired(), middleware.RateLimit("post_draft_create", 30, 10*time.Minute), postsH.CreateDraft)
+	api.GET("/posts/drafts/:id", postsH.AuthRequired(), postsH.GetDraft)
+	api.PUT("/posts/drafts/:id", postsH.AuthRequired(), middleware.RateLimit("post_draft_save", 240, time.Minute), postsH.SaveDraft)
+	api.POST("/posts/drafts/:id/publish", postsH.AuthRequired(), middleware.RateLimit("post_draft_publish", 30, time.Minute), postsH.PublishDraft)
+	api.DELETE("/posts/drafts/:id", postsH.AuthRequired(), postsH.DeleteDraft)
 	api.GET("/posts/picker-defaults", postsH.AuthRequired(), postsH.PickerDefaults)
 	api.GET("/posts/:id", postsH.Detail)
 	api.POST("/posts", postsH.AuthRequired(), postsH.Create)
 	api.POST("/posts/:id/like", postsH.AuthRequired(), postsH.Like)
 	api.POST("/posts/:id/favorite", postsH.AuthRequired(), postsH.Favorite)
 	api.POST("/posts/:id/delete", postsH.AuthRequired(), postsH.Delete)
-	api.POST("/posts/:id/report", postsH.AuthRequired(), postsH.Report)
+	api.POST("/posts/:id/report", postsH.AuthRequired(), middleware.RateLimit("post_report", 10, time.Hour), postsH.Report)
 
 	// ---- 评论 ----
 	api.GET("/posts/:id/comments", postsH.Comments)
@@ -205,6 +221,20 @@ func registerAPIRoutes(api *gin.RouterGroup, h apiHandlers) {
 	// ---- 站点配置（公开）----
 	api.GET("/site/config", siteH.SiteConfig)
 
+	// ---- 设定记录（角色设定卡）----
+	// 静态路由必须写在 /:id 之前（gin 虽能区分，但保持可读性）。
+	api.GET("/character-sheets/mine", authH.AuthRequired(), characterH.Mine)
+	api.GET("/character-sheets/search", middleware.RateLimit("character_search", 120, time.Minute), characterH.Search)
+	api.POST("/character-sheets", middleware.RateLimit("character_create", 5, 10*time.Minute), authH.AuthRequired(), characterH.Create)
+	api.POST("/character-sheets/prompt-seen", authH.AuthRequired(), characterH.PromptSeen)
+	api.GET("/character-sheets/user/:userId", characterH.ByUser)
+	api.GET("/character-sheets/:id", characterH.Detail)
+	api.PUT("/character-sheets/:id/draft", middleware.RateLimit("character_draft", 120, time.Minute), authH.AuthRequired(), characterH.SaveDraft)
+	api.DELETE("/character-sheets/:id/draft", authH.AuthRequired(), characterH.DiscardDraft)
+	api.POST("/character-sheets/:id/publish", middleware.RateLimit("character_publish", 30, time.Minute), authH.AuthRequired(), characterH.Publish)
+	api.POST("/character-sheets/:id/like", middleware.RateLimit("character_like", 60, time.Minute), authH.AuthRequired(), characterH.Like)
+	api.DELETE("/character-sheets/:id", authH.AuthRequired(), characterH.Delete)
+
 	// ---- 引用卡片 / 媒体 ----
 	api.GET("/embeds", embedsH.List)
 	api.POST("/media/images", middleware.RateLimit("media_image", 30, 600*time.Second), authH.AuthRequired(), mediaH.UploadImage)
@@ -222,7 +252,7 @@ func registerAPIRoutes(api *gin.RouterGroup, h apiHandlers) {
 	api.GET("/reports/bug/:id", middleware.RateLimit("report_bug_detail", 120, time.Minute), miscH.BugReportDetail)
 	api.GET("/easter-egg", miscH.EasterEgg)
 
-	api.POST("/users/me/avatar", authH.AuthRequired(), postsH.UploadAvatar)
+	api.POST("/users/me/avatar", middleware.RateLimit("avatar_upload", 10, time.Hour), authH.AuthRequired(), postsH.UploadAvatar)
 	api.GET("/avatar/:filename", postsH.ServeAvatar)
 
 	// ---- 新增模块（Batch 2）----

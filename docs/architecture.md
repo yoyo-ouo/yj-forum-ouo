@@ -13,7 +13,7 @@
                         ▼
 ┌────────────────────────────────────────────────────┐
 │                 Nginx (宝塔 80/443)                │
-│   /api/* /avatar/* → Go :8090                      │
+│   /ov2/api/* /avatar/* → Go :8090                  │
 │   其余 → Next.js :3000                             │
 └──────────┬─────────────────────────┬──────────────┘
            │                         │
@@ -39,14 +39,14 @@
 
 ### Next.js（渲染层）
 - **页面**：App Router，全站静态壳（SSG）+ 客户端组件；`output: 'standalone'` 支持裸机部署。
-- **数据获取**：客户端 `lib/api.ts` 统一 `fetch('/api/v1/...')`，`credentials: 'include'` 携带会话 cookie。
-- **静态资源**：全部本地化于 `public/assets/`（图片/字体/CSS/JS/Live2D/鼠标包）。
+- **数据获取**：客户端 `lib/api.ts` 统一 `fetch('/ov2/api/...')`，`credentials: 'include'` 携带会话 cookie。
+- **静态资源**：全部本地化于 `public/assets/`（图片/图标字体/CSS/JS）。
 - **状态**：`lib/store.tsx`（主题/登录用户），主题 localStorage 持久化 + 时间段自动切换。
-- **开发代理**：`next.config.ts` rewrites `/api/*`、`/avatar/*` → Go（`API_TARGET`）；生产由 Nginx 分发。新 MD 媒体统一走 `/ov2/api/media/<id>`；`/guild-img/*`、`/guide-img/*` 兼容代理已删除（旧 GridFS 已迁移到 S3 或删除）。
+- **开发代理**：`next.config.ts` rewrites `/ov2/api/*`、`/avatar/*` → Go（`API_TARGET`）；生产由 Nginx 分发。新 MD 媒体统一走 `/ov2/api/media/<id>`；`/guild-img/*`、`/guide-img/*` 兼容代理已删除（旧 GridFS 已迁移到 S3 或删除）。
 
 ### Go（服务层）
 - **框架**：Gin；数据库 pgxpool + golang-migrate；密码 bcrypt（兼容 werkzeug scrypt/pbkdf2 旧哈希）。
-- **认证**：数据库 `sessions` 表 + HttpOnly cookie（`forum_session`，24h）+ 非 HttpOnly `user_id` cookie（30 天，前端乐观判断）。
+- **认证**：数据库 `sessions` 表 + HttpOnly cookie（`forum_session`，14 天）+ 非 HttpOnly `user_id` cookie（14 天，前端乐观判断）。
 - **缓存**：进程内 LRU+TTL（posts 30s / post_detail 60s / user_info 300s / guilds 30s / search 120s / comments 60s）。
 - **中间件**：CORS 白名单 / CSRF（Origin+Referer）/ 限流（IP+维度）/ 安全响应头 / gzip。
 - **邮件**：SMTP（net/smtp），异步 goroutine 发送（注册码/重置码/登录提醒/粉丝通知/评论提醒/Bug 通知）。
@@ -54,7 +54,7 @@
 - **模块边界**：`handler/`（auth、users、posts、comments、guilds、misc、search）负责路由与参数校验；`database/`（users、users_credentials、posts、comments、guilds、misc）负责 SQL 查询；`models/` 定义对外数据结构；`middleware/`、`cache/`、`email/` 为横切与基础设施。会馆系统新增 `handler/guilds.go`（列表/详情/信息流/文章/入退馆）与 `database/guilds.go`（会馆、成员、入馆申请、分类、公告、文章与信息流查询）。
 
 ## 通信方式
-- **RESTful JSON**：`/api/v1/*`，HTTP 状态码语义化（200/201/400/401/403/404/429/500）。
+- **RESTful JSON**：`/ov2/api/*`，HTTP 状态码语义化（200/201/400/401/403/404/429/500）。
 - 错误体：`{"success": false, "message": "..."}`（部分端点 HTTP 状态码携带语义）。
 - 会话：HttpOnly cookie 由 Go 下发，浏览器自动携带；Next.js 与 Go 同域（Nginx 统一或开发代理）。
 
@@ -73,25 +73,25 @@
 
 **登录**：
 ```
-POST /api/v1/auth/login → Go 校验(兼容旧哈希) → 写 sessions → Set-Cookie
+POST /ov2/api/auth/login → Go 校验(兼容旧哈希) → 写 sessions → Set-Cookie
 → Next.js store.refreshUser() → GET /users/me → Header 显示用户名
 ```
 
 **发帖**：
 ```
-POST /api/v1/posts（auth） → SafeHTML 净化 → INSERT → 失效列表缓存 → 异步粉丝通知
+POST /ov2/api/posts（auth） → SafeHTML 净化 → INSERT → 失效列表缓存 → 异步粉丝通知
 → 客户端跳转 /post/{id} → GET /posts/{id} → 渲染详情+评论
 ```
 
 **入馆申请（管理端审批）**：
 ```
-POST /api/v1/guilds/:slug/join（登录，可选 reason） → 校验未入馆/无待审 → INSERT guild_join_requests(status=0)
+POST /ov2/api/guilds/:slug/join（登录，可选 reason） → 校验未入馆/无待审 → INSERT guild_join_requests(status=0)
 → 管理端 yj-forum-admin 审核（approve / reject） → approve 后写入 guild_members → 用户可发该馆帖子并在资料页显示 guild
 ```
 
 **文章浏览**：
 ```
-GET /api/v1/articles/:id → views +1 → 读取 guild_articles + 作者/参与人/所属会馆
+GET /ov2/api/articles/:id → views +1 → 读取 guild_articles + 作者/参与人/所属会馆
 → 客户端渲染（会馆页/信息流点击 item.type=article 进入）
 ```
 
@@ -108,7 +108,7 @@ GET /api/v1/articles/:id → views +1 → 读取 guild_articles + 作者/参与�
 | 前端交互 | 外部 CDN AfterBody.js | React 组件化重写 |
 | 样式 | CDN main.css | 本地 main.css + Tailwind 基础设施 |
 | 认证 | Flask-Login 签名 cookie | 数据库 sessions 表 |
-| API | /api/* 混合风格 | /api/v1/* RESTful |
+| API | /api/* 混合风格 | /ov2/api/* RESTful |
 | 缓存 | 内存 LRU + Vercel Blob | 进程内 LRU（单实例） |
 | 会馆 | 静态 JSON 列表（外部外链） | PostgreSQL 动态会馆 + 管理端（admin）审批与 logo 存储 |
 | 部署 | Vercel Serverless | 自建服务器裸机 + Nginx |

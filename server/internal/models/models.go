@@ -108,6 +108,32 @@ type PostListItem struct {
 	GuildThemeColor string `json:"guild_theme_color,omitempty"`
 }
 
+// PostDraftItem 帖子草稿列表项（仅作者本人可见；不含正文）。
+// UpdatedAt 是草稿最近保存时间，列表按它倒序。
+type PostDraftItem struct {
+	ID        string     `json:"id"`
+	Title     string     `json:"title"`
+	Summary   string     `json:"summary"`
+	Category  string     `json:"category"`
+	CreatedAt *time.Time `json:"created_at"`
+	UpdatedAt *time.Time `json:"updated_at"`
+	// ScheduledAt 草稿里暂存的定时发布时间（UTC；nil = 未开启定时）
+	ScheduledAt     *time.Time `json:"scheduled_at,omitempty"`
+	GuildID         *int64     `json:"guild_id,omitempty"`
+	GuildUUID       string     `json:"guild_uuid,omitempty"`
+	GuildName       string     `json:"guild_name,omitempty"`
+	GuildThemeColor string     `json:"guild_theme_color,omitempty"`
+}
+
+// PostDraft 帖子草稿详情（作者本人可读；含正文）。
+type PostDraft struct {
+	PostDraftItem
+	Content       string `json:"content"`
+	ContentFormat string `json:"content_format"`
+	// PublishToken 编辑器会话级发布幂等标识；旧草稿可能为空
+	PublishToken string `json:"publish_token"`
+}
+
 // ReplyItem 我收到的回复。
 type ReplyItem struct {
 	Comment
@@ -234,26 +260,32 @@ type GuildMembership struct {
 }
 
 // GuildMember 会馆成员（列表用）。
+// Kind: member（真实成员）/ character（设定角色，不写入 guild_members）。
 type GuildMember struct {
-	ID       string     `json:"id"`
-	Name     string     `json:"name"`
-	Avatar   string     `json:"avatar"`
-	Prefix   string     `json:"prefix"`
-	Intro    string     `json:"intro"`
-	IsLeader bool       `json:"is_leader"`
-	JoinedAt *time.Time `json:"joined_at"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	Avatar         string     `json:"avatar"`
+	Prefix         string     `json:"prefix"`
+	Intro          string     `json:"intro"`
+	IsLeader       bool       `json:"is_leader"`
+	JoinedAt       *time.Time `json:"joined_at"`
+	Kind           string     `json:"kind"`
+	CharacterID    string     `json:"character_id,omitempty"`
+	CharacterName  string     `json:"character_name,omitempty"`
+	CharacterTitle string     `json:"character_title,omitempty"`
 }
 
 // GuildJoinRequest 入馆申请。
 type GuildJoinRequest struct {
-	ID        int64      `json:"id"`
-	GuildID   int64      `json:"guild_id"`
-	UserID    string     `json:"user_id"`
-	Status    int        `json:"status"`
-	Reason    string     `json:"reason"`
-	HandledBy string     `json:"handled_by"`
-	HandledAt *time.Time `json:"handled_at"`
-	CreatedAt *time.Time `json:"created_at"`
+	ID          int64      `json:"id"`
+	GuildID     int64      `json:"guild_id"`
+	UserID      string     `json:"user_id"`
+	Status      int        `json:"status"`
+	Reason      string     `json:"reason"`
+	HandledNote string     `json:"handled_note"`
+	HandledBy   string     `json:"-"`
+	HandledAt   *time.Time `json:"handled_at"`
+	CreatedAt   *time.Time `json:"created_at"`
 }
 
 // GuildArticleAuthor 文章作者摘要。
@@ -371,6 +403,10 @@ type GuildMyState struct {
 	IsLeader          bool  `json:"is_leader"`
 	HasPendingRequest bool  `json:"has_pending_request"`
 	RequestID         int64 `json:"request_id,omitempty"`
+	// CurrentGuild 用户当前已加入的会馆（可能是当前页面的会馆，也可能是其他会馆）。
+	CurrentGuild *GuildMembership `json:"current_guild,omitempty"`
+	// LatestRequest 用户对当前会馆最近一次入馆申请（含已处理状态，供「查看申请进度」）。
+	LatestRequest *GuildJoinRequest `json:"latest_request,omitempty"`
 }
 
 // Stats 用户统计。
@@ -458,4 +494,125 @@ type GuideNode struct {
 type BugReportStat struct {
 	Status int `json:"status"`
 	Count  int `json:"count"`
+}
+
+// ---- 设定记录（角色设定卡）----
+
+// CharacterAbility 设定能力项（category 为六大系之一，detail 为自由文本）。
+type CharacterAbility struct {
+	Category string `json:"category"`
+	Detail   string `json:"detail"`
+}
+
+// CharacterQuote 设定语录（已公开内容）。
+type CharacterQuote struct {
+	ID       int64  `json:"id"`
+	Content  string `json:"content"`
+	IsActive bool   `json:"is_active"`
+}
+
+// CharacterGuildRef 设定所属会馆（mode: none / existing / custom）。
+type CharacterGuildRef struct {
+	Mode       string `json:"mode"`
+	GuildID    int64  `json:"guild_id"`
+	CustomName string `json:"custom_name"`
+}
+
+// CharacterQuoteInput 语录输入项。
+type CharacterQuoteInput struct {
+	Content string `json:"content"`
+}
+
+// CharacterSheetPayload 编辑期内容：草稿 JSONB 与发布请求共用同一结构。
+type CharacterSheetPayload struct {
+	Name            string                `json:"name"`
+	Alias           string                `json:"alias"`
+	Title           string                `json:"title"`
+	Gender          int                   `json:"gender"`
+	Age             string                `json:"age"`
+	Build           string                `json:"build"`
+	Species         string                `json:"species"`
+	Identity        string                `json:"identity"`
+	DescriptionHTML string                `json:"description_html"`
+	AvatarMediaID   string                `json:"avatar_media_id"`
+	ImageMediaIDs   []string              `json:"image_media_ids"`
+	Guild           CharacterGuildRef     `json:"guild"`
+	Abilities       []CharacterAbility    `json:"abilities"`
+	Quotes          []CharacterQuoteInput `json:"quotes"`
+	QuotesVisible   bool                  `json:"quotes_visible"`
+}
+
+// CharacterSheet 设定详情（已公开内容 + 草稿元信息）。
+type CharacterSheet struct {
+	ID              string     `json:"id"`
+	UserID          string     `json:"user_id"`
+	Status          int        `json:"status"`
+	Version         int        `json:"version"`
+	Name            string     `json:"name"`
+	Alias           string     `json:"alias"`
+	Title           string     `json:"title"`
+	Gender          int        `json:"gender"`
+	Age             string     `json:"age"`
+	Build           string     `json:"build"`
+	Species         string     `json:"species"`
+	Identity        string     `json:"identity"`
+	DescriptionHTML string     `json:"description_html"`
+	AvatarMediaID   string     `json:"avatar_media_id"`
+	Avatar          string     `json:"avatar"`
+	GuildID         *int64     `json:"guild_id"`
+	GuildUUID       string     `json:"guild_uuid"`
+	GuildName       string     `json:"guild_name"`
+	GuildThemeColor string     `json:"guild_theme_color"`
+	GuildCustomName string     `json:"guild_custom_name"`
+	QuotesVisible   bool       `json:"quotes_visible"`
+	LikeCount       int        `json:"like_count"`
+	PublishedAt     *time.Time `json:"published_at"`
+	CreatedAt       *time.Time `json:"created_at"`
+	UpdatedAt       *time.Time `json:"updated_at"`
+
+	Abilities []CharacterAbility `json:"abilities"`
+	Images    []string           `json:"images"`
+	Quotes    []CharacterQuote   `json:"quotes"`
+
+	OwnerName   string `json:"owner_name"`
+	OwnerAvatar string `json:"owner_avatar"`
+	OwnerPrefix string `json:"owner_prefix"`
+
+	Liked          bool                   `json:"liked"`
+	Mine           bool                   `json:"mine"`
+	HasDraft       bool                   `json:"has_draft"`
+	DraftUpdatedAt *time.Time             `json:"draft_updated_at"`
+	Draft          *CharacterSheetPayload `json:"draft,omitempty"`
+}
+
+// CharacterEggQuote 彩蛋语录池条目（角色名 + 语录正文）。
+type CharacterEggQuote struct {
+	SheetID string `json:"sheet_id"`
+	Name    string `json:"name"`
+	Text    string `json:"text"`
+}
+
+// EmbedCharacter 引用卡片：角色设定。
+type EmbedCharacter struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Title       string   `json:"title"`
+	Alias       string   `json:"alias"`
+	Avatar      string   `json:"avatar"`
+	OwnerID     string   `json:"owner_id"`
+	OwnerName   string   `json:"owner_name"`
+	OwnerAvatar string   `json:"owner_avatar"`
+	Abilities   []string `json:"abilities"`
+	LikeCount   int      `json:"like_count"`
+}
+
+// WorldMessageParent 世界频道被引用消息的摘要（仅保留展示所需字段）。
+// 父消息已删除（status != 1）或不存在时，上层 parent 字段下发 null。
+type WorldMessageParent struct {
+	ID            int64     `json:"id"`
+	SenderName    string    `json:"sender_name"`
+	SenderAvatar  string    `json:"sender_avatar"`
+	Content       string    `json:"content"`
+	ContentFormat string    `json:"content_format"`
+	CreatedAt     time.Time `json:"created_at"`
 }

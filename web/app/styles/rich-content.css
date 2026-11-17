@@ -120,10 +120,20 @@
     border-top: 1px solid var(--color-border-divider);
 }
 
-/* 图片：全局 svg,img 的 all:inherit 会丢失 max-width，这里恢复正文图片约束 */
+/* 图片：显式恢复“按原图尺寸、最大不超过容器宽”。
+   ⚠️ 全局 `svg, img { all: inherit; ... width: inherit }`（elements.css）会把每张图拉满父容器，
+   必须同时覆盖 width / height / object-fit，只写 max-width 不够。 */
 .rich-content img {
-    max-width: 100%;
+    width: auto;
     height: auto;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    object-fit: contain;
 }
 
 /* 表格 */

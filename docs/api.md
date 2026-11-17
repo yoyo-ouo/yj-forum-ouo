@@ -1,6 +1,6 @@
 # 妖精论坛 ov2 API 文档（RESTful）
 
-- **Base URL**: `https://<domain>/api/v1`
+- **Base URL**: `https://<domain>/ov2/api`
 - **认证**: Session Cookie（`forum_session`，HttpOnly）或 `Authorization: Bearer`（预留）
 - 响应 JSON：`{"success": true/false, ...}`；错误：`{"success": false, "message": "..."}`
 - 状态码：200 成功 / 201 创建 / 400 参数错 / 401 未登录 / 403 无权限/封禁 / 404 不存在 / 429 限流 / 500 服务器错
@@ -36,6 +36,12 @@
 | GET | `/users/:id/followers` | 粉丝列表 | 否 |
 
 > 会馆字段：`guild` 为 `{id, uuid, slug, name, theme_color, is_leader}`，未入馆时为 `null`；顶层同名布尔字段 `is_leader` 便于前端直接判断（两者取值一致）。`uuid` 为会馆稳定标识，`id` 仅供展示/排序，前端路由与接口调用一律使用 `uuid`（`/users/me` 与 `/users/:id` 的 `guild` 对象同构）。
+>
+> 个人主页分页：`/users/:id/posts`、`/users/:id/favorites`、`/users/:id/comments` 均支持 `page` / `page_size`（默认 20，上限 100），响应固定含 `has_more`（布尔）。帖子/收藏的 `has_more` 由多取一条（`page_size + 1`）探测；评论由 `total` 计算（`page * page_size < total`）。
+>
+> 字段说明：帖子/收藏列表项为 `PostListItem`（`summary` 仅 200 字摘要，**不含正文** `content`）；需要完整正文时前端按 id 另行拉取 `GET /posts/:id?include_comments=0&track=0`（正文 + 引用卡片，不附评论、不计数）。评论列表项为 `ReplyItem`（含 `post_id` / `post_title`）。
+>
+> 可见性口径：`/users/:id/posts` 本人视角含未来定时帖，他人仅已发布；`/users/:id/comments` 只返回所属帖子未删除（`p.status = 1`）的评论，非本人视角还要求帖子已发布（排除定时帖）；`/users/:id` 的 `stats.post_count` 与帖子列表同口径（本人含定时帖，他人不含）。
 
 ## 帖子 Posts
 
@@ -109,7 +115,7 @@
 
 > 搜索结果：`posts[]` 与帖子列表字段同构（含会馆归属与作者会馆字段）；`users[]` 为用户摘要。响应另含 `keyword` / `page` / `page_size` 与 `posts_total` / `posts_has_more` / `users_total` / `users_has_more`（按 `type` 选择性返回）。
 
-> 兼容说明：旧 `GET /api/v1/hui-guan`（会馆 JSON 列表）**已删除**，由 `GET /api/v1/guilds` 替代；旧实时消息接口 `/api/v1/world/messages`（`/World` 页面）与 `world` 数据表一并移除，由公共广场（`/feed?space=public`）与会馆信息流取代。会馆 logo 与正文图片统一由媒体中台提供，前端请求 `/ov2/api/media/<id>`；原 `/guild-img/*` 代理已退役。
+> 兼容说明：历史 `GET /api/v1/hui-guan`（会馆 JSON 列表，旧前缀已随兼容层移除）由 `GET /ov2/api/guilds` 替代；历史实时消息接口（`/api/v1/world/messages`）与 `world` 数据表一并移除，由公共广场（`/feed?space=public`）与会馆信息流取代。会馆 logo 与正文图片统一由媒体中台提供，前端请求 `/ov2/api/media/<id>`；原 `/guild-img/*` 代理已退役。
 
 ## 限流规则（key: IP）
 

@@ -16,7 +16,7 @@ import SpaceBadge from "@/components/ui/SpaceBadge";
 import BackButton from "@/components/ui/BackButton";
 import { postApi, Comment, ApiException } from "@/lib/api";
 import { useStore } from "@/lib/store";
-import { formatTime } from "@/lib/constants";
+import { formatTime, isScheduledPost } from "@/lib/constants";
 
 /** 定时发布时间展示（YYYY-MM-DD HH:mm，本地时区） */
 function fmtDateTime(v?: string) {
@@ -24,11 +24,6 @@ function fmtDateTime(v?: string) {
   if (!v || isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-/** published_at 在未来即定时未发布（未发布帖仅作者可见，故仅作者会看到该标记） */
-function isScheduled(v?: string) {
-  return !!v && new Date(v).getTime() > Date.now();
 }
 
 export default function PostDetailPage() {
@@ -44,6 +39,11 @@ export default function PostDetailPage() {
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
+  const [commentsLoading, setCommentsLoading] = useState(true);
+  // 评论游标翻页：hasMore + 下一页游标（本页最旧一条的 id）
+  const [commentsHasMore, setCommentsHasMore] = useState(false);
+  const [commentsCursor, setCommentsCursor] = useState("");
+  const [loadingMoreComments, setLoadingMoreComments] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
   const commentEditorRef = useRef<CommentEditorHandle>(null);
@@ -51,9 +51,9 @@ export default function PostDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const r = await postApi.detail(id);
+      // 正文单独拉（include_comments=0）：评论再多/再慢也不拖正文首屏
+      const r = await postApi.detail(id, false);
       setPost(r.post);
-      setComments(r.comments || []);
       setLiked(r.liked);
       setFavorited(r.favorited);
     } catch (e) {
@@ -63,9 +63,43 @@ export default function PostDetailPage() {
     }
   }, [id]);
 
+  const loadComments = useCallback(async () => {
+    try {
+      const r = await postApi.comments(id, 50);
+      setComments(r.comments || []);
+      setCommentsHasMore(!!r.has_more);
+      setCommentsCursor(r.next_cursor || "");
+    } catch {
+      // 评论拉取失败不打断阅读，保持骨架/空态即可
+    } finally {
+      setCommentsLoading(false);
+    }
+  }, [id]);
+
+  /** 加载更早的评论：更早的一页拼到数组前面，整体保持时间升序（渲染时 reverse 即最新在前） */
+  const loadMoreComments = useCallback(async () => {
+    if (loadingMoreComments || !commentsCursor) return;
+    setLoadingMoreComments(true);
+    try {
+      const r = await postApi.comments(id, 50, commentsCursor);
+      setComments((prev) => {
+        const seen = new Set(prev.map((c) => c.id));
+        const older = (r.comments || []).filter((c) => !seen.has(c.id));
+        return [...older, ...prev];
+      });
+      setCommentsHasMore(!!r.has_more);
+      setCommentsCursor(r.next_cursor || "");
+    } catch (e: any) {
+      toast(e instanceof ApiException ? e.message : "加载更早的评论失败", "error");
+    } finally {
+      setLoadingMoreComments(false);
+    }
+  }, [id, commentsCursor, loadingMoreComments, toast]);
+
   useEffect(() => {
-    load();
-  }, [load]);
+    void load();
+    void loadComments();
+  }, [load, loadComments]);
 
   // 从个人中心评论卡片跳转：滚动定位到目标评论并高亮
   useEffect(() => {
@@ -141,8 +175,8 @@ export default function PostDetailPage() {
     if (!window.confirm("确定删除这条评论吗？")) return;
     try {
       await postApi.deleteComment(cid);
-      // 删除后重拉：服务端归并/提升口径（父级缺失等）以最新数据为准
-      await load();
+      // 删除后重拉评论：服务端归并/提升口径（父级缺失等）以最新数据为准
+      await loadComments();
     } catch (e: any) {
       toast(e.message, "error");
     }
@@ -188,7 +222,7 @@ export default function PostDetailPage() {
           <div className="post-meta-top">
             <CategoryBadge category={post.category} className="post-category-badge" />
             <SpaceBadge name={post.guild_name} color={post.guild_theme_color} />
-            {isScheduled(post.published_at) && (
+            {isScheduledPost(post.published_at, post.created_at) && (
               <span className="post-scheduled-tag-wrap">
                 <span className="post-scheduled-tag" title="尚未到达发布时间，仅自己可见">
                   <i className="fa fa-clock-o"></i> 定时发布 {fmtDateTime(post.published_at)}
@@ -268,6 +302,10 @@ export default function PostDetailPage() {
             onChangeReplyText={setCommentText}
             onSubmit={submitComment}
             submitting={submittingComment}
+            loading={commentsLoading}
+            hasMore={commentsHasMore}
+            loadingMore={loadingMoreComments}
+            onLoadMore={loadMoreComments}
             canWrite={!loadingUser && (!!user || !!userId)}
             onDelete={deleteComment}
             onLike={doLikeComment}

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"yj-forum/server/internal/models"
 )
 
 // 世界频道常量。
@@ -34,24 +36,28 @@ var (
 	ErrWorldRateLimited = errors.New("世界频道发言过于频繁")
 	// ErrWorldUserNotFound 发送者不存在（会话失效或账号已注销）。
 	ErrWorldUserNotFound = errors.New("世界频道用户不存在")
+	// ErrWorldParentNotFound 引用的父消息不存在或已删除（status != 1）。
+	ErrWorldParentNotFound = errors.New("引用的世界频道消息不存在")
 )
 
 // WorldMessage 世界频道消息（对外 JSON 形状对齐 backend-contract §3）。
 // 发送者昵称/头像/会馆信息为写入时快照，后续改名或退馆不会影响历史消息。
 type WorldMessage struct {
-	ID            int64     `json:"id"`
-	SenderID      string    `json:"sender_id"`
-	SenderName    string    `json:"sender_name"`
-	SenderAvatar  string    `json:"sender_avatar"`
-	Content       string    `json:"content"`
-	ContentFormat string    `json:"content_format"`
-	ParentID      *int64    `json:"parent_id"`
-	GuildID       string    `json:"guild_id"`
-	GuildName     string    `json:"guild_name"`
-	IsLeader      bool      `json:"is_leader"`
-	IsAdmin       bool      `json:"is_admin"`
-	AdminID       string    `json:"admin_id,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            int64  `json:"id"`
+	SenderID      string `json:"sender_id"`
+	SenderName    string `json:"sender_name"`
+	SenderAvatar  string `json:"sender_avatar"`
+	Content       string `json:"content"`
+	ContentFormat string `json:"content_format"`
+	ParentID      *int64 `json:"parent_id"`
+	GuildID       string `json:"guild_id"`
+	GuildName     string `json:"guild_name"`
+	IsLeader      bool   `json:"is_leader"`
+	IsAdmin       bool   `json:"is_admin"`
+	AdminID       string `json:"admin_id,omitempty"`
+	// Parent 被引用消息的摘要；无引用或父消息已删除时为 null。
+	Parent    *models.WorldMessageParent `json:"parent"`
+	CreatedAt time.Time                  `json:"created_at"`
 }
 
 // WorldUserSnapshot 发言时的用户资料快照（会馆 ID 使用对外稳定 UUID）。
@@ -68,6 +74,10 @@ type WorldUserSnapshot struct {
 const worldMessageColumns = `id, sender_id, COALESCE(sender_name, ''), COALESCE(sender_avatar, ''),
 	content, COALESCE(content_format, 'html'), parent_id, COALESCE(guild_id, ''), COALESCE(guild_name, ''),
 	is_leader, is_admin, COALESCE(admin_id, ''), created_at`
+
+// worldParentColumns 父消息摘要查询列。
+const worldParentColumns = `id, COALESCE(sender_name, ''), COALESCE(sender_avatar, ''),
+	content, COALESCE(content_format, 'html'), created_at`
 
 // NormalizeWorldLimit 归一化列表条数：<=0 取默认 50，>500 截断为 500。
 func NormalizeWorldLimit(limit int) int {
@@ -124,7 +134,14 @@ func (d *DB) ListWorldMessages(ctx context.Context, beforeID, afterID int64, lim
 	if err != nil {
 		return nil, false, err
 	}
-	return scanWorldMessages(rows, limit)
+	items, hasMore, err := scanWorldMessages(rows, limit)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := d.attachWorldParents(ctx, items); err != nil {
+		return nil, false, err
+	}
+	return items, hasMore, nil
 }
 
 // ListWorldAfterID 增量拉取 id 之后的消息（升序；供 poller / SSE 补发使用）。
@@ -139,7 +156,75 @@ func (d *DB) ListWorldAfterID(ctx context.Context, id int64, limit int) ([]World
 		return nil, err
 	}
 	items, _, err := scanWorldMessages(rows, limit)
-	return items, err
+	if err != nil {
+		return nil, err
+	}
+	if err := d.attachWorldParents(ctx, items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// GetWorldMessageParents 批量读取父消息摘要（一次 WHERE id = ANY($1) 查询，避免列表 N+1）。
+// 已删除（status != 1）或不存在的 id 不会出现在返回的 map 中；调用方据此下发 parent=null。
+func (d *DB) GetWorldMessageParents(ctx context.Context, ids []int64) (map[int64]*models.WorldMessageParent, error) {
+	parents := make(map[int64]*models.WorldMessageParent, len(ids))
+	uniq := make([]int64, 0, len(ids))
+	seen := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		if id <= 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+		uniq = append(uniq, id)
+	}
+	if len(uniq) == 0 {
+		return parents, nil
+	}
+	rows, err := d.Query(ctx, `SELECT `+worldParentColumns+` FROM world_messages
+		WHERE status = 1 AND id = ANY($1)`, uniq)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var p models.WorldMessageParent
+		if err := rows.Scan(&p.ID, &p.SenderName, &p.SenderAvatar, &p.Content, &p.ContentFormat, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		parents[p.ID] = &p
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return parents, nil
+}
+
+// attachWorldParents 为一批消息批量补全 parent 摘要（一次查询，不逐条查）；
+// 父消息已删除或不存在时保持 nil（JSON 为 null）。
+func (d *DB) attachWorldParents(ctx context.Context, items []WorldMessage) error {
+	ids := make([]int64, 0, len(items))
+	for _, m := range items {
+		if m.ParentID != nil {
+			ids = append(ids, *m.ParentID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	parents, err := d.GetWorldMessageParents(ctx, ids)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		if items[i].ParentID == nil {
+			continue
+		}
+		if p, ok := parents[*items[i].ParentID]; ok {
+			items[i].Parent = p
+		}
+	}
+	return nil
 }
 
 func scanWorldMessages(rows pgx.Rows, limit int) ([]WorldMessage, bool, error) {
@@ -206,6 +291,16 @@ func (d *DB) CreateWorldMessage(ctx context.Context, userID, content, contentFor
 		// 同用户串行化：并发请求均看到前一条已提交消息，2 秒限流才可靠。
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1::varchar))`, "world_send:"+userID); err != nil {
 			return err
+		}
+		// 引用校验：父消息必须存在且未被删除，否则拒绝发布。
+		if parentID != nil {
+			var parentExists bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM world_messages WHERE id = $1 AND status = 1)`, *parentID).Scan(&parentExists); err != nil {
+				return err
+			}
+			if !parentExists {
+				return ErrWorldParentNotFound
+			}
 		}
 		// 以库内时钟为基准比较，避免应用/数据库时钟偏差导致误判。
 		var (

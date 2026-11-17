@@ -4,11 +4,11 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 
 	"yj-forum/server/internal/database"
 	"yj-forum/server/internal/models"
@@ -18,44 +18,99 @@ import (
 // maxCommentContentBytes 评论原始正文长度上限（64KB，与发帖富文本一致）。
 const maxCommentContentBytes = 64 * 1024
 
-// ---- GET /api/v1/posts/:id/comments ----
+// ---- GET /ov2/api/posts/:id/comments ----
 
-// Comments 评论列表（匿名缓存 comments:post:ID；登录用户实时返回含 liked_by_me）。
+// defaultCommentsPageSize 评论列表默认每页条数（与前端首屏一致）。
+const defaultCommentsPageSize = 50
+
+// maxCommentsPageSize 单次翻页上限。
+const maxCommentsPageSize = 100
+
+// Comments 评论列表（游标翻页：首次取最新一批，带 before_id 取更早的一批）。
+//
+// 响应字段：comments（时间升序，兼容旧前端「reverse 后最新在前」）、page_size、
+// has_more、next_cursor（下一页游标 = 本页最旧一条的 id，无更早评论时为空）。
+//
+// 缓存里只存「匿名基底」（liked_by_me 全为 false）：登录用户命中缓存后
+// 再叠一次个人点赞态（单条 IN 查询），避免为每个登录访客重复打完整的评论 JOIN。
 func (h *PostsHandler) Comments(c *gin.Context) {
 	id := c.Param("id")
-	page, _ := parsePage(c)
-	pageSize := 50
+	limit := defaultCommentsPageSize
+	for _, raw := range []string{c.Query("limit"), c.Query("page_size")} {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 && v <= maxCommentsPageSize {
+			limit = v
+			break
+		}
+	}
 	me := currentUserFromCookie(c, h.Sessions)
 	// 定时未发布帖（非作者视角）与不存在的帖子：评论列表同样 404
 	if !h.postVisible(c, id, me) {
 		return
 	}
-	key := "comments:post:" + id + ":" + itoa(page)
-	if me == "" {
-		if v, ok := h.Cache.Comments.Get(key); ok {
-			c.Header("X-Cache", "HIT")
-			c.JSON(http.StatusOK, v)
+	beforeID := strings.TrimSpace(c.Query("before_id"))
+	var before *database.CommentCursor
+	if beforeID != "" {
+		cur, exists, err := h.DB.GetCommentCursor(c.Request.Context(), beforeID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 			return
 		}
+		// 游标必须属于本帖，避免跨帖乱序
+		if !exists || cur.PostID != id {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "翻页游标无效"})
+			return
+		}
+		before = &cur
 	}
-	comments, err := h.DB.GetPostComments(c.Request.Context(), id, page, pageSize)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
+	key := "comments:post:" + id + ":" + itoa(limit) + ":" + beforeID
+	cacheState := "MISS"
+	v, ok := h.Cache.Comments.Get(key)
+	if !ok {
+		comments, hasMore, err := h.DB.GetPostComments(c.Request.Context(), id, limit, before)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
+			return
+		}
+		nextCursor := ""
+		if hasMore && len(comments) > 0 {
+			nextCursor = comments[0].ID // 升序返回，首条即本页最旧
+		}
+		v = gin.H{
+			"success": true, "comments": comments, "page_size": limit,
+			"has_more": hasMore, "next_cursor": nextCursor,
+		}
+		h.Cache.Comments.Set(key, v, 60*time.Second)
+	} else {
+		cacheState = "HIT"
+	}
+	if me == "" {
+		c.Header("X-Cache", cacheState)
+		c.JSON(http.StatusOK, v)
 		return
 	}
-	resp := gin.H{"success": true, "comments": comments, "page": page, "page_size": pageSize}
-	if me != "" {
-		// 含个人点赞状态，不走共享缓存
-		markCommentLikedByMe(h.DB, c.Request.Context(), me, comments)
-		c.Header("X-Cache", "BYPASS")
-	} else {
-		h.Cache.Comments.Set(key, resp, 60*time.Second)
-		c.Header("X-Cache", "MISS")
+	// 登录态：复制切片再写个人字段，绝不污染共享缓存
+	m, _ := v.(gin.H)
+	hasMore, _ := m["has_more"].(bool)
+	nextCursor, _ := m["next_cursor"].(string)
+	out := gin.H{
+		"success": true, "comments": cloneComments(v), "page_size": limit,
+		"has_more": hasMore, "next_cursor": nextCursor,
 	}
-	c.JSON(http.StatusOK, resp)
+	markCommentLikedByMe(h.DB, c.Request.Context(), me, out["comments"].([]models.Comment))
+	c.Header("X-Cache", cacheState+":BYME")
+	c.JSON(http.StatusOK, out)
 }
 
-// ---- POST /api/v1/posts/:id/comments ----
+// cloneComments 从缓存值复制评论切片（浅拷贝足够：只覆写 liked_by_me）。
+func cloneComments(v any) []models.Comment {
+	m, _ := v.(gin.H)
+	src, _ := m["comments"].([]models.Comment)
+	out := make([]models.Comment, len(src))
+	copy(out, src)
+	return out
+}
+
+// ---- POST /ov2/api/posts/:id/comments ----
 
 type createCommentReq struct {
 	Content  string  `json:"content" binding:"required"`
@@ -124,10 +179,10 @@ func (h *PostsHandler) CreateComment(c *gin.Context) {
 	}
 	// 评论/回复灵力 +3（source=commentID 幂等）
 	h.awardCommentSpirit(c.Request.Context(), uid, comment.ID)
-	// 异步写站内通知（评论行为不再发送邮件）
+	// 异步通知（站内通知 + 邮件 outbox）
 	go h.notifyComment(comment)
 	h.Cache.Comments.DeletePrefix("comments:post:" + postID)
-	h.Cache.PostDetail.Delete("post:detail:" + postID)
+	h.invalidatePostDetail(postID)
 	c.JSON(http.StatusCreated, gin.H{"success": true, "comment": comment})
 }
 
@@ -143,10 +198,19 @@ func (h *PostsHandler) awardCommentSpirit(ctx context.Context, userID, commentID
 	}
 }
 
-// notifyComment 评论通知：只写站内通知（评论行为不再发送邮件）。
+// notifyComment 评论通知：给帖子作者/父评论作者写站内通知。
+// 邮件提醒已按需求下线（「xxx 评论了你」不再发送邮件），仅保留消息中心站内通知。
 func (h *PostsHandler) notifyComment(comment *models.Comment) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	// 先读帖子信息：无论通知发给谁，帖子作者都因「帖子下新增评论」产生未读，
+	// 需要在 SSE 连接活跃时补推一次未读数（不额外建通知行）。
+	postAuthorID, postTitle := "", ""
+	if post, err := h.DB.GetPost(ctx, comment.PostID); err == nil && post != nil {
+		postAuthorID, postTitle = post.UserID, post.Title
+	}
+
 	// 回复则通知父评论作者，否则通知帖子作者；跳过自己给自己评论/回复自己的情况
 	var targetUserID string
 	notifType := database.NotificationPostComment
@@ -154,40 +218,23 @@ func (h *PostsHandler) notifyComment(comment *models.Comment) {
 		notifType = database.NotificationCommentReply
 		pc, err := h.DB.GetComment(ctx, *comment.ParentID)
 		if err == nil && pc != nil {
-			u, err2 := h.DB.GetUserByID(ctx, pc.UserID)
-			if err2 == nil {
+			if u, err2 := h.DB.GetUserByID(ctx, pc.UserID); err2 == nil {
 				targetUserID = u.ID
 			}
 		}
 	} else {
-		post, err := h.DB.GetPost(ctx, comment.PostID)
-		if err == nil && post != nil {
-			u, err2 := h.DB.GetUserByID(ctx, post.UserID)
-			if err2 == nil {
-				targetUserID = u.ID
+		targetUserID = postAuthorID
+	}
+
+	if targetUserID != "" && targetUserID != comment.UserID {
+		excerpt := truncateRunes(sanitize.StripTagsAndTrim(comment.Content), 200)
+		authorName := comment.UserName
+		if authorName == "" {
+			if u, err := h.DB.GetUserByID(ctx, comment.UserID); err == nil && u != nil {
+				authorName = u.Name
 			}
 		}
-	}
-	if targetUserID == "" || targetUserID == comment.UserID {
-		return
-	}
-
-	postTitle := ""
-	if post, err := h.DB.GetPost(ctx, comment.PostID); err == nil && post != nil {
-		postTitle = post.Title
-	}
-	excerpt := truncateRunes(sanitize.StripTagsAndTrim(comment.Content), 200)
-	authorName := comment.UserName
-	if authorName == "" {
-		if u, err := h.DB.GetUserByID(ctx, comment.UserID); err == nil && u != nil {
-			authorName = u.Name
-		}
-	}
-
-	var notifID int64
-	created := false
-	err := h.DB.Tx(ctx, func(tx pgx.Tx) error {
-		id, ok, e := h.DB.CreateNotificationTx(ctx, tx, database.NotificationInput{
+		notifID, created, err := h.DB.CreateNotification(ctx, database.NotificationInput{
 			UserID: targetUserID, Type: notifType, ActorID: comment.UserID,
 			TargetType: "comment", TargetID: comment.ID,
 			ContextPostID: comment.PostID, ContextCommentID: comment.ID,
@@ -197,24 +244,22 @@ func (h *PostsHandler) notifyComment(comment *models.Comment) {
 			},
 			DedupeKey: "comment_notify:" + comment.ID,
 		})
-		if e != nil {
-			return e
+		if err != nil {
+			log.Printf("[COMMENT] 站内通知写入失败 comment=%s: %v", comment.ID, err)
+		} else if created {
+			PushNotificationEvent(targetUserID, notifID, gin.H{
+				"id": notifID, "type": notifType, "actor_id": comment.UserID, "actor_name": authorName,
+				"target_type": "comment", "target_id": comment.ID, "comment_id": comment.ID,
+				"post_id": comment.PostID, "post_title": postTitle, "excerpt": excerpt,
+				"parent_id": parentIDString(comment.ParentID),
+			})
+			PushUnreadEvent(ctx, h.DB, targetUserID)
 		}
-		notifID, created = id, ok
-		return nil
-	})
-	if err != nil {
-		log.Printf("[COMMENT] 站内通知写入失败 comment=%s: %v", comment.ID, err)
-		return
 	}
-	if created {
-		PushNotificationEvent(targetUserID, notifID, gin.H{
-			"id": notifID, "type": notifType, "actor_id": comment.UserID, "actor_name": authorName,
-			"target_type": "comment", "target_id": comment.ID, "comment_id": comment.ID,
-			"post_id": comment.PostID, "post_title": postTitle, "excerpt": excerpt,
-			"parent_id": parentIDString(comment.ParentID),
-		})
-		PushUnreadEvent(ctx, h.DB, targetUserID)
+
+	// 帖子作者与通知收件人不同（例如回复了他人评论）时，仍需刷新帖子作者的未读角标。
+	if postAuthorID != "" && postAuthorID != comment.UserID && postAuthorID != targetUserID {
+		PushUnreadEvent(ctx, h.DB, postAuthorID)
 	}
 }
 
@@ -225,7 +270,7 @@ func parentIDString(parent *string) string {
 	return *parent
 }
 
-// ---- DELETE /api/v1/comments/:id ----
+// ---- DELETE /ov2/api/comments/:id ----
 
 // DeleteComment 删除评论（仅作者）。
 func (h *PostsHandler) DeleteComment(c *gin.Context) {
@@ -244,12 +289,12 @@ func (h *PostsHandler) DeleteComment(c *gin.Context) {
 	// 使评论列表与帖子详情缓存失效
 	if comment != nil {
 		h.Cache.Comments.DeletePrefix("comments:post:" + comment.PostID)
-		h.Cache.PostDetail.Delete("post:detail:" + comment.PostID)
+		h.invalidatePostDetail(comment.PostID)
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-// ---- POST /api/v1/comments/:id/like ----
+// ---- POST /ov2/api/comments/:id/like ----
 
 // LikeComment 评论点赞切换。
 func (h *PostsHandler) LikeComment(c *gin.Context) {
@@ -274,7 +319,7 @@ func (h *PostsHandler) LikeComment(c *gin.Context) {
 	}
 	// 使评论列表与帖子详情缓存失效
 	h.Cache.Comments.DeletePrefix("comments:post:" + comment.PostID)
-	h.Cache.PostDetail.Delete("post:detail:" + comment.PostID)
+	h.invalidatePostDetail(comment.PostID)
 	c.JSON(http.StatusOK, gin.H{"success": true, "liked": liked, "likes": likes})
 }
 

@@ -263,3 +263,66 @@
     color: inherit !important;
 }
 
+
+/* ===== 角色设定引用卡片（character） ===== */
+.quote-card-character {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+}
+.quote-card-char-avatar {
+    overflow: hidden;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(140deg, #84a8b9 0%, #3f8c86 100%);
+}
+
+.quote-card-char-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.quote-card-char-title {
+    font-size: 10px;
+    line-height: 1.7;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: rgba(106, 140, 137, 0.16);
+    color: var(--color-text-accent);
+    white-space: nowrap;
+}
+
+.quote-card-char-owner {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--color-text-tertiary);
+}
+
+.quote-card-char-abilities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 5px;
+}
+
+.quote-card-char-ab {
+    font-size: 9.5px;
+    line-height: 1.7;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: rgba(63, 140, 134, 0.14);
+    color: var(--color-text-accent);
+    white-space: nowrap;
+}
+
+.quote-card-char-ab-2 { background: rgba(110, 154, 95, 0.16); }
+.quote-card-char-ab-3 { background: rgba(91, 127, 150, 0.16); }
+.quote-card-char-ab-4 { background: rgba(185, 138, 47, 0.18); }
+.quote-card-char-ab-5 { background: rgba(140, 111, 168, 0.16); }
+.quote-card-char-ab-6 { background: rgba(91, 111, 166, 0.16); }

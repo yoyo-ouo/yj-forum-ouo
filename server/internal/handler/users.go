@@ -2,11 +2,13 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
@@ -30,7 +32,7 @@ func (h *AuthHandler) isDeletedUser(ctx context.Context, id string) bool {
 	return err == nil && u.DeletedAt != nil
 }
 
-// ---- /api/v1/users/me ----
+// ---- /ov2/api/users/me ----
 
 // Me 当前登录用户。
 func (h *AuthHandler) Me(c *gin.Context) {
@@ -51,7 +53,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		"guild": guild, "is_leader": isLeader})
 }
 
-// ---- GET /api/v1/users/:id ----
+// ---- GET /ov2/api/users/:id ----
 
 // UserProfile 用户主页。
 func (h *AuthHandler) UserProfile(c *gin.Context) {
@@ -70,10 +72,11 @@ func (h *AuthHandler) UserProfile(c *gin.Context) {
 			"is_following": false, "is_self": false, "guild": nil, "is_leader": false})
 		return
 	}
-	stats, _ := h.DB.GetUserStats(c.Request.Context(), id)
-	followStats, _ := h.DB.GetFollowStats(c.Request.Context(), id)
 	me := h.CurrentUserFromCookie(c)
 	isSelf := me != "" && me == id
+	// 统计与列表口径一致：本人含定时帖，他人仅已发布
+	stats, _ := h.DB.GetUserStats(c.Request.Context(), id, me)
+	followStats, _ := h.DB.GetFollowStats(c.Request.Context(), id)
 	isFollowing := false
 	if me != "" && !isSelf {
 		isFollowing = h.DB.IsFollowing(c.Request.Context(), me, id)
@@ -94,26 +97,26 @@ func (h *AuthHandler) UserProfile(c *gin.Context) {
 		"guild": guild, "is_leader": isLeader})
 }
 
-// ---- GET /api/v1/users/:id/posts ----
+// ---- GET /ov2/api/users/:id/posts ----
 
 // UserPosts 用户帖子。
 func (h *AuthHandler) UserPosts(c *gin.Context) {
 	id := c.Param("id")
 	page, pageSize := parsePage(c)
 	if h.isDeletedUser(c.Request.Context(), id) {
-		c.JSON(http.StatusOK, gin.H{"success": true, "posts": []models.PostListItem{}, "page": page, "page_size": pageSize})
+		c.JSON(http.StatusOK, gin.H{"success": true, "posts": []models.PostListItem{}, "page": page, "page_size": pageSize, "has_more": false})
 		return
 	}
 	viewer := h.CurrentUserFromCookie(c)
-	posts, err := h.DB.GetUserPosts(c.Request.Context(), id, viewer, page, pageSize)
+	posts, hasMore, err := h.DB.GetUserPosts(c.Request.Context(), id, viewer, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "posts": posts, "page": page, "page_size": pageSize})
+	c.JSON(http.StatusOK, gin.H{"success": true, "posts": posts, "page": page, "page_size": pageSize, "has_more": hasMore})
 }
 
-// ---- PATCH /api/v1/users/me ----
+// ---- PATCH /ov2/api/users/me ----
 
 type updateProfileReq struct {
 	Name            *string `json:"Name"`
@@ -151,13 +154,27 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		fields["name"] = *req.Name
 	}
 	if req.Gender != nil {
+		if err := validateProfileGender(*req.Gender); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
 		fields["gender"] = *req.Gender
 	}
 	if req.Age != nil {
-		fields["age"] = *req.Age
+		age, err := validateProfileAge(*req.Age)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		fields["age"] = age
 	}
 	if req.Intro != nil {
-		fields["intro"] = *req.Intro
+		intro, err := validateProfileIntro(*req.Intro)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		fields["intro"] = intro
 	}
 	if req.Avatar != nil && *req.Avatar != "" {
 		avatar := strings.TrimSpace(*req.Avatar)
@@ -212,6 +229,45 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
+// 资料字段限制。
+const (
+	profileIntroMaxRunes = 200
+	profileAgeMaxRunes   = 32
+)
+
+var (
+	errProfileIntroTooLong  = errors.New("简介不能超过200字")
+	errProfileGenderInvalid = errors.New("性别取值无效")
+	errProfileAgeTooLong    = errors.New("年龄不能超过32个字符")
+)
+
+// validateProfileIntro 归一化简介：去首尾空白，超过 200 字报错。
+func validateProfileIntro(raw string) (string, error) {
+	intro := strings.TrimSpace(raw)
+	if utf8.RuneCountInString(intro) > profileIntroMaxRunes {
+		return "", errProfileIntroTooLong
+	}
+	return intro, nil
+}
+
+// validateProfileGender 性别仅允许 0（未设置）/1/2。
+func validateProfileGender(gender int) error {
+	switch gender {
+	case 0, 1, 2:
+		return nil
+	default:
+		return errProfileGenderInvalid
+	}
+}
+
+// validateProfileAge 年龄为自由文本，长度最多 32 个字符。
+func validateProfileAge(raw string) (string, error) {
+	if utf8.RuneCountInString(raw) > profileAgeMaxRunes {
+		return "", errProfileAgeTooLong
+	}
+	return raw, nil
+}
+
 // validAvatarURL 校验头像地址：允许站内相对路径或 http/https；拒绝 data/javascript/svg 等危险形态。
 func validAvatarURL(raw string) bool {
 	raw = strings.TrimSpace(raw)
@@ -224,7 +280,7 @@ func validAvatarURL(raw string) bool {
 	}
 	if strings.HasPrefix(raw, "/") {
 		return strings.HasPrefix(raw, "/avatar/") || strings.HasPrefix(raw, "/static/img/avatars/") ||
-			strings.HasPrefix(raw, "/ov2/api/media/") || strings.HasPrefix(raw, "/api/v1/media/")
+			strings.HasPrefix(raw, "/ov2/api/media/")
 	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || u.User != nil {
@@ -239,7 +295,7 @@ func validAvatarURL(raw string) bool {
 	return true
 }
 
-// ---- POST /api/v1/users/me/sign-in ----
+// ---- POST /ov2/api/users/me/sign-in ----
 
 // SignIn 每日签到（当日未签到则灵力 +10；重复签到 409）。
 func (h *AuthHandler) SignIn(c *gin.Context) {
@@ -260,7 +316,7 @@ func (h *AuthHandler) SignIn(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"spirit": spirit, "last_sign_in": lastSignIn}})
 }
 
-// ---- POST /api/v1/users/:id/follow ----
+// ---- POST /ov2/api/users/:id/follow ----
 
 // ToggleFollow 关注/取消。
 func (h *AuthHandler) ToggleFollow(c *gin.Context) {
@@ -282,7 +338,7 @@ func (h *AuthHandler) ToggleFollow(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "following": following})
 }
 
-// ---- GET /api/v1/users/:id/following / followers ----
+// ---- GET /ov2/api/users/:id/following / followers ----
 
 func (h *AuthHandler) Following(c *gin.Context) {
 	h.followList(c, "following")
@@ -313,7 +369,7 @@ func (h *AuthHandler) followList(c *gin.Context, kind string) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "users": users, "page": page, "page_size": pageSize, "has_more": hasMore})
 }
 
-// ---- GET /api/v1/users/:id/mutual ----
+// ---- GET /ov2/api/users/:id/mutual ----
 
 // Mutual 共同关注（viewer 来自 cookie；匿名或看自己时返回空列表）。
 func (h *AuthHandler) Mutual(c *gin.Context) {
@@ -332,7 +388,7 @@ func (h *AuthHandler) Mutual(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "users": users, "page": page, "page_size": pageSize, "has_more": hasMore})
 }
 
-// ---- GET /api/v1/users/me/replies ----
+// ---- GET /ov2/api/users/me/replies ----
 
 // MyReplies 我收到的回复。
 func (h *AuthHandler) MyReplies(c *gin.Context) {
@@ -350,40 +406,62 @@ func (h *AuthHandler) MyReplies(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "replies": replies, "total": total})
 }
 
-// ---- GET /api/v1/users/:id/comments ----
+// ---- GET /ov2/api/users/me/likes ----
+
+// MyLikes 谁赞了我：当前用户的帖子/评论收到的全部点赞（仅本人可见）。
+func (h *AuthHandler) MyLikes(c *gin.Context) {
+	uid := CurrentUser(c)
+	if uid == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": "请先登录"})
+		return
+	}
+	items, hasMore, next, err := h.DB.ListLikeMessages(c.Request.Context(), uid, c.Query("cursor"), messageLimit(c))
+	if err != nil {
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "游标") {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"success": false, "message": "查询失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "items": items, "has_more": hasMore, "next_cursor": next})
+}
+
+// ---- GET /ov2/api/users/:id/comments ----
 
 // UserComments 用户发表的评论。
 func (h *AuthHandler) UserComments(c *gin.Context) {
 	id := c.Param("id")
 	page, pageSize := parsePage(c)
 	if h.isDeletedUser(c.Request.Context(), id) {
-		c.JSON(http.StatusOK, gin.H{"success": true, "comments": []models.ReplyItem{}, "total": 0, "page": page, "page_size": pageSize})
+		c.JSON(http.StatusOK, gin.H{"success": true, "comments": []models.ReplyItem{}, "total": 0, "page": page, "page_size": pageSize, "has_more": false})
 		return
 	}
-	comments, total, err := h.DB.GetUserComments(c.Request.Context(), id, page, pageSize)
+	viewer := h.CurrentUserFromCookie(c)
+	comments, total, err := h.DB.GetUserComments(c.Request.Context(), id, viewer, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "comments": comments, "total": total, "page": page, "page_size": pageSize})
+	c.JSON(http.StatusOK, gin.H{"success": true, "comments": comments, "total": total, "page": page, "page_size": pageSize, "has_more": page*pageSize < total})
 }
 
-// ---- GET /api/v1/users/:id/favorites ----
+// ---- GET /ov2/api/users/:id/favorites ----
 
 // UserFavorites 用户收藏。
 func (h *AuthHandler) UserFavorites(c *gin.Context) {
 	id := c.Param("id")
 	page, pageSize := parsePage(c)
 	if h.isDeletedUser(c.Request.Context(), id) {
-		c.JSON(http.StatusOK, gin.H{"success": true, "posts": []models.PostListItem{}, "page": page, "page_size": pageSize})
+		c.JSON(http.StatusOK, gin.H{"success": true, "posts": []models.PostListItem{}, "page": page, "page_size": pageSize, "has_more": false})
 		return
 	}
-	posts, err := h.DB.GetUserFavorites(c.Request.Context(), id, page, pageSize)
+	posts, hasMore, err := h.DB.GetUserFavorites(c.Request.Context(), id, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "posts": posts, "page": page, "page_size": pageSize})
+	c.JSON(http.StatusOK, gin.H{"success": true, "posts": posts, "page": page, "page_size": pageSize, "has_more": hasMore})
 }
 
 // parsePage 解析 page/page_size（默认每页 20，上限 100）。

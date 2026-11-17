@@ -11,6 +11,11 @@ const htmlLimitedBots =
   /[\w-]+-Google|Google-[\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight|MicroMessenger|WeChat|QQ\/|Weibo|Bytespider|BytedanceBot/i;
 
 const nextConfig: NextConfig = {
+  // dev 时代理 /ov2/api/* 会缓冲请求体；默认 10MB 会把 10MB 图片截断（生产走 nginx 不受影响）。
+  // 与 nginx 的 client_max_body_size 12m 对齐。Next 16 中该项位于 experimental（旧名 middlewareClientMaxBodySize）。
+  experimental: {
+    proxyClientMaxBodySize: "12mb",
+  },
   // 裸机部署：产出 .next/standalone/server.js（自带最小 node_modules 依赖树），
   // 由 deploy/yj-web.service 直接 `node .next/standalone/server.js` 运行；
   // 仅影响 `next build`，对 `next dev` 无影响。
@@ -24,17 +29,12 @@ const nextConfig: NextConfig = {
     unoptimized: true, // 本地资源全部走 public/，无需服务端优化
   },
   async rewrites() {
-    // 开发环境：浏览器与 Next 同源，/api/* 代理到 Go 后端（生产由 Nginx 分域，此规则仍可复用）
+    // 开发环境：浏览器与 Next 同源，/ov2/api/* 代理到 Go 后端（生产由 Nginx 分域，此规则仍可复用）
     return [
       {
         // 新 API（canonical）：浏览器同源请求 /ov2/api/* → Go 后端
         source: "/ov2/api/:path*",
         destination: `${API_TARGET}/ov2/api/:path*`,
-      },
-      {
-        // 旧兼容层 + /api/v1 别名
-        source: "/api/:path*",
-        destination: `${API_TARGET}/api/:path*`,
       },
       {
         // 旧头像兼容：/avatar/<uuid>.webp → Go 后端（生产由 Nginx 分发）

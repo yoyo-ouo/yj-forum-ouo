@@ -1,5 +1,6 @@
 // Package queue 实现基于 PostgreSQL 的后台消费者：
-// email_outbox（5s/20 条，失败指数退避）、cache_invalidations（1s/50 条）。
+// email_outbox（5s/20 条，失败指数退避）与 cache_invalidations（1s/50 条）。
+// 粉丝发帖邮件（email_fanout_jobs / follower_post）已按产品需求下线。
 package queue
 
 import (

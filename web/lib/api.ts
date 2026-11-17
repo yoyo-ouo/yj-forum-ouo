@@ -47,6 +47,10 @@ export interface Post {
   comment_count?: number;
   status?: number;
   created_at?: string;
+  // 最近更新时间（草稿卡片显示「编辑于…」用）
+  updated_at?: string;
+  // 列表项是否为草稿（首页信息流仅本人可见）
+  is_draft?: boolean;
   user_name: string;
   user_avatar: string;
   // 正文格式：'markdown'（旧帖）| 'html'（富文本编辑器产出）
@@ -93,6 +97,21 @@ export interface ReplyItem extends Comment {
   post_title?: string;
 }
 
+/** 「谁赞了我」条目（GET /users/me/likes，仅本人可见）。 */
+export interface LikeItem {
+  id: string;
+  actor: { id: string; name: string; avatar: string };
+  target_type: "post" | "comment" | "character";
+  target_id: string;
+  post_id: string;
+  post_title: string;
+  comment_id: string;
+  comment_excerpt: string;
+  /** 设定名（target_type=character 时有效） */
+  target_title?: string;
+  created_at: string;
+}
+
 // ---- 会馆 ----
 
 // 馆长摘要（列表/详情共用）
@@ -115,6 +134,11 @@ export interface GuildMember {
   intro?: string;
   is_leader?: boolean;
   joined_at?: string;
+  /** member（真实成员）/ character（设定角色，不写入 guild_members） */
+  kind?: "member" | "character";
+  character_id?: string;
+  character_name?: string;
+  character_title?: string;
 }
 
 // 馆长介绍页数据（GET /guilds/:slug/leader）
@@ -181,11 +205,28 @@ export interface GuildDetail {
 }
 
 // 当前用户与会馆的关系（详情页；未登录为 null）
+/** 入馆申请（status：0 待审 / 1 通过 / 2 拒绝 / 3 撤回）。 */
+export interface GuildJoinRequestInfo {
+  id: number;
+  guild_id: number;
+  user_id: string;
+  status: number;
+  reason: string;
+  handled_note?: string;
+  handled_by?: string;
+  handled_at?: string | null;
+  created_at?: string | null;
+}
+
 export interface GuildMyState {
   is_member: boolean;
   is_leader: boolean;
   has_pending_request: boolean;
   request_id?: number;
+  /** 用户当前已加入的会馆（可能是其他会馆）。 */
+  current_guild?: GuildMembership | null;
+  /** 对该会馆最近一次申请（含已处理状态）。 */
+  latest_request?: GuildJoinRequestInfo | null;
 }
 
 // 动态流条目（帖子或文章）
@@ -245,8 +286,8 @@ export interface ArticleSearchResult {
   page_size: number;
 }
 
-// 引用卡片（GET /embeds）：三类数据，查不到的 id 不出现在数组里
-export type EmbedKind = "user" | "post" | "article";
+// 引用卡片（GET /embeds）：四类数据，查不到的 id 不出现在数组里
+export type EmbedKind = "user" | "post" | "article" | "character";
 
 export interface EmbedUserItem {
   id: string;
@@ -278,11 +319,26 @@ export interface EmbedArticleItem {
   guild_name: string;
 }
 
+/** 角色设定引用卡片 */
+export interface EmbedCharacterItem {
+  id: string;
+  name: string;
+  title: string;
+  alias: string;
+  avatar: string;
+  owner_id: string;
+  owner_name: string;
+  owner_avatar: string;
+  abilities: string[];
+  like_count: number;
+}
+
 // 批量解析结果（每类 ≤30）
 export interface EmbedResolved {
   users: EmbedUserItem[];
   posts: EmbedPostItem[];
   articles: EmbedArticleItem[];
+  characters: EmbedCharacterItem[];
 }
 
 // 文章参与人
@@ -472,9 +528,9 @@ export const userApi = {
       is_leader?: boolean;
     }>(`/users/${id}`),
   posts: (id: string, page = 1, pageSize = 20) =>
-    request<{ posts: Post[]; page: number; page_size: number }>(`/users/${id}/posts?page=${page}&page_size=${pageSize}`),
+    request<{ posts: Post[]; page: number; page_size: number; has_more?: boolean }>(`/users/${id}/posts?page=${page}&page_size=${pageSize}`),
   favorites: (id: string, page = 1, pageSize = 20) =>
-    request<{ posts: Post[] }>(`/users/${id}/favorites?page=${page}&page_size=${pageSize}`),
+    request<{ posts: Post[]; page?: number; page_size?: number; has_more?: boolean }>(`/users/${id}/favorites?page=${page}&page_size=${pageSize}`),
   follow: (id: string) => request<{ following: boolean }>(`/users/${id}/follow`, { method: "POST" }),
   following: (id: string, page = 1, pageSize = 20) =>
     request<{ users: UserBrief[]; page?: number; page_size?: number; has_more?: boolean }>(`/users/${id}/following?page=${page}&page_size=${pageSize}`),
@@ -484,11 +540,16 @@ export const userApi = {
   mutual: (id: string, page = 1, pageSize = 20) =>
     request<{ users: UserBrief[]; page: number; page_size: number; has_more?: boolean }>(`/users/${id}/mutual?page=${page}&page_size=${pageSize}`),
   comments: (id: string, page = 1, pageSize = 20) =>
-    request<{ comments: ReplyItem[]; total: number }>(`/users/${id}/comments?page=${page}&page_size=${pageSize}`),
+    request<{ comments: ReplyItem[]; total: number; page?: number; page_size?: number; has_more?: boolean }>(`/users/${id}/comments?page=${page}&page_size=${pageSize}`),
   updateMe: (data: Record<string, unknown>) =>
     request<{ success: boolean }>("/users/me", { method: "PATCH", body: JSON.stringify(data) }),
   replies: (page = 1, pageSize = 50) =>
     request<{ replies: Comment[]; total: number }>(`/users/me/replies?page=${page}&page_size=${pageSize}`),
+  // 谁赞了我（仅本人）：cursor 分页
+  myLikes: (cursor = "", pageSize = 20) =>
+    request<{ items: LikeItem[]; has_more: boolean; next_cursor: string }>(
+      `/users/me/likes?limit=${pageSize}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`
+    ),
   // 每日签到（+10 灵力；409 = 今日已签）
   signIn: () =>
     request<{ data: { spirit: number; last_sign_in: string } }>("/users/me/sign-in", { method: "POST" }),
@@ -513,13 +574,57 @@ export const userApi = {
   },
 };
 
+// ---- 帖子草稿 ----
+
+/** 帖子草稿列表项（仅本人可读；不含正文） */
+export interface PostDraftItem {
+  id: string;
+  title: string;
+  summary: string;
+  category: string;
+  created_at?: string;
+  updated_at?: string;
+  /** 草稿里暂存的定时发布时间（RFC3339；未开启时缺省） */
+  scheduled_at?: string;
+  guild_id?: number | null;
+  guild_uuid?: string;
+  guild_name?: string;
+  guild_theme_color?: string;
+}
+
+/** 帖子草稿详情（作者本人） */
+export interface PostDraft extends PostDraftItem {
+  content: string;
+  content_format?: string;
+  /** 编辑器会话级发布幂等 token（旧草稿可能为空） */
+  publish_token?: string;
+}
+
+/** 草稿保存/发布负载（guild_uuid 为空 = 公共空间） */
+export interface PostDraftPayload {
+  title: string;
+  content: string;
+  category: string;
+  guild_uuid?: string;
+  scheduled_at?: string;
+  /** 发布幂等 token：同一编辑器会话跨草稿 id 恢复时仍能找回已发布的帖子 */
+  publish_token?: string;
+}
+
 // ---- 帖子 ----
 export const postApi = {
   list: (page = 1, pageSize = 20, category = "") =>
     request<{ posts: Post[]; page: number; page_size: number }>(`/posts?page=${page}&page_size=${pageSize}${category ? `&category=${encodeURIComponent(category)}` : ""}`),
   random: () => request<{ posts: Post[] }>("/posts/random"),
-  detail: (id: string) =>
-    request<{ post: Post; comments: Comment[]; liked: boolean; favorited: boolean }>(`/posts/${id}`),
+  // includeComments=false：只取正文（跳过 50 条评论）；track=false：不计数（track=0）
+  detail: (id: string, includeComments = true, track = true) => {
+    const q: string[] = [];
+    if (!includeComments) q.push("include_comments=0");
+    if (!track) q.push("track=0");
+    return request<{ post: Post; comments: Comment[]; liked: boolean; favorited: boolean }>(
+      `/posts/${id}${q.length ? `?${q.join("&")}` : ""}`
+    );
+  },
   // 引用选择器默认项（登录；关注/收藏各至多 20 条）
   pickerDefaults: () => request<{ data: PickerDefaults }>("/posts/picker-defaults"),
   // guildUuid 传入时帖子归属该会馆（需为该馆成员），否则发到公共空间；publishedAt 为 RFC3339（可选，未来时间即定时发布）
@@ -539,8 +644,11 @@ export const postApi = {
   remove: (id: string) => request<{ success: boolean }>(`/posts/${id}/delete`, { method: "POST" }),
   report: (id: string, reason: string, detail = "") =>
     request<{ success: boolean }>(`/posts/${id}/report`, { method: "POST", body: JSON.stringify({ reason, detail }) }),
-  comments: (id: string, page = 1, pageSize = 50) =>
-    request<{ comments: Comment[] }>(`/posts/${id}/comments?page=${page}&page_size=${pageSize}`),
+  // 评论列表：游标翻页（首次不带 beforeId 取最新一批；带 beforeId 取更早的一批）
+  comments: (id: string, limit = 50, beforeId?: string) =>
+    request<{ comments: Comment[]; has_more: boolean; next_cursor: string }>(
+      `/posts/${id}/comments?limit=${limit}${beforeId ? `&before_id=${encodeURIComponent(beforeId)}` : ""}`
+    ),
   createComment: (id: string, content: string, parentId?: string, contentFormat?: string, altcha?: string) =>
     request<{ comment: Comment }>(`/posts/${id}/comments`, {
       method: "POST",
@@ -553,6 +661,27 @@ export const postApi = {
     }),
   deleteComment: (id: string) => request<{ success: boolean }>(`/comments/${id}`, { method: "DELETE" }),
   likeComment: (id: string) => request<{ liked: boolean; likes: number }>(`/comments/${id}/like`, { method: "POST" }),
+};
+
+// ---- 帖子草稿（全部需登录；服务端按 user_id 隔离，非本人一律 404） ----
+export const postDraftApi = {
+  list: (limit = 20) => request<{ drafts: PostDraftItem[] }>(`/posts/drafts?limit=${limit}`),
+  // keepalive=true 用于页面卸载/隐藏时的最后一次保存（请求可在页面销毁后继续）
+  create: (keepalive = false) => request<{ id: string }>("/posts/drafts", { method: "POST", keepalive }),
+  get: (id: string) => request<{ draft: PostDraft }>(`/posts/drafts/${encodeURIComponent(id)}`),
+  save: (id: string, payload: PostDraftPayload, keepalive = false) =>
+    request<{ saved_at: string }>(`/posts/drafts/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+      keepalive,
+    }),
+  publish: (id: string, payload: PostDraftPayload) =>
+    request<{ id: string }>(`/posts/drafts/${encodeURIComponent(id)}/publish`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  remove: (id: string, signal?: AbortSignal) =>
+    request<{ success: boolean }>(`/posts/drafts/${encodeURIComponent(id)}`, { method: "DELETE", signal }),
 };
 
 // ---- 会馆 ----
@@ -603,18 +732,19 @@ export const feedApi = {
 // ---- 引用卡片 ----
 export const embedApi = {
   // 批量解析引用 id（URLSearchParams 逗号拼接；查不到的 id 省略；每类最多 30 个）
-  resolve: (ids: { users?: string[]; posts?: string[]; articles?: string[] }) => {
+  resolve: (ids: { users?: string[]; posts?: string[]; articles?: string[]; characters?: string[] }) => {
     const qs = new URLSearchParams();
     if (ids.users?.length) qs.set("users", ids.users.join(","));
     if (ids.posts?.length) qs.set("posts", ids.posts.join(","));
     if (ids.articles?.length) qs.set("articles", ids.articles.join(","));
+    if (ids.characters?.length) qs.set("characters", ids.characters.join(","));
     return request<EmbedResolved>(`/embeds?${qs.toString()}`);
   },
 };
 
 // ---- 媒体（发帖配图） ----
 export const mediaApi = {
-  // 上传图片（需登录；multipart file，≤5MB，png/jpeg/webp/gif）；scene 可选：post_image | comment_image，缺省回退 post_image
+  // 上传图片（需登录；multipart file，仅限 10MB，png/jpeg/webp/gif）；scene 可选：post_image | comment_image，缺省回退 post_image
   upload: (file: File, scene?: string) => {
     const fd = new FormData();
     fd.append("file", file);
@@ -629,7 +759,8 @@ export const miscApi = {
     request<SearchResult>(`/search?k=${encodeURIComponent(k)}&type=${type}&page=${page}&page_size=${pageSize}`),
   reportBug: (data: { title: string; detail: string; steps?: string; contact?: string; page_url?: string }, altcha?: string) =>
     request<{ id: number }>("/reports/bug", { method: "POST", body: JSON.stringify({ ...data, ...(altcha ? { altcha } : {}) }) }),
-  easterEgg: () => request<{ ID: string; Name: string; Text: string }>("/easter-egg"),
+  easterEgg: () =>
+    request<{ ID: string; Name: string; Text: string; Kind?: "static" | "quote" }>("/easter-egg"),
 };
 
 // ---- 反馈中心（公开；status 缺省为全部，0/1/2/3 四态过滤）----

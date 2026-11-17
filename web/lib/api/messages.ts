@@ -16,16 +16,18 @@ export interface MessageActor {
   avatar: string;
 }
 
-/** 点赞消息：帖子被赞 / 评论被赞。 */
+/** 点赞消息：帖子被赞 / 评论被赞 / 设定被赞。 */
 export interface LikeMessage {
   id: string;
   actor: MessageActor;
-  target_type: "post" | "comment";
+  target_type: "post" | "comment" | "character";
   target_id: string;
   post_id: string;
   post_title: string;
   comment_id: string;
   comment_excerpt: string;
+  /** 设定名（target_type=character 时有效） */
+  target_title?: string;
   created_at: string;
 }
 
@@ -71,12 +73,24 @@ export interface MessageSummary {
   chat: number;
 }
 
-/** cursor 分页响应（items/has_more/next_cursor）。 */
-export interface MessagePage<T> {
-  success: boolean;
+/** 单类分页数据（全量接口内嵌使用）。 */
+export interface MessagePageData<T> {
   items: T[];
   has_more: boolean;
   next_cursor: string;
+}
+
+/** cursor 分页响应（items/has_more/next_cursor）。 */
+export interface MessagePage<T> extends MessagePageData<T> {
+  success: boolean;
+}
+
+/** GET /messages/all：点赞/评论/系统三路一次返回。 */
+export interface AllMessagesResponse {
+  success: boolean;
+  likes: MessagePageData<LikeMessage>;
+  comments: MessagePageData<CommentMessage>;
+  system: MessagePageData<SystemMessage>;
 }
 
 /** summary 接口响应。 */
@@ -129,6 +143,7 @@ export interface StreamNotificationItem {
   comment_id?: string;
   post_id?: string;
   post_title?: string;
+  character_name?: string;
   excerpt?: string;
   comment_excerpt?: string;
   parent_id?: string;
@@ -182,6 +197,19 @@ export function messagesStreamUrl(): string {
 export const messagesApi = {
   /** 四类未读数。 */
   summary: () => request<MessageSummaryResponse>("/messages/summary"),
+
+  /** 「全部」聚合：一条请求返回点赞/评论/系统三路分页（各自 cursor）。 */
+  all: (
+    cursors: { likes?: string; comments?: string; system?: string } = {},
+    limit = MESSAGE_PAGE_SIZE
+  ) => {
+    const qs = new URLSearchParams();
+    qs.set("limit", String(normalizeLimit(limit)));
+    if (cursors.likes) qs.set("likes_cursor", cursors.likes);
+    if (cursors.comments) qs.set("comments_cursor", cursors.comments);
+    if (cursors.system) qs.set("system_cursor", cursors.system);
+    return request<AllMessagesResponse>(`/messages/all?${qs.toString()}`);
+  },
 
   /** 点赞消息（帖子赞 + 评论赞，按时间倒序 cursor 分页）。 */
   likes: (cursor?: string, limit = MESSAGE_PAGE_SIZE) =>

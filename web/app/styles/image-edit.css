@@ -1,0 +1,397 @@
+/* ===== 图片编辑模态框（ImageEditModal）=====
+   分片：弹窗外壳 / 裁剪舞台 / 右侧控制区 / 底部按钮 / 窄屏适配
+   命名前缀 ie-，仅复用论坛颜色变量；裁剪舞台固定深色底，日夜皆适用。 */
+
+/* ---------- 弹窗外壳 ---------- */
+.ie-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+    align-items: center;
+    justify-content: center;
+}
+
+.ie-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 20, 22, 0.55);
+    backdrop-filter: blur(4px);
+}
+
+.ie-card {
+    position: relative;
+    width: min(920px, 94vw);
+    max-height: 92vh;
+    overflow: auto;
+    padding: 20px 22px 18px;
+    border-radius: 12px;
+    border: 1px solid var(--color-border-card);
+    background: var(--color-bg-card);
+    box-shadow: 0 18px 46px var(--color-shadow-card);
+    text-align: left;
+    animation: ieCardIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes ieCardIn {
+    from {
+        opacity: 0;
+        transform: scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.ie-close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-text-tertiary);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ie-close:hover {
+    background: var(--color-bg-item-hover);
+    color: var(--color-text-primary);
+}
+
+.ie-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 36px 4px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.ie-title i {
+    color: var(--color-primary);
+    font-size: 16px;
+}
+
+.ie-subtitle {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--color-text-tertiary);
+}
+
+/* ---------- 主体布局 ---------- */
+.ie-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 224px;
+    gap: 16px;
+    margin-top: 14px;
+}
+
+/* ---------- 裁剪舞台 ---------- */
+.ie-stage {
+    position: relative;
+    height: 340px;
+    overflow: hidden;
+    border-radius: 12px;
+    background: #22343a;
+    box-shadow: inset 0 0 0 1px rgba(132, 168, 185, 0.14);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
+.ie-stage.is-dragging {
+    cursor: grabbing;
+}
+
+.ie-canvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.ie-crop-frame {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 2;
+    transform: translate(-50%, -50%);
+    border: 1px solid rgba(87, 148, 145, 0.85);
+    box-shadow: 0 0 0 9999px rgba(10, 20, 22, 0.45);
+    pointer-events: none;
+}
+
+/* 三分线：低透明度青灰色，避免高亮感 */
+.ie-crop-frame::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(to right, rgba(180, 210, 216, 0.16) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(180, 210, 216, 0.16) 1px, transparent 1px);
+    background-size: 33.333% 33.333%;
+    background-position: -1px -1px;
+}
+
+.ie-stage-tip {
+    position: absolute;
+    right: 0;
+    bottom: 8px;
+    left: 0;
+    z-index: 3;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    color: rgba(232, 238, 237, 0.5);
+    pointer-events: none;
+}
+
+.ie-stage-loading {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(34, 52, 58, 0.86);
+    font-size: 13px;
+    color: rgba(232, 238, 237, 0.85);
+}
+
+/* ---------- 右侧控制区 ---------- */
+.ie-side {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 14px;
+    border: 1px solid var(--color-border-card);
+    border-radius: 12px;
+    background: var(--color-bg-item);
+}
+
+.ie-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ie-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12.5px;
+    color: var(--color-text-secondary);
+}
+
+.ie-label-value {
+    color: var(--color-text-tertiary);
+    font-variant-numeric: tabular-nums;
+}
+
+.ie-ratios {
+    display: flex;
+    gap: 6px;
+}
+
+.ie-ratio-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 7px 2px;
+    border: 1px solid var(--color-border-card);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.ie-ratio-btn:hover:not(:disabled) {
+    background: var(--color-bg-item-hover);
+    color: var(--color-text-primary);
+}
+
+.ie-ratio-btn.is-active {
+    border-color: rgba(87, 148, 145, 0.55);
+    background: rgba(87, 148, 145, 0.16);
+    color: var(--color-text-primary);
+    font-weight: 600;
+}
+
+.night-mode .ie-ratio-btn.is-active {
+    border-color: rgba(132, 168, 185, 0.5);
+    background: rgba(132, 168, 185, 0.18);
+}
+
+.ie-ratio-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.ie-range {
+    width: 100%;
+    height: 18px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+}
+
+.ie-range:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.ie-tools {
+    display: flex;
+    gap: 8px;
+}
+
+.ie-tool {
+    display: inline-flex;
+    flex: 1 1 0;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 6px;
+    border: 1px solid var(--color-border-card);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-family: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.ie-tool:hover {
+    background: var(--color-bg-item-hover);
+    color: var(--color-text-primary);
+}
+
+.ie-tool i {
+    font-size: 12px;
+    color: var(--color-text-accent);
+}
+
+.ie-tool-block {
+    width: 100%;
+}
+
+.ie-note {
+    margin: 0;
+    font-size: 11.5px;
+    line-height: 1.7;
+    color: var(--color-text-tertiary);
+}
+
+.ie-error {
+    margin: 10px 0 0;
+    font-size: 12.5px;
+    color: #b04a42;
+}
+
+.night-mode .ie-error {
+    color: #e08f88;
+}
+
+/* ---------- 底部按钮 ---------- */
+.ie-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.ie-btn {
+    min-width: 92px;
+    padding: 8px 20px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 13.5px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.ie-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.ie-btn-ghost {
+    border-color: var(--color-border-card);
+    background: var(--color-bg-item);
+    color: var(--color-text-secondary);
+}
+
+.ie-btn-ghost:hover:not(:disabled) {
+    background: var(--color-bg-item-hover);
+    color: var(--color-text-primary);
+}
+
+.ie-btn-primary {
+    background: var(--color-primary);
+    color: var(--color-text-light);
+    box-shadow: 0 4px 14px var(--color-shadow-primary);
+}
+
+.ie-btn-primary:hover:not(:disabled) {
+    opacity: 0.92;
+}
+
+/* ---------- 焦点可见 ---------- */
+.ie-close:focus-visible,
+.ie-ratio-btn:focus-visible,
+.ie-tool:focus-visible,
+.ie-range:focus-visible,
+.ie-btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* ---------- 窄屏：上下堆叠 ---------- */
+@media (max-width: 719.98px) {
+    .ie-card {
+        width: 94vw;
+        padding: 16px 16px 14px;
+    }
+
+    .ie-body {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    .ie-stage {
+        height: 260px;
+    }
+
+    .ie-side {
+        gap: 14px;
+        padding: 12px;
+    }
+}
+
+@media (max-width: 420px) {
+    .ie-actions {
+        flex-direction: column-reverse;
+    }
+
+    .ie-btn {
+        width: 100%;
+    }
+}

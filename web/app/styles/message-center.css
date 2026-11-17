@@ -1,4 +1,4 @@
-/* ===== 消息中心（/messages）：260px 类型栏 + 自适应详情 ===== */
+/* ===== 消息中心（/messages）：桌面 260px 类型栏 + 自适应详情；移动端单屏（顶部标题/连接状态 + 横向类型切换器 + 正文） ===== */
 
 .msg-page {
     max-width: 1220px;
@@ -170,6 +170,28 @@
     min-height: 0;
 }
 
+.msg-chat-back {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding: 5px 9px;
+    border: none;
+    border-radius: 8px;
+    background: var(--color-bg-icon);
+    color: var(--color-text-secondary);
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease;
+}
+
+.msg-chat-back:hover {
+    background: var(--color-bg-icon-hover);
+    color: var(--color-primary);
+}
+
 .msg-detail-head {
     display: flex;
     align-items: center;
@@ -203,15 +225,20 @@
     white-space: nowrap;
 }
 
-.msg-back-btn,
+.msg-refresh-btn i {
+    color: inherit;
+}
+
 .msg-refresh-btn {
-    display: none;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 4px;
+    width: 34px;
     height: 34px;
+    padding: 0;
     border: 1px solid var(--color-border-card);
-    border-radius: 17px;
+    border-radius: 50%;
     background: var(--color-bg-card);
     color: var(--color-text-secondary);
     font-family: inherit;
@@ -221,23 +248,6 @@
     transition: border-color 0.18s ease, color 0.18s ease;
 }
 
-.msg-back-btn {
-    padding: 0 12px;
-}
-
-.msg-back-btn i,
-.msg-refresh-btn i {
-    color: inherit;
-}
-
-.msg-refresh-btn {
-    display: inline-flex;
-    width: 34px;
-    padding: 0;
-    border-radius: 50%;
-}
-
-.msg-back-btn:hover,
 .msg-refresh-btn:hover {
     border-color: var(--color-border-focus);
     color: var(--color-primary);
@@ -951,7 +961,6 @@
 
 .msg-type-item:focus-visible,
 .msg-item:focus-visible,
-.msg-back-btn:focus-visible,
 .msg-refresh-btn:focus-visible,
 .msg-load-more button:focus-visible,
 .msg-chat-more button:focus-visible,
@@ -979,46 +988,227 @@
 }
 
 @media (max-width: 768px) {
+    /* 消息页固定占满顶栏以下区域：tab 切换器固定，仅正文列表内部滚动 */
+    body.msg-page-active {
+        overflow: hidden;
+    }
+
+    body.msg-page-active #footer {
+        display: none;
+    }
+
     .msg-page {
-        padding: 10px 10px 24px;
+        box-sizing: border-box;
+        height: calc(100dvh - 70px);
+        padding: 8px 8px 10px;
+        overflow: hidden;
     }
 
     .msg-shell {
-        display: block;
-        height: calc(100vh - 100px);
-        height: calc(100dvh - 100px);
-        min-height: 420px;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
         max-height: none;
         border-radius: 12px;
     }
 
+    /* 单屏布局：顶部「标题 + 连接状态」一行，其下横向类型切换器 */
     .msg-sidebar {
+        position: sticky;
+        top: 0;
+        z-index: 6;
         width: 100%;
-        height: 100%;
+        height: auto;
+        min-height: 0;
+        flex-shrink: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "head conn"
+            "types types";
+        align-items: center;
+        column-gap: 10px;
+        row-gap: 8px;
+        padding: 9px 10px 8px;
         border-right: none;
-        overflow-y: auto;
+        border-bottom: 1px solid var(--color-border-divider);
+        background: var(--color-bg-card);
     }
 
+    .msg-sidebar-head {
+        grid-area: head;
+        min-width: 0;
+        padding: 0;
+    }
+
+    .msg-sidebar-title {
+        font-size: 16px;
+        letter-spacing: 1px;
+    }
+
+    .msg-sidebar-title i {
+        font-size: 14px;
+    }
+
+    /* 顶部只保留标题行，副标题让位给类型切换器 */
+    .msg-sidebar-sub {
+        display: none;
+    }
+
+    .msg-conn {
+        grid-area: conn;
+        margin-top: 0;
+        max-width: 46vw;
+        padding: 4px 8px;
+        overflow: hidden;
+        font-size: 10.5px;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    /* 类型列表：移动端横向居中排列，窄屏仍可横向滚动 */
+    .msg-type-list {
+        grid-area: types;
+        flex-direction: row;
+        justify-content: center;
+        gap: 4px;
+        padding: 0 4px 2px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+
+    .msg-type-list::-webkit-scrollbar {
+        display: none;
+    }
+
+    .msg-type-item {
+        position: relative;
+        width: auto;
+        flex: 0 0 auto;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 2px;
+        min-width: 52px;
+        height: auto;
+        padding: 3px 0 2px;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        font-size: 11px;
+        line-height: 1.2;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .msg-type-item:hover {
+        background: transparent;
+    }
+
+    .msg-type-item.active {
+        border: none;
+        background: transparent;
+    }
+
+    .msg-type-item.active::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        width: 20px;
+        height: 2px;
+        border-radius: 2px;
+        background: var(--color-primary);
+        transform: translateX(-50%);
+    }
+
+    .msg-type-item .msg-type-icon {
+        width: auto;
+        height: 30px;
+        font-size: 28px;
+        line-height: 30px;
+    }
+
+    .msg-type-label {
+        flex: 0 0 auto;
+        max-width: 60px;
+        overflow: hidden;
+        font-size: 11px;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+    }
+
+    .msg-type-badge {
+        position: absolute;
+        top: 0;
+        right: 0;
+        min-width: 15px;
+        height: 15px;
+        padding: 0 4px;
+        border-radius: 8px;
+        font-size: 9px;
+        line-height: 15px;
+    }
+
+    /* 正文占满剩余高度；列表/聊天各自在内部滚动 */
     .msg-detail {
-        display: none;
-        height: 100%;
+        flex: 1;
+        height: auto;
+        min-height: 0;
+        overflow: hidden;
     }
 
-    .msg-shell.mobile-detail-open .msg-sidebar {
-        display: none;
-    }
-
-    .msg-shell.mobile-detail-open .msg-detail {
-        display: flex;
-    }
-
-    .msg-back-btn {
-        display: inline-flex;
+    .msg-detail-body {
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
     }
 
     .msg-detail-head {
         gap: 8px;
         padding: 10px 12px;
+    }
+
+    /* 管理团队聊天：单视图，隐藏顶部 Tab，提供返回消息中心按钮 */
+    .msg-shell.is-chat-view .msg-sidebar {
+        display: none;
+    }
+
+    .msg-shell.is-chat-view .msg-detail-head {
+        position: relative;
+        justify-content: center;
+        min-height: 56px;
+    }
+
+    .msg-shell.is-chat-view .msg-chat-back {
+        display: inline-flex;
+        position: absolute;
+        top: 50%;
+        left: 12px;
+        transform: translateY(-50%);
+    }
+
+    .msg-shell.is-chat-view .msg-refresh-btn {
+        position: absolute;
+        top: 50%;
+        right: 12px;
+        transform: translateY(-50%);
+    }
+
+    .msg-shell.is-chat-view .msg-detail-heading {
+        flex: 0 1 auto;
+        align-items: center;
+        text-align: center;
+    }
+
+    .msg-shell.is-chat-view .msg-detail-title {
+        text-align: center;
+    }
+
+    .msg-shell.is-chat-view .msg-detail-sub {
+        display: none;
     }
 
     .msg-detail-title {
@@ -1086,6 +1276,12 @@
     .msg-gate {
         margin: 40px auto;
         padding: 28px 20px;
+    }
+}
+
+@media (max-width: 480px) and (orientation: portrait) {
+    body.msg-page-active .msg-page {
+        height: calc(100dvh - 60px);
     }
 }
 

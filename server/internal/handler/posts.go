@@ -2,11 +2,13 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"log"
 	"math/rand"
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
@@ -34,7 +36,7 @@ type PostsHandler struct {
 	Altcha   *altcha.Service // nil 安全：未注入时跳过 ALTCHA 校验
 }
 
-// ---- GET /api/v1/posts ----
+// ---- GET /ov2/api/posts ----
 
 // List 帖子列表（缓存 posts:list:page:size:cat）。
 func (h *PostsHandler) List(c *gin.Context) {
@@ -60,7 +62,7 @@ func (h *PostsHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ---- GET /api/v1/posts/random ----
+// ---- GET /ov2/api/posts/random ----
 
 // randomPoolKey 随机推荐候选池（缓存 60s，避免每次请求都全表 ORDER BY RANDOM）。
 const randomPoolKey = "posts:random:pool"
@@ -100,7 +102,7 @@ func (h *PostsHandler) Random(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "posts": out})
 }
 
-// ---- GET /api/v1/posts/picker-defaults ----
+// ---- GET /ov2/api/posts/picker-defaults ----
 
 // PickerDefaults 引用选择器默认项（登录用户；关注/收藏各至多 20 条，依赖 viewer 不做共享缓存）。
 func (h *PostsHandler) PickerDefaults(c *gin.Context) {
@@ -119,7 +121,7 @@ func (h *PostsHandler) PickerDefaults(c *gin.Context) {
 	}})
 }
 
-// ---- POST /api/v1/posts ----
+// ---- POST /ov2/api/posts ----
 
 type createPostReq struct {
 	Title    string `json:"title" binding:"required"`
@@ -130,6 +132,90 @@ type createPostReq struct {
 	GuildUUID string `json:"guild_uuid"`
 	// PublishedAt 定时发布时间（RFC3339 字符串，可选；未来时间即定时未发布）
 	PublishedAt string `json:"published_at"`
+}
+
+// normalizePostTitle 标题归一化：去首尾空白，要求 1-100 字符。
+func normalizePostTitle(raw string) (string, string) {
+	title := strings.TrimSpace(raw)
+	if title == "" || utf8.RuneCountInString(title) > 100 {
+		return "", "标题需1-100字符"
+	}
+	return title, ""
+}
+
+// cleanPostContent 正文净化与校验。
+// strict=true（正式发布）额外校验节点上限与非空；strict=false（草稿自动保存）只限制原始长度，
+// 允许空内容——草稿允许用户写到一半，硬性要求会打断自动保存。
+func cleanPostContent(raw string, strict bool) (string, string) {
+	if len(raw) > maxPostContentBytes {
+		return "", "正文过长"
+	}
+	clean := sanitize.SanitizeRichContent(raw)
+	if !strict {
+		return clean, ""
+	}
+	// 节点上限（净化后计数）：防超大 DOM 结构拖垮渲染与存储。
+	if strings.Count(clean, "<img") > 60 || strings.Count(clean, "data-embed=") > 30 {
+		return "", "图片/引用数量过多"
+	}
+	hasRichMedia := strings.Contains(clean, "<img") || strings.Contains(clean, "data-embed")
+	if sanitize.StripTagsAndTrim(clean) == "" && !hasRichMedia {
+		return "", "正文不能为空"
+	}
+	return clean, ""
+}
+
+// parsePostSchedule 解析定时发布时间（RFC3339，转 UTC 存储）。
+// strict=true（正式发布）要求晚于当前时间 1 分钟且不超过 365 天；
+// strict=false（草稿）只校验格式——草稿可能被放置很久，存下过期时间由前端重新选择。
+func parsePostSchedule(raw string, strict bool) (*time.Time, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, ""
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return nil, "定时发布时间格式错误，需 RFC3339"
+	}
+	if strict {
+		now := time.Now()
+		if !t.After(now.Add(time.Minute)) {
+			return nil, "定时发布时间需晚于当前时间 1 分钟"
+		}
+		if t.After(now.Add(365 * 24 * time.Hour)) {
+			return nil, "定时发布时间不能超过 365 天"
+		}
+	}
+	// 时间列与比较基准均为库内 NOW()/CURRENT_TIMESTAMP（UTC），统一转 UTC 存储。
+	utc := t.UTC()
+	return &utc, ""
+}
+
+// resolvePostTarget 解析发布目标（公共空间 / 会馆），返回归一化分类、guildID。
+// 非 0 的 httpStatus 表示失败，message 可直接回给客户端。
+func (h *PostsHandler) resolvePostTarget(ctx context.Context, uid, category, guildUUID string, guildIDIn *int64) (string, *int64, int, string) {
+	var guildID *int64
+	if gu := strings.TrimSpace(guildUUID); gu != "" {
+		// guild_uuid 优先：按稳定标识反查数字 id
+		id, err := h.DB.GetGuildIDByUUID(ctx, gu)
+		if err != nil {
+			return "", nil, http.StatusInternalServerError, "查询失败"
+		}
+		if id == nil {
+			return "", nil, http.StatusNotFound, "会馆不存在"
+		}
+		guildID = id
+	} else if guildIDIn != nil && *guildIDIn > 0 {
+		guildID = guildIDIn
+	}
+	if guildID != nil {
+		// 会馆帖：仅成员可发，分类自会馆配置取值
+		if !h.DB.IsGuildMember(ctx, *guildID, uid) {
+			return "", nil, http.StatusForbidden, "你还不是该会馆成员，无法发帖"
+		}
+		return h.DB.ResolveGuildCategory(ctx, *guildID, strings.TrimSpace(category)), guildID, 0, ""
+	}
+	return normalizeCategory(category), nil, 0, ""
 }
 
 // Create 发帖（可选 guild_uuid/guild_id：需为会馆成员，分类取自该馆配置）。
@@ -144,89 +230,41 @@ func (h *PostsHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "参数错误"})
 		return
 	}
-	title := strings.TrimSpace(req.Title)
-	if title == "" || len([]rune(title)) > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "标题需1-100字符"})
+	title, msg := normalizePostTitle(req.Title)
+	if msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": msg})
 		return
 	}
-	// 正文服务端校验：原始长度上限 + 净化后非空（纯图片/纯引用帖视为有效内容），避免纯空白内容入库
-	if len(req.Content) > maxPostContentBytes {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "正文过长"})
-		return
-	}
-	sanitizedContent := sanitize.SanitizeRichContent(req.Content)
-	// 内容节点上限（净化后计数）：防超大 DOM 结构拖垮渲染与存储
-	if strings.Count(sanitizedContent, "<img") > 60 || strings.Count(sanitizedContent, "data-embed=") > 30 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "图片/引用数量过多"})
-		return
-	}
-	hasRichMedia := strings.Contains(sanitizedContent, "<img") || strings.Contains(sanitizedContent, "data-embed")
-	if sanitize.StripTagsAndTrim(sanitizedContent) == "" && !hasRichMedia {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "正文不能为空"})
+	// 正文服务端校验：原始长度上限 + 净化后非空（纯图片/纯引用帖视为有效内容）
+	sanitizedContent, msg := cleanPostContent(req.Content, true)
+	if msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": msg})
 		return
 	}
 	// 定时发布（可选）：RFC3339 解析；必须晚于当前时间 1 分钟且不超过 365 天
-	var publishedAt *time.Time
-	if raw := strings.TrimSpace(req.PublishedAt); raw != "" {
-		t, err := time.Parse(time.RFC3339, raw)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "定时发布时间格式错误，需 RFC3339"})
-			return
-		}
-		now := time.Now()
-		if !t.After(now.Add(time.Minute)) {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "定时发布时间需晚于当前时间 1 分钟"})
-			return
-		}
-		if t.After(now.Add(365 * 24 * time.Hour)) {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "定时发布时间不能超过 365 天"})
-			return
-		}
-		// 时间列与比较基准均为库内 NOW()/CURRENT_TIMESTAMP（实测该库时区为 UTC）；
-		// 统一转 UTC 存储，保证 published_at <= NOW() 口径一致
-		utc := t.UTC()
-		publishedAt = &utc
+	publishedAt, msg := parsePostSchedule(req.PublishedAt, true)
+	if msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": msg})
+		return
 	}
-	var (
-		cat     string
-		guildID *int64
-	)
-	if gu := strings.TrimSpace(req.GuildUUID); gu != "" {
-		// guild_uuid 优先：按稳定标识反查数字 id
-		id, err := h.DB.GetGuildIDByUUID(c.Request.Context(), gu)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
-			return
-		}
-		if id == nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "会馆不存在"})
-			return
-		}
-		guildID = id
-	} else if req.GuildID != nil && *req.GuildID > 0 {
-		guildID = req.GuildID
+	cat, guildID, status, msg := h.resolvePostTarget(c.Request.Context(), uid, req.Category, req.GuildUUID, req.GuildID)
+	if status != 0 {
+		c.JSON(status, gin.H{"success": false, "message": msg})
+		return
 	}
-	if guildID != nil {
-		// 会馆帖：仅成员可发，分类自会馆配置取值
-		if !h.DB.IsGuildMember(c.Request.Context(), *guildID, uid) {
-			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "你还不是该会馆成员，无法发帖"})
-			return
-		}
-		cat = h.DB.ResolveGuildCategory(c.Request.Context(), *guildID, strings.TrimSpace(req.Category))
-	} else {
-		cat = normalizeCategory(req.Category)
-	}
-	postID, err := h.DB.SendPost(c.Request.Context(), uid, title, req.Content, cat, guildID, publishedAt)
+	postID, err := h.DB.SendPost(c.Request.Context(), uid, title, sanitizedContent, cat, guildID, publishedAt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "发布失败"})
 		return
 	}
 	if publishedAt == nil {
-		// 立即帖：灵力奖励同步完成（source 幂等）；定时帖由 ProcessScheduledPublishes 到点补发
+		// 立即帖：灵力奖励同步完成（source 幂等）。
+		// 粉丝发帖邮件提醒已按需求下线；定时帖由 ProcessScheduledPublishes 到点补发灵力。
 		h.awardPostSpirit(c.Request.Context(), uid, postID)
 	}
 	h.Cache.Posts.DeletePrefix("posts:list:")
 	h.Cache.Posts.Delete(randomPoolKey)
+	h.invalidateFeedCaches()
 	c.JSON(http.StatusCreated, gin.H{"success": true, "id": postID})
 }
 
@@ -246,20 +284,26 @@ func (h *PostsHandler) awardPostSpirit(ctx context.Context, userID, postID strin
 // 供点赞/收藏/举报/评论等路径复用（GetPostPublishInfo 仅取发布状态，不含帖子正文）；
 // 软删帖与 Detail 行为一致，一律视为不可见，不能再评论/点赞/收藏/举报/读评论列表。
 func (h *PostsHandler) postVisible(c *gin.Context, postID, viewer string) bool {
+	_, ok := h.postAuthorVisible(c, postID, viewer)
+	return ok
+}
+
+// postAuthorVisible 同 postVisible，额外返回作者 id（举报需要判断是否自举报）。
+func (h *PostsHandler) postAuthorVisible(c *gin.Context, postID, viewer string) (string, bool) {
 	authorID, publishedAt, status, exists, err := h.DB.GetPostPublishInfo(c.Request.Context(), postID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
-		return false
+		return "", false
 	}
 	if !exists || status != 1 || (publishedAt.After(time.Now()) && viewer != authorID) {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "帖子不存在"})
-		return false
+		return "", false
 	}
-	return true
+	return authorID, true
 }
 
-// ProcessScheduledPublishes 定时补发任务：把到点的定时帖原子标记为已通知（每次至多 50 条）
-// 并补发粉丝通知；有新帖转公开时失效帖子列表/搜索/详情缓存。由 main 每分钟 ticker 调用。
+// ProcessScheduledPublishes 定时补发任务：把到点的定时帖原子标记为已通知（每次至多 50 条），
+// 补发灵力奖励；有新帖转公开时失效帖子列表/搜索/详情缓存。由 main 每分钟 ticker 调用。
 func (h *PostsHandler) ProcessScheduledPublishes(ctx context.Context) {
 	pending, err := h.DB.ClaimPendingPublishPosts(ctx)
 	if err != nil {
@@ -272,19 +316,31 @@ func (h *PostsHandler) ProcessScheduledPublishes(ctx context.Context) {
 	for _, p := range pending {
 		// 到点补发灵力奖励（与立即帖一致，source 幂等避免重复）
 		h.awardPostSpirit(ctx, p.UserID, p.ID)
-		// 站内通知由发布逻辑自身维护，不再发送粉丝发帖邮件
 	}
-	// 定时帖转为可见：失效帖子列表、搜索与单帖详情缓存
+	// 定时帖转为可见：失效帖子列表、信息流、搜索与单帖详情缓存
 	h.Cache.Posts.DeletePrefix("posts:list:")
 	h.Cache.Posts.Delete(randomPoolKey)
+	h.invalidateFeedCaches()
 	h.Cache.Search.DeletePrefix("search:")
 	for _, p := range pending {
-		h.Cache.PostDetail.Delete("post:detail:" + p.ID)
+		h.invalidatePostDetail(p.ID)
 	}
 	log.Printf("[POST] 定时发布完成 %d 篇", len(pending))
 }
 
-// ---- GET /api/v1/posts/:id ----
+// invalidatePostDetail 失效帖子详情缓存（含 include_comments=0 的「仅正文」变体）。
+func (h *PostsHandler) invalidatePostDetail(postID string) {
+	h.Cache.PostDetail.Delete("post:detail:" + postID)
+	h.Cache.PostDetail.Delete("post:detail:" + postID + ":postonly")
+}
+
+// invalidateFeedCaches 失效会馆/全站信息流缓存（`feed:` 前缀）。
+// 信息流本身 TTL 30s，这里保证发帖/删帖/点赞后立刻能看到变化。
+func (h *PostsHandler) invalidateFeedCaches() {
+	h.Cache.Posts.DeletePrefix("feed:")
+}
+
+// ---- GET /ov2/api/posts/:id ----
 
 // Detail 帖子详情（匿名缓存 post:detail:ID；登录用户实时返回含个人状态）。
 // track=0：SEO 等服务端拉取不计数、只读匿名缓存不写入；其余请求同一访客同帖 30 分钟内只计一次（匿名按 IP / 登录按 uid）。
@@ -292,7 +348,13 @@ func (h *PostsHandler) Detail(c *gin.Context) {
 	id := c.Param("id")
 	me := currentUserFromCookie(c, h.Sessions)
 	noTrack := c.Query("track") == "0"
+	// include_comments=0：只回帖子本体。SEO/首屏正文不需要评论时跳过 50 条评论查询，
+	// 前端改为并行拉 /posts/:id/comments，正文不再被评论拖住。默认 1 保持旧契约。
+	includeComments := c.Query("include_comments") != "0"
 	key := "post:detail:" + id
+	if !includeComments {
+		key += ":postonly"
+	}
 	// SEO（track=0）复用匿名详情缓存读：不计数、只读不写，避免每次 SEO 拉取都打到 DB 导致超时
 	if me == "" {
 		if v, ok := h.Cache.PostDetail.Get(key); ok {
@@ -333,10 +395,13 @@ func (h *PostsHandler) Detail(c *gin.Context) {
 		liked = h.DB.HasLikedPost(c.Request.Context(), id, me)
 		favorited = h.DB.HasFavoritedPost(c.Request.Context(), id, me)
 	}
-	// 评论（附带，取前 50）
-	comments, _ := h.DB.GetPostComments(c.Request.Context(), id, 1, 50)
-	if me != "" {
-		markCommentLikedByMe(h.DB, c.Request.Context(), me, comments)
+	// 评论（附带，取最新 50 条；无更早翻页）；include_comments=0 时跳过，字段保留空数组以免契约变化
+	comments := []models.Comment{}
+	if includeComments {
+		comments, _, _ = h.DB.GetPostComments(c.Request.Context(), id, 50, nil)
+		if me != "" {
+			markCommentLikedByMe(h.DB, c.Request.Context(), me, comments)
+		}
 	}
 	resp := gin.H{"success": true, "post": post, "comments": comments, "liked": liked, "favorited": favorited}
 	if noTrack {
@@ -352,7 +417,7 @@ func (h *PostsHandler) Detail(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ---- POST /api/v1/posts/:id/like ----
+// ---- POST /ov2/api/posts/:id/like ----
 
 // Like 点赞切换。
 func (h *PostsHandler) Like(c *gin.Context) {
@@ -373,9 +438,10 @@ func (h *PostsHandler) Like(c *gin.Context) {
 	if liked {
 		h.notifyPostLike(c.Request.Context(), id, uid)
 	}
-	h.Cache.PostDetail.Delete("post:detail:" + id)
+	h.invalidatePostDetail(id)
 	h.Cache.Posts.DeletePrefix("posts:list:")
 	h.Cache.Posts.Delete(randomPoolKey)
+	h.invalidateFeedCaches()
 	c.JSON(http.StatusOK, gin.H{"success": true, "liked": liked, "likes": likes})
 }
 
@@ -410,7 +476,7 @@ func (h *PostsHandler) notifyPostLike(ctx context.Context, postID, actorID strin
 	PushUnreadEvent(ctx, h.DB, authorID)
 }
 
-// ---- POST /api/v1/posts/:id/favorite ----
+// ---- POST /ov2/api/posts/:id/favorite ----
 
 // Favorite 收藏切换。
 func (h *PostsHandler) Favorite(c *gin.Context) {
@@ -428,11 +494,11 @@ func (h *PostsHandler) Favorite(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "操作失败"})
 		return
 	}
-	h.Cache.PostDetail.Delete("post:detail:" + id)
+	h.invalidatePostDetail(id)
 	c.JSON(http.StatusOK, gin.H{"success": true, "favorited": favorited})
 }
 
-// ---- POST /api/v1/posts/:id/delete ----
+// ---- POST /ov2/api/posts/:id/delete ----
 
 // Delete 删除帖子（仅作者）。
 func (h *PostsHandler) Delete(c *gin.Context) {
@@ -447,17 +513,56 @@ func (h *PostsHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "无权限删除该帖子"})
 		return
 	}
-	h.Cache.PostDetail.Delete("post:detail:" + id)
+	h.invalidatePostDetail(id)
 	h.Cache.Posts.DeletePrefix("posts:list:")
 	h.Cache.Posts.Delete(randomPoolKey)
+	h.invalidateFeedCaches()
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-// ---- POST /api/v1/posts/:id/report ----
+// ---- POST /ov2/api/posts/:id/report ----
 
 type reportPostReq struct {
-	Reason string `json:"reason" binding:"required"`
+	// Reason 不做 binding 校验：空/非法值统一由 validateReportPayload 返回「举报原因无效」。
+	Reason string `json:"reason"`
 	Detail string `json:"detail"`
+}
+
+// maxReportDetailRunes 举报补充说明上限。
+const maxReportDetailRunes = 500
+
+// reportReasons 举报原因白名单（与前端选项一致）。
+var reportReasons = map[string]bool{
+	"spam":         true, // 垃圾广告
+	"abuse":        true, // 辱骂攻击
+	"porn":         true, // 色情低俗
+	"illegal":      true, // 违法违规
+	"infringement": true, // 侵权抄袭
+	"other":        true, // 其他
+}
+
+var (
+	errReportReasonInvalid = errors.New("举报原因无效")
+	errReportDetailTooLong = errors.New("详情不能超过500字")
+)
+
+// validateReportPayload 校验举报原因与补充说明：原因必须在白名单内，说明去首尾空白后不超过 500 字。
+// 返回归一化（去空白）后的原因与说明。
+func validateReportPayload(reason, detail string) (string, string, error) {
+	reason = strings.TrimSpace(reason)
+	if !reportReasons[reason] {
+		return "", "", errReportReasonInvalid
+	}
+	detail = strings.TrimSpace(detail)
+	if utf8.RuneCountInString(detail) > maxReportDetailRunes {
+		return "", "", errReportDetailTooLong
+	}
+	return reason, detail, nil
+}
+
+// isSelfReport 作者与举报人一致时视为自举报（禁止）。
+func isSelfReport(authorID, reporterID string) bool {
+	return authorID != "" && authorID == reporterID
 }
 
 // Report 举报帖子。
@@ -468,7 +573,8 @@ func (h *PostsHandler) Report(c *gin.Context) {
 		return
 	}
 	id := c.Param("id")
-	if !h.postVisible(c, id, uid) {
+	authorID, ok := h.postAuthorVisible(c, id, uid)
+	if !ok {
 		return
 	}
 	var req reportPostReq
@@ -476,11 +582,16 @@ func (h *PostsHandler) Report(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "参数错误"})
 		return
 	}
-	if len([]rune(req.Detail)) > 500 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "详情不能超过500字"})
+	reason, detail, err := validateReportPayload(req.Reason, req.Detail)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	if err := h.DB.ReportPost(c.Request.Context(), id, uid, req.Reason, req.Detail); err != nil {
+	if isSelfReport(authorID, uid) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "不能举报自己的帖子"})
+		return
+	}
+	if err := h.DB.ReportPost(c.Request.Context(), id, uid, reason, detail); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "举报失败"})
 		return
 	}

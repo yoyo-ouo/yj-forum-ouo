@@ -63,11 +63,6 @@ export const MESSAGE_TYPE_META: Record<MessageType, MessageTypeMeta> = {
   },
 };
 
-/** URL `?type=` 校验（非法值回退到全部）。 */
-export function isMessageType(value: string | null | undefined): value is MessageType {
-  return value === "all" || value === "likes" || value === "comments" || value === "system" || value === "chat";
-}
-
 /** 三类通知统一后的列表条目。 */
 export type FeedItem =
   | { kind: "like"; key: string; created_at: string; like: LikeMessage }
@@ -145,9 +140,17 @@ export function notificationToFeedItem(item: StreamNotificationItem): FeedItem |
     avatar: item.actor_avatar || "",
   };
 
-  if (item.type === "post_like" || item.type === "comment_like") {
-    const targetType: "post" | "comment" = item.target_type === "comment" || item.type === "comment_like" ? "comment" : "post";
-    const targetId = item.target_id || (targetType === "post" ? item.post_id : item.comment_id) || "";
+  if (item.type === "post_like" || item.type === "comment_like" || item.type === "character_like") {
+    const targetType: "post" | "comment" | "character" =
+      item.type === "character_like"
+        ? "character"
+        : item.target_type === "comment" || item.type === "comment_like"
+          ? "comment"
+          : "post";
+    const targetId =
+      item.target_id ||
+      (targetType === "post" ? item.post_id : targetType === "comment" ? item.comment_id : "") ||
+      "";
     return likeToFeedItem({
       id: `notif:${item.id}`,
       actor,
@@ -157,6 +160,7 @@ export function notificationToFeedItem(item: StreamNotificationItem): FeedItem |
       post_title: item.post_title || "",
       comment_id: item.comment_id || "",
       comment_excerpt: item.comment_excerpt || item.excerpt || "",
+      target_title: item.character_name || "",
       created_at: createdAt,
     });
   }

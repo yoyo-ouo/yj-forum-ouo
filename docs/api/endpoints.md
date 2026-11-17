@@ -1,6 +1,10 @@
 # ouo API 端点索引（自动生成）
 
-> 由 `server/internal/handler/router.go` 与 `legacy.go` 提取；canonical 前缀为 `/ov2/api`，`/api/v1` 为同 shape 别名，`/api/*` 为旧 APP 兼容层。
+> 由 `server/internal/handler/router.go` 与 `server/internal/handler/captcha.go`（`RegisterCaptchaRoutes`）提取；唯一 API 前缀为 `/ov2/api`。旧 `/api/v1` 别名与 `/api/*` 兼容层已于 2026-11-07 移除。
+>
+> 人机验证端点限流（按 IP）：`/captcha/challenge` 60 次/分、`/captcha/verify` 20 次/分；`/captcha/app/challenge` 30 次/分、`/captcha/app/verify` 12 次/分。两个 challenge 响应均带 `Cache-Control: no-store`。
+>
+> 用户列表分页：`GET /ov2/api/users/:id/posts`、`GET /ov2/api/users/:id/favorites`、`GET /ov2/api/users/:id/comments` 均返回 `has_more`（帖子/收藏为多取一条探测，评论由 `total` 计算）；字段与可见性说明见 `docs/api.md`「用户 Users」。
 
 | 方法 | 路径 | 分组 |
 |---|---|---|
@@ -18,6 +22,7 @@
 | PATCH | `/ov2/api/users/me` | users |
 | POST | `/ov2/api/users/me/sign-in` | users |
 | GET | `/ov2/api/users/me/replies` | users |
+| GET | `/ov2/api/users/me/likes` | users |
 | POST | `/ov2/api/users/me/verify-email` | users |
 | POST | `/ov2/api/users/me/verify-email/confirm` | users |
 | POST | `/ov2/api/users/me/delete` | users |
@@ -62,6 +67,17 @@
 | GET | `/ov2/api/guides` | guides |
 | GET | `/ov2/api/guides/:id` | guides |
 | GET | `/ov2/api/site/config` | site |
+| GET | `/ov2/api/character-sheets/mine` | character-sheets |
+| GET | `/ov2/api/character-sheets/search` | character-sheets |
+| POST | `/ov2/api/character-sheets` | character-sheets |
+| POST | `/ov2/api/character-sheets/prompt-seen` | character-sheets |
+| GET | `/ov2/api/character-sheets/user/:userId` | character-sheets |
+| GET | `/ov2/api/character-sheets/:id` | character-sheets |
+| PUT | `/ov2/api/character-sheets/:id/draft` | character-sheets |
+| DELETE | `/ov2/api/character-sheets/:id/draft` | character-sheets |
+| POST | `/ov2/api/character-sheets/:id/publish` | character-sheets |
+| POST | `/ov2/api/character-sheets/:id/like` | character-sheets |
+| DELETE | `/ov2/api/character-sheets/:id` | character-sheets |
 | GET | `/ov2/api/embeds` | embeds |
 | POST | `/ov2/api/media/images` | media |
 | GET | `/ov2/api/media/:id` | media |
@@ -74,6 +90,11 @@
 | GET | `/ov2/api/easter-egg` | easter-egg |
 | POST | `/ov2/api/users/me/avatar` | users |
 | GET | `/ov2/api/avatar/:filename` | avatar |
+| GET | `/ov2/api/captcha/config` | captcha |
+| GET | `/ov2/api/captcha/challenge` | captcha |
+| POST | `/ov2/api/captcha/verify` | captcha |
+| GET | `/ov2/api/captcha/app/challenge` | captcha |
+| POST | `/ov2/api/captcha/app/verify` | captcha |
 | POST | `/api/login` | compat |
 | POST | `/api/register` | compat |
 | POST | `/api/logout` | compat |

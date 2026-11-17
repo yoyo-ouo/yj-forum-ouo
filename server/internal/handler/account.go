@@ -26,7 +26,7 @@ type AccountHandler struct {
 	Cache    *CacheSet
 }
 
-// ---- POST /api/v1/users/me/delete ----
+// ---- POST /ov2/api/users/me/delete ----
 
 type deleteAccountReq struct {
 	Mode        string `json:"mode"`
@@ -107,6 +107,7 @@ func (h *AccountHandler) invalidateAccountCaches() {
 		return
 	}
 	h.Cache.Posts.DeletePrefix("posts:list:")
+	h.Cache.Posts.DeletePrefix("feed:")
 	h.Cache.Posts.Delete(randomPoolKey)
 	h.Cache.PostDetail.DeletePrefix("post:detail:")
 	h.Cache.Comments.DeletePrefix("comments:post:")

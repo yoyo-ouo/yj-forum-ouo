@@ -265,7 +265,8 @@ func (d *DB) SendPost(ctx context.Context, userID, title, content, category stri
 }
 
 // GetUserPosts 用户帖子列表（viewer 为本人时不过滤未来定时帖；其他视角仅见已发布）。
-func (d *DB) GetUserPosts(ctx context.Context, userID, viewer string, page, pageSize int) ([]models.PostListItem, error) {
+// hasMore 用 pageSize+1 探测，避免额外 COUNT。
+func (d *DB) GetUserPosts(ctx context.Context, userID, viewer string, page, pageSize int) ([]models.PostListItem, bool, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -277,7 +278,7 @@ func (d *DB) GetUserPosts(ctx context.Context, userID, viewer string, page, page
 	if viewer != userID {
 		where += " AND p.published_at <= NOW()"
 	}
-	return d.queryPostListItems(ctx, `SELECT p.id, p.user_id, p.title, `+postSummaryExpr+`, p.category, p.likes, p.views,
+	posts, err := d.queryPostListItems(ctx, `SELECT p.id, p.user_id, p.title, `+postSummaryExpr+`, p.category, p.likes, p.views,
 		p.created_at, u.name, u.avatar,
 		(SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = 1) AS comment_count,
 		p.guild_id, g.name, g.theme_color,
@@ -287,14 +288,26 @@ func (d *DB) GetUserPosts(ctx context.Context, userID, viewer string, page, page
 		LEFT JOIN guild_members ugm ON ugm.user_id = p.user_id
 		LEFT JOIN guilds ug ON ug.id = ugm.guild_id
 		`+where+` ORDER BY p.created_at DESC LIMIT $2 OFFSET $3`,
-		userID, pageSize, offset)
+		userID, pageSize+1, offset)
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(posts) > pageSize
+	if hasMore {
+		posts = posts[:pageSize]
+	}
+	return posts, hasMore, nil
 }
 
-// GetUserStats 用户统计（不含未到发布时间的定时帖）。
-func (d *DB) GetUserStats(ctx context.Context, userID string) (models.Stats, error) {
+// GetUserStats 用户统计（与列表口径一致：本人视角含未到发布时间的定时帖；其他视角仅统计已发布）。
+func (d *DB) GetUserStats(ctx context.Context, userID, viewer string) (models.Stats, error) {
 	var s models.Stats
-	err := d.QueryRow(ctx, `SELECT COUNT(*), COALESCE(SUM(likes),0), COALESCE(SUM(views),0)
-		FROM posts WHERE user_id = $1 AND status = 1 AND published_at <= NOW()`, userID).Scan(&s.PostCount, &s.TotalLikes, &s.TotalViews)
+	q := `SELECT COUNT(*), COALESCE(SUM(likes),0), COALESCE(SUM(views),0)
+		FROM posts WHERE user_id = $1 AND status = 1`
+	if viewer != userID {
+		q += ` AND published_at <= NOW()`
+	}
+	err := d.QueryRow(ctx, q, userID).Scan(&s.PostCount, &s.TotalLikes, &s.TotalViews)
 	return s, err
 }
 

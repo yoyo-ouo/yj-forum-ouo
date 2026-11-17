@@ -61,6 +61,18 @@ func (d *DB) CreateVerifyCode(ctx context.Context, email, code, purpose string, 
 	return err
 }
 
+// LastUnusedVerifyCodeAt 返回该邮箱+用途最近一次未使用验证码的创建时间；无记录返回 nil。
+// 用于发送侧的冷却判定（只读，不改变验证码状态）。
+func (d *DB) LastUnusedVerifyCodeAt(ctx context.Context, email, purpose string) (*time.Time, error) {
+	var last *time.Time
+	err := d.QueryRow(ctx, `SELECT MAX(created_at) FROM verify_codes
+		WHERE email=$1 AND purpose=$2 AND used=0`, email, purpose).Scan(&last)
+	if err != nil {
+		return nil, err
+	}
+	return last, nil
+}
+
 // GetVerifyCode 校验验证码（返回 id 行存在性）。
 func (d *DB) GetVerifyCode(ctx context.Context, email, code, purpose string) (bool, error) {
 	var n int

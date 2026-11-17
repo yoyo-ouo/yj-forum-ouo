@@ -85,3 +85,42 @@ func TestVerifyCodeAttemptsInvalidate(t *testing.T) {
 		t.Fatalf("code should be invalid after invalidate, ok=%v err=%v", ok, err)
 	}
 }
+
+// 发送侧冷却依赖「最近一次未使用验证码的创建时间」：无码为 nil，下发后有值，核销后回到 nil。
+func TestLastUnusedVerifyCodeAt(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	email := testVerifyEmail(t)
+	t.Cleanup(func() { _, _ = db.Exec(context.Background(), `DELETE FROM verify_codes WHERE email=$1`, email) })
+
+	// 无记录：nil（调用方据此放行首封）。
+	last, err := db.LastUnusedVerifyCodeAt(ctx, email, "email_verify")
+	if err != nil || last != nil {
+		t.Fatalf("无记录时应返回 nil，got=%v err=%v", last, err)
+	}
+
+	before := time.Now().Add(-time.Minute)
+	if err := db.CreateVerifyCode(ctx, email, "555555", "email_verify", 5); err != nil {
+		t.Fatalf("create code: %v", err)
+	}
+	last, err = db.LastUnusedVerifyCodeAt(ctx, email, "email_verify")
+	if err != nil || last == nil {
+		t.Fatalf("下发后应返回创建时间，got=%v err=%v", last, err)
+	}
+	if last.Before(before) || last.After(time.Now().Add(time.Minute)) {
+		t.Fatalf("创建时间不在预期区间: %v", last)
+	}
+
+	// 其他用途互不影响。
+	if other, err := db.LastUnusedVerifyCodeAt(ctx, email, "register"); err != nil || other != nil {
+		t.Fatalf("其他用途应为 nil，got=%v err=%v", other, err)
+	}
+
+	// 核销（used=1）后不再计入。
+	if ok, err := db.ConsumeVerifyCode(ctx, email, "555555", "email_verify"); err != nil || !ok {
+		t.Fatalf("consume code: ok=%v err=%v", ok, err)
+	}
+	if last, err := db.LastUnusedVerifyCodeAt(ctx, email, "email_verify"); err != nil || last != nil {
+		t.Fatalf("核销后应返回 nil，got=%v err=%v", last, err)
+	}
+}

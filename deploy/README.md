@@ -11,7 +11,6 @@ Browser
   ▼
 Nginx (宝塔管理 80/443)
   ├── /ov2/api/*      → Go 后端  127.0.0.1:8090（canonical；SSE 单独 location）
-  ├── /api/*          → Go 后端  127.0.0.1:8090（/api/v1 别名 + 旧 APP 兼容层）
   ├── /avatar/*       → Go 后端  127.0.0.1:8090（旧头像兼容）
   ├── /static/*       → Next.js  127.0.0.1:3000（旧帖图/默认头像兼容）
   └── 其余            → Next.js  127.0.0.1:3000
@@ -95,6 +94,41 @@ systemctl status yj-forum
 > chown yoyo:yoyo /var/yj-forum/media   # 改为实际运行用户
 > ```
 
+## 二·五、人机验证（ALTCHA / APP 零 PoW 通道）
+
+登录/注册/发码/重置密码/Bug 提交在 `ALTCHA_ENABLED=true` 时都需要 `altcha` 或 `grant`。浏览器走标准 PoW；Android 走 APP 专用零 PoW 通道（一次 HMAC 换 grant）。
+
+### 环境变量（server/.env）
+
+| 变量 | 必填 | 说明 |
+|---|---|---|
+| `ALTCHA_ENABLED` | 是（启用时） | `true` 开启；`false` 时 `/captcha/*` 与 `/captcha/app/*` 全部 404 `CAPTCHA_DISABLED` |
+| `ALTCHA_HMAC_KEY` | 是 | 签发 challenge/grant 的主密钥；启用时不能为空（否则 challenge 返回 503 `CAPTCHA_UNAVAILABLE`） |
+| `ALTCHA_APP_SECRET` | APP 必需 | APP 通道密钥，**≥32 字符**、不能与 `ALTCHA_HMAC_KEY` 相同，且必须与 APK 内置值一致；生成：`openssl rand -hex 32` |
+| `ALTCHA_ALGORITHM` / `ALTCHA_COST` / `ALTCHA_EXPIRES_SECONDS` | 否 | 标准通道参数，默认 `PBKDF2/SHA-256` / `5000` / `600` |
+
+> 密钥写成无引号、无空白、无 `$` 的纯 ASCII：同一份 `.env` 同时被 godotenv 与 systemd `EnvironmentFile` 解析。改完必须 `systemctl restart yj-forum`。
+
+### 部署检查清单
+
+1. **服务端先行**：先上代码 + `server/.env`，再发 APK；旧 APK 不受影响（走标准通道）。
+2. **启动日志**：
+   - 正常：`[ALTCHA] APP 零 PoW 通道已开启（/captcha/app/*）`
+   - 启用但缺 APP 密钥：`[WARN] ALTCHA_ENABLED=true 但 ALTCHA_APP_SECRET 为空：/captcha/app/* 将返回 404 CAPTCHA_DISABLED，APP 登录/评论将无法通过人机验证（APP 不会本地求解，将提示「人机验证暂不可用」）`
+   - 启用但缺主密钥：`[WARN] ALTCHA_ENABLED=true 但 ALTCHA_HMAC_KEY 为空：challenge/grant 无法签发，/captcha/* 与 /captcha/app/* 均不可用（fail-closed）`
+   - 密钥过短/与主密钥相同：启动直接 `[FATAL]` 退出（避免「challenge 200、verify 400」的静默失效）
+   - 未启用：`[ALTCHA] ALTCHA_ENABLED=false，人机验证整体关闭（... 一律 404 CAPTCHA_DISABLED）`
+3. **接口自检**：
+   ```bash
+   curl -s https://<域名>/ov2/api/captcha/config
+   # 期望 {"success":true,"enabled":true,"app_enabled":true,...}
+   curl -s -D- -o /dev/null https://<域名>/ov2/api/captcha/app/challenge
+   # 期望 200 + cache-control: no-store，body 含 32 位 hex challenge 与 timestamp
+   ```
+4. **密钥一致性**：GitHub Actions Secrets 的 `ALTCHA_APP_SECRET` 与生产 `server/.env` 必须一致（APK 构建时注入）。不一致的表现：challenge 200、verify 400 `CAPTCHA_REQUIRED`。
+5. **关闭通道**：清空 `ALTCHA_APP_SECRET` 并重启（无需发版）；此后 APP 侧人机验证不可用，**不会本地求解/回退标准 PoW**。
+6. **限流**：标准 challenge 60 次/分/IP、verify 20 次/分/IP；APP challenge 30 次/分/IP、verify 12 次/分/IP（超限 429）。
+
 ## 三、前端部署（Next.js）
 
 ```bash
@@ -134,7 +168,7 @@ systemctl enable --now yj-web
 1. 宝塔面板创建站点（域名绑定）。
 2. 将 `deploy/nginx/yj-forum.conf` 内容合并入站点配置（注意替换 `server_name` 为实际域名）。
 3. 无需再配置 `/guild-img/`、`/guide-img/` 反代（已退役，图片走 `/ov2/api/media/`）。
-4. 媒体上传（`POST /ov2/api/media/images`，图片 ≤5MB；头像 ≤10MB）需 Nginx/反代允许较大请求体：配置已在 `location /ov2/api/` 与 `location /api/` 内置 `client_max_body_size 12m;`，若在 http 层统一配置请核对（不足会返回 413）。
+4. 媒体上传（`POST /ov2/api/media/images`，图片 ≤10MB；头像 ≤10MB）需 Nginx/反代允许较大请求体：配置已在 `location /ov2/api/` 内置 `client_max_body_size 12m;`，若在 http 层统一配置请核对（不足会返回 413）。
 5. SSE 必须走 `location = /ov2/api/world/stream` 与 `location = /ov2/api/messages/stream` 的专用配置（`proxy_buffering off`、`proxy_read_timeout 3600s`、`gzip off`），否则会出现“连上但不流动”。
 6. 宝塔内申请 SSL 证书，开启 HTTPS（注释段提供 443 示范）。
 
@@ -142,7 +176,7 @@ systemctl enable --now yj-web
 
 ```bash
 # 健康检查
-curl http://127.0.0.1:8090/api/v1/votes/version/stats
+curl http://127.0.0.1:8090/ov2/api/votes/version/stats
 curl -I http://127.0.0.1:3000/
 # 浏览器访问域名，完成注册 → 登录 → 发帖全流程
 ```
@@ -158,8 +192,8 @@ curl -I http://127.0.0.1:3000/
 | `AVATAR_DIR` | server/.env | 头像存储目录 |
 | `MEDIA_DIR` | server/.env | 旧用户媒体存储目录（S3 未启用时新上传也落此）；默认 `/var/yj-forum/media`；需可写 |
 | `S3_ENABLED` / `S3_ENDPOINT` / `S3_BUCKET` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` | server/.env（ouo + admin） | SeaweedFS S3；新上传写 S3；未启用回退本地/GridFS |
-| `ALTCHA_ENABLED` / `ALTCHA_HMAC_KEY` | server/.env | ALTCHA v2；启用时登录/注册/发码/重置/Bug 提交需要 challenge/grant |
-| `LEGACY_TOKEN_TTL_HOURS` / `LEGACY_APP_SUNSET` | server/.env | 旧 APP 兼容层的 token 窗口与下线日期 |
+| `ALTCHA_ENABLED` / `ALTCHA_HMAC_KEY` | server/.env | ALTCHA v2；启用时登录/注册/发码/重置/Bug 提交需要 challenge/grant；`ALTCHA_HMAC_KEY` 启用时必填 |
+| `ALTCHA_APP_SECRET` | server/.env | APP 专用零 PoW 通道密钥（≥32 字符、与 `ALTCHA_HMAC_KEY` 不同且与 APK 内置值一致）；留空则 `/captcha/app/*` 返回 404，APP 不会本地求解，会提示「人机验证暂不可用」（详见「二·五」） |
 | `GITHUB_TOKEN` | server/.env | 下载页 GitHub Releases 可选 token（提高限额） |
 | `PUBLIC_BASE_URL` | server/.env | 邮件中链接的站点地址 |
 | `API_TARGET` | web/.env | Next rewrites 的 Go 地址（构建时写进路由清单）兼服务端 SSR/SEO 直连地址（运行期读取；生产由 Nginx 分发 API） |

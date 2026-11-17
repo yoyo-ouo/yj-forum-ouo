@@ -398,3 +398,156 @@
     position: relative;
 }
 
+
+/* ===== 发帖草稿：状态条 / 自动保存 ===== */
+.post-draft-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    margin-bottom: 18px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--color-bg-item-hover);
+    border: 1px solid var(--color-border-card);
+    font-size: 12px;
+}
+
+.post-draft-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(63, 140, 134, 0.14);
+    color: var(--color-text-accent);
+    white-space: nowrap;
+}
+
+.post-draft-chip.is-draft {
+    background: rgba(245, 158, 11, 0.14);
+    color: #8a5a12;
+}
+
+.post-draft-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--color-text-tertiary);
+}
+
+.post-draft-status.is-dirty {
+    color: #8a5a12;
+}
+
+.post-draft-status.is-saved {
+    color: var(--color-text-accent);
+}
+
+.post-draft-status.is-error {
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #b91c1c;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.post-draft-status.is-error:hover {
+    text-decoration: underline;
+}
+
+.post-draft-discard {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border-card);
+    background: transparent;
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.post-draft-discard:hover {
+    color: #b91c1c;
+    border-color: rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.post-draft-discard.is-confirming {
+    color: #b91c1c;
+    border-color: rgba(239, 68, 68, 0.45);
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.post-target-hint-warn,
+.post-schedule-hint-warn {
+    color: #8a5a12;
+}
+
+.post-draft-error-card {
+    text-align: center;
+    padding: 36px 24px;
+}
+
+.post-draft-error-card > i {
+    font-size: 34px;
+    color: #ef4444;
+    margin-bottom: 10px;
+}
+
+.post-draft-error-card p {
+    color: var(--color-text-secondary);
+}
+
+.post-draft-error-hint {
+    font-size: 13px;
+    color: var(--color-text-tertiary);
+}
+
+.night-mode .post-draft-chip.is-draft,
+.night-mode .post-draft-status.is-dirty,
+.night-mode .post-target-hint-warn,
+.night-mode .post-schedule-hint-warn {
+    color: #f0c27a;
+}
+
+@media (max-width: 480px) {
+    .post-draft-bar {
+        padding: 9px 10px;
+    }
+
+    .post-draft-status {
+        width: 100%;
+    }
+
+    .post-draft-discard {
+        margin-left: 0;
+    }
+}
+
+
+.night-mode .post-draft-status.is-error,
+.night-mode .post-draft-discard:hover,
+.night-mode .post-draft-discard.is-confirming,
+.night-mode .post-draft-delete-btn:hover,
+.night-mode .post-draft-delete-btn.is-confirming {
+    color: #f87171;
+}
+
+.post-draft-status-wrap {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+}
+
+@media (max-width: 480px) {
+    .post-draft-status-wrap {
+        width: 100%;
+    }
+}

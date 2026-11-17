@@ -25,7 +25,6 @@ const PLATFORMS: PlatformMeta[] = [
   { key: "windows", name: "Windows", icon: "fa-windows", requirement: "Windows 10 / 11" },
   { key: "android", name: "Android", icon: "fa-android", requirement: "Android 8.0 及以上" },
   { key: "linux", name: "Linux", icon: "fa-linux", requirement: "AppImage / deb / rpm" },
-  { key: "macos", name: "macOS", icon: "fa-apple", requirement: "macOS 11 及以上" },
 ];
 
 /** v 前缀归一（避免后端 version 已带 v 时出现 vv） */
@@ -193,6 +192,16 @@ export default function DownloadPage() {
       : latest.url
     : "";
 
+  // 无最新版本时：滚动到最新版本卡片；卡片不存在时退到 GitHub Releases
+  const jumpToLatest = () => {
+    const target = document.getElementById("download-latest-card");
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    window.open(GITHUB_RELEASES_URL, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <div className="download-page">
       <header className="download-hero">
@@ -200,8 +209,24 @@ export default function DownloadPage() {
           <i className="fa fa-download" aria-hidden="true"></i> 下载客户端
         </h1>
         <p className="download-subtitle">
-          妖精论坛客户端 —— 论坛 / 世界频道 / WIKI / 彩蛋一站式入口。支持 Windows、Android、Linux 与 macOS。
+          两种安装方式任选：<b>PWA</b> 由浏览器直接安装到桌面或主屏幕，无需下载安装包，站点更新后自动生效；<b>APP</b> 是原生客户端，按平台下载对应的安装包，功能更完整。
         </p>
+        <div className="download-install-actions">
+          <PwaInstallButton className="download-btn download-btn-soft download-pwa-btn" label="安装 PWA" />
+          {latestDownloadUrl ? (
+            <a className="download-btn download-btn-primary download-app-btn" href={latestDownloadUrl}>
+              <i className="fa fa-download" aria-hidden="true"></i> 下载 APP
+            </a>
+          ) : (
+            <button
+              type="button"
+              className="download-btn download-btn-primary download-app-btn"
+              onClick={jumpToLatest}
+            >
+              <i className="fa fa-download" aria-hidden="true"></i> 下载 APP
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="download-platform-tabs" role="tablist" aria-label="选择平台">
@@ -225,16 +250,20 @@ export default function DownloadPage() {
       </p>
 
       {latestLoading ? (
-        <section className="download-latest-card download-latest-loading" role="status">
+        <section className="download-latest-card download-latest-loading" id="download-latest-card" role="status">
           <i className="fa fa-spinner fa-spin" aria-hidden="true"></i> 正在获取最新版本...
         </section>
       ) : latestError ? (
-        <section className="download-latest-card download-error" role="alert">
+        <section className="download-latest-card download-error" id="download-latest-card" role="alert">
           <h2 className="download-error-title">
-            <i className="fa fa-exclamation-triangle" aria-hidden="true"></i> 获取发布信息失败
+            <i className="fa fa-exclamation-triangle" aria-hidden="true"></i> 该平台未发布
           </h2>
-          <p className="download-error-message">{latestError}</p>
-          <p className="download-error-hint">如 GitHub Releases 暂时不可用，你也可以直接前往 GitHub 查看或下载：</p>
+          <p className="download-error-message">
+            「{currentPlatform.name}」暂未发布安装包，你可以先安装 PWA 使用，或前往 GitHub Releases 查看其它平台。
+          </p>
+          {latestError && latestError !== "该平台暂未发布" && (
+            <p className="download-error-hint">技术信息：{latestError}</p>
+          )}
           <div className="download-actions">
             <a
               className="download-btn download-btn-primary"
@@ -250,7 +279,7 @@ export default function DownloadPage() {
           </div>
         </section>
       ) : latest ? (
-        <section className="download-latest-card" aria-labelledby="download-latest-title">
+        <section className="download-latest-card" id="download-latest-card" aria-labelledby="download-latest-title">
           <div className="download-latest-head">
             <div className="download-latest-title-wrap">
               <span className="download-kicker">最新版本</span>
@@ -267,7 +296,6 @@ export default function DownloadPage() {
                 )}
               </div>
             </div>
-            <PwaInstallButton className="download-btn download-btn-soft download-pwa-btn" />
           </div>
 
           <dl className="download-meta">
@@ -342,8 +370,8 @@ export default function DownloadPage() {
           <p className="download-hint">下载由本站服务器中转（GitHub 反代，支持断点续传）；非本站来源请勿轻信。</p>
         </section>
       ) : (
-        <section className="download-latest-card download-empty">
-          <i className="fa fa-inbox" aria-hidden="true"></i> 该平台暂无可用安装包，请稍后再来看看。
+        <section className="download-latest-card download-empty" id="download-latest-card">
+          <i className="fa fa-inbox" aria-hidden="true"></i> 该平台暂未发布安装包，可先安装 PWA 使用。
         </section>
       )}
 

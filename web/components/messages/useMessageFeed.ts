@@ -43,6 +43,48 @@ function errorText(err: unknown): string {
   return err instanceof Error && err.message ? err.message : "加载失败，请稍后重试";
 }
 
+/** 「全部」：一次 API 返回三路数据，避免前端并发三个请求。 */
+async function fetchAllPage(cursors: CursorMap): Promise<CategoryPage[]> {
+  try {
+    const r = await messagesApi.all(
+      { likes: cursors.likes, comments: cursors.comments, system: cursors.system },
+      MESSAGE_PAGE_SIZE
+    );
+    return [
+      {
+        category: "likes",
+        items: (r.likes.items || []).map((m: LikeMessage) => likeToFeedItem(m)),
+        hasMore: !!r.likes.has_more,
+        next: r.likes.next_cursor || "",
+        error: "",
+      },
+      {
+        category: "comments",
+        items: (r.comments.items || []).map((m: CommentMessage) => commentToFeedItem(m)),
+        hasMore: !!r.comments.has_more,
+        next: r.comments.next_cursor || "",
+        error: "",
+      },
+      {
+        category: "system",
+        items: (r.system.items || []).map((m: SystemMessage) => systemToFeedItem(m)),
+        hasMore: !!r.system.has_more,
+        next: r.system.next_cursor || "",
+        error: "",
+      },
+    ];
+  } catch (err) {
+    const message = errorText(err);
+    return (["likes", "comments", "system"] as MessageCategory[]).map((category) => ({
+      category,
+      items: [],
+      hasMore: false,
+      next: "",
+      error: message,
+    }));
+  }
+}
+
 async function fetchCategoryPage(category: MessageCategory, cursor: string): Promise<CategoryPage> {
   try {
     if (category === "likes") {
@@ -121,9 +163,14 @@ export function useMessageFeed(
     lastReadAtRef.current[category] = ts;
     void messagesApi
       .read(category, ts)
-      .then(() => onReadRef.current?.(category))
+      .then(() => {
+        onReadRef.current?.(category);
+        // 通知全局导航栏重新拉取未读数（消息中心内切换 Tab 不会触发 pathname 变化）
+        if (typeof window !== "undefined") window.dispatchEvent(new Event("ouo:messages-read"));
+      })
       .catch(() => {
-        /* 下次加载/新消息时重试 */
+        // 请求失败则回退本地水位，否则同一时间戳会被去重跳过，永远不会重试。
+        if (lastReadAtRef.current[category] === ts) lastReadAtRef.current[category] = prev || "";
       });
   }, []);
 
@@ -137,7 +184,10 @@ export function useMessageFeed(
       }
 
       const categories = categoriesOfType(type);
-      const results = await Promise.all(categories.map((c) => fetchCategoryPage(c, "")));
+      const results =
+        type === "all"
+          ? await fetchAllPage({ ...EMPTY_CURSORS })
+          : await Promise.all(categories.map((c) => fetchCategoryPage(c, "")));
       if (seq !== seqRef.current) return;
 
       const okResults = results.filter((r) => !r.error);
@@ -163,9 +213,11 @@ export function useMessageFeed(
       setLoading(false);
       setLoadedType(type);
 
-      // 单类详情打开时标记已读（「全部」是聚合浏览，不清空各分类徽标；SSE 实时条目光临时例外）
-      if (type !== "all" && merged.length > 0) {
-        markCategoryRead(categories[0], merged[0].created_at);
+      // 用户已实际看到列表：按分类分别标记已读（「全部」也清空对应分类徽标）。
+      // 未读数与列表同源，标记到该分类最新一条即可精确清零。
+      for (const category of categories) {
+        const newest = merged.find((item) => categoryOfFeedItem(item) === category);
+        if (newest) markCategoryRead(category, newest.created_at);
       }
     },
     [enabled, type, markCategoryRead]
@@ -205,7 +257,10 @@ export function useMessageFeed(
     const seq = seqRef.current;
     loadingMoreRef.current = true;
     setLoadingMore(true);
-    const results = await Promise.all(categories.map((c) => fetchCategoryPage(c, cursorsRef.current[c])));
+    const results =
+      type === "all"
+        ? await fetchAllPage(cursorsRef.current)
+        : await Promise.all(categories.map((c) => fetchCategoryPage(c, cursorsRef.current[c])));
     if (seq !== seqRef.current || loadedTypeRef.current !== type) {
       loadingMoreRef.current = false;
       setLoadingMore(false);

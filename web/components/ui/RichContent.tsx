@@ -64,7 +64,16 @@ export default function RichContent({ content, className = "" }: { content?: str
     if (!root) return;
     root.querySelectorAll("img[width]").forEach((node) => {
       const raw = (node.getAttribute("width") ?? "").trim();
-      if (!/^\d+$/.test(raw)) return; // 仅纯正整数（拒绝 "100%"/"500px" 等，避免误解析为小图）
+      // 百分比宽（width="50%"）：响应式，跟随容器；净化器禁用 style，故运行时落内联样式
+      const pct = /^(\d{1,3})%$/.exec(raw);
+      if (pct) {
+        const value = Math.min(100, Math.max(1, Number(pct[1])));
+        const img = node as HTMLImageElement;
+        img.style.width = `${value}%`;
+        img.style.height = "auto";
+        return;
+      }
+      if (!/^\d+$/.test(raw)) return; // 仅纯正整数（拒绝 "100px" 等，避免误解析为小图）
       const width = Number.parseInt(raw, 10);
       if (width > 0) {
         (node as HTMLImageElement).style.width = `${Math.min(width, 2400)}px`;

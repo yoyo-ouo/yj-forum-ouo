@@ -44,10 +44,19 @@ func (d *DB) AnonymizeUser(ctx context.Context, userID, defaultAvatar string) (s
 			`DELETE FROM guild_join_requests WHERE user_id=$1`,
 			`UPDATE guilds SET leader_user_id=NULL WHERE leader_user_id=$1`,
 			`DELETE FROM email_change_requests WHERE user_id=$1`,
+			// 草稿是私人未发布内容：匿名化后不应继续留在库里；先清媒体引用再删草稿
+			`DELETE FROM media_references WHERE owner_type='post_draft' AND owner_id IN (SELECT id FROM post_drafts WHERE user_id=$1)`,
+			`DELETE FROM post_drafts WHERE user_id=$1`,
 		} {
 			if _, err := tx.Exec(ctx, q, userID); err != nil {
 				return err
 			}
+		}
+		// 草稿删除后，仅该用户上传且已无任何引用的媒体置为已删除（物理文件由后台清理）
+		if _, err := tx.Exec(ctx, `UPDATE media_assets SET status=0, deleted_at=NOW()
+			WHERE uploader_user_id=$1
+			  AND NOT EXISTS (SELECT 1 FROM media_references mr WHERE mr.media_id = media_assets.id)`, userID); err != nil {
+			return err
 		}
 		if _, err := tx.Exec(ctx, `DELETE FROM verify_codes WHERE email=$1`, oldEmail); err != nil {
 			return err
@@ -76,7 +85,10 @@ func (d *DB) PurgeUser(ctx context.Context, userID string) (string, error) {
 		// media_references 无外键不会自动清，残留引用会把媒体永久钉住（无法 GC，公开图仍可被访问）。
 		if _, err := tx.Exec(ctx, `DELETE FROM media_references
 			WHERE (owner_type = 'post' AND owner_id IN (SELECT id FROM posts WHERE user_id=$1))
-			   OR (owner_type = 'comment' AND owner_id IN (SELECT id FROM comments WHERE user_id=$1))`, userID); err != nil {
+			   OR (owner_type = 'post_draft' AND owner_id IN (SELECT id FROM post_drafts WHERE user_id=$1))
+			   OR (owner_type = 'comment' AND owner_id IN (SELECT id FROM comments WHERE user_id=$1))
+			   OR (owner_type IN ('character', 'character_draft')
+			       AND owner_id IN (SELECT id FROM character_sheets WHERE user_id=$1))`, userID); err != nil {
 			return err
 		}
 		// media_assets 仅置为已删除，物理文件交由后台过期媒体清理任务处理；
@@ -114,6 +126,12 @@ func (d *DB) PurgeUser(ctx context.Context, userID string) (string, error) {
 		if _, err := tx.Exec(ctx, `UPDATE comments SET likes = GREATEST(likes - sub.cnt, 0)
 			FROM (SELECT comment_id, COUNT(*) AS cnt FROM comment_likes WHERE user_id=$1 GROUP BY comment_id) AS sub
 			WHERE comments.id = sub.comment_id`, userID); err != nil {
+			return err
+		}
+		// 角色设定的获赞数同理：级联删除 character_sheet_likes 前回补冗余计数
+		if _, err := tx.Exec(ctx, `UPDATE character_sheets SET like_count = GREATEST(like_count - sub.cnt, 0)
+			FROM (SELECT sheet_id, COUNT(*) AS cnt FROM character_sheet_likes WHERE user_id=$1 GROUP BY sheet_id) AS sub
+			WHERE character_sheets.id = sub.sheet_id`, userID); err != nil {
 			return err
 		}
 		// 原邮箱的限流记录一并清除

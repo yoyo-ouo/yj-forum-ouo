@@ -196,6 +196,15 @@
     object-fit: cover;
 }
 
+/* 容器是 overflow: visible（为放右下角身份角标），而全局 `svg,img{all:inherit}` 会让
+   img 继承这个 visible。img 自身 overflow 不是 hidden/clip 时，浏览器不按 border-radius
+   裁剪替换内容，方图就会显示成方块（透明 PNG 只是四角本就透明，看着“像圆的”）。
+   这里用 clip-path 强制圆形，与 elements.css 里 img.avatar-round 的做法保持一致。 */
+.guild-member-avatar img {
+    -webkit-clip-path: circle(50%);
+    clip-path: circle(50%);
+}
+
 .guild-member-name {
     max-width: 100%;
     font-size: 14px;

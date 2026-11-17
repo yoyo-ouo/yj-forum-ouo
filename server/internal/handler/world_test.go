@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"yj-forum/server/internal/database"
+	"yj-forum/server/internal/models"
 )
 
 func TestValidateWorldContent(t *testing.T) {
@@ -235,4 +237,37 @@ func TestRegisterWorldRoutes(t *testing.T) {
 	// nil 参数安全
 	RegisterWorldRoutes(nil, &WorldHandler{})
 	RegisterWorldRoutes(api, nil)
+}
+
+// 列表/创建响应/SSE 的消息 JSON 均包含 parent 字段：无引用或父消息已删时为 null，
+// 有引用时下发 id/sender_name/sender_avatar/content/content_format/created_at 六个字段。
+func TestWorldMessageJSONParentField(t *testing.T) {
+	raw, err := json.Marshal(database.WorldMessage{ID: 1})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(raw), `"parent":null`) {
+		t.Fatalf("无引用时 parent 应为 null: %s", raw)
+	}
+
+	parentID := int64(7)
+	raw, err = json.Marshal(database.WorldMessage{
+		ID:       1,
+		ParentID: &parentID,
+		Parent: &models.WorldMessageParent{
+			ID: 7, SenderName: "甲", SenderAvatar: "/a.png",
+			Content: "<p>父</p>", ContentFormat: "html",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal parent: %v", err)
+	}
+	for _, want := range []string{
+		`"parent":{`, `"id":7`, `"sender_name":"甲"`, `"sender_avatar":"/a.png"`,
+		`"content":"\u003cp\u003e父\u003c/p\u003e"`, `"content_format":"html"`, `"created_at"`,
+	} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("parent JSON 缺少 %s: %s", want, raw)
+		}
+	}
 }

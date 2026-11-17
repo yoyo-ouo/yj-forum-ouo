@@ -1,22 +1,10 @@
 "use client";
 
-// 消息中心页面：MessageCenter 内部使用 useSearchParams（?type= 深链），
-// 按 Next.js App Router 规范包一层 Suspense。
+// 消息中心页面：类型由 MessageCenter 内部状态管理，不再使用 URL ?type=，
+// 因此不需要 Suspense / useSearchParams。
 
-import { Suspense } from "react";
-import GlobalLoading from "@/components/GlobalLoading";
 import MessageCenter from "@/components/messages/MessageCenter";
 
 export default function MessagesPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="route-loading">
-          <GlobalLoading />
-        </div>
-      }
-    >
-      <MessageCenter />
-    </Suspense>
-  );
+  return <MessageCenter />;
 }

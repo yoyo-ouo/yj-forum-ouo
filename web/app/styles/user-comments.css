@@ -65,3 +65,49 @@
     }
 }
 
+/* ---- 谁赞了我 ---- */
+.user-like-excerpt {
+    display: block;
+    margin-top: 4px;
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+    line-height: 1.6;
+    word-break: break-word;
+}
+
+.user-likes-more {
+    display: flex;
+    justify-content: center;
+    padding: 14px 0 4px;
+}
+
+.user-likes-more button,
+.user-likes-retry {
+    padding: 6px 18px;
+    border: 1px solid var(--color-border-primary);
+    border-radius: 16px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.user-likes-retry {
+    padding: 2px 10px;
+    font-size: 12px;
+}
+
+.user-likes-more button:hover:not(:disabled),
+.user-likes-retry:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: var(--color-bg-item-hover);
+}
+
+.user-likes-more button:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+

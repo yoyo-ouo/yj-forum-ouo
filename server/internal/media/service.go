@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -25,8 +26,14 @@ import (
 )
 
 const (
-	MaxInputBytes = 5 << 20
-	MaxPixels     = 12_000_000
+	// MaxInputBytes 单张图片上传上限（全站统一 10MB）。
+	MaxInputBytes = 10 << 20
+	// MaxDecodeBytes 单张图片解码内存预算（不是产品尺寸限制）：
+	// 按 W×H×每像素字节数估算，防超大/高位深图片（16-bit PNG、CMYK JPEG）解码打爆内存。
+	// 与 decodeSem 配合：3 并发最坏约 384MB 常驻。
+	MaxDecodeBytes = 128 << 20
+	// MaxDimension 单边像素上限：只防「像素总数不高但单边极端」的图（如 5000 万×1）。
+	MaxDimension = 10_000
 
 	// cacheControlImmutable 媒体对象缓存策略：对象 key 含随机 ID，内容不变更。
 	cacheControlImmutable = "public, max-age=31536000, immutable"
@@ -35,8 +42,8 @@ const (
 // ErrMediaNotFound 媒体字节不存在（数据库有记录但对象/文件缺失）。
 var ErrMediaNotFound = errors.New("媒体不存在")
 
-// decodeSem 限制并发解码量：大图解码占用内存高，避免上传洪峰打爆内存（容量 4）。
-var decodeSem = make(chan struct{}, 4)
+// decodeSem 限制并发解码量：大图解码占用内存高，避免上传洪峰打爆内存（容量 3）。
+var decodeSem = make(chan struct{}, 3)
 
 // Service 媒体服务。
 type Service struct {
@@ -64,7 +71,7 @@ type SaveInput struct {
 	UploaderUserID  string
 	UploaderAdminID string
 	Visibility      string
-	MaxBytes        int64 // 0 = MaxInputBytes（5MB）；头像可传 10MB
+	MaxBytes        int64 // 0 = MaxInputBytes（10MB）；头像可传 10MB
 }
 
 // Save 校验、重编码（JPEG/PNG）并保存到 S3/本地，返回资产。
@@ -314,7 +321,9 @@ func prepareImage(data []byte, ext, mime string) (image.Image, []byte, string, i
 	if err != nil {
 		return nil, nil, "", 0, 0, fmt.Errorf("图片解码失败")
 	}
-	if cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > MaxPixels {
+	if cfg.Width <= 0 || cfg.Height <= 0 ||
+		cfg.Width > MaxDimension || cfg.Height > MaxDimension ||
+		int64(cfg.Width)*int64(cfg.Height)*bytesPerPixel(cfg.ColorModel) > MaxDecodeBytes {
 		return nil, nil, "", 0, 0, fmt.Errorf("图片尺寸过大")
 	}
 	switch format {
@@ -345,6 +354,23 @@ func prepareImage(data []byte, ext, mime string) (image.Image, []byte, string, i
 	default:
 		// GIF（可能动图）与 WebP：保留原始字节，避免破坏动画/透明；不生成变体
 		return nil, data, mime, cfg.Width, cfg.Height, nil
+	}
+}
+
+// bytesPerPixel 按解码后的颜色模型估算每像素字节数（偏保守）。
+func bytesPerPixel(m color.Model) int64 {
+	switch m {
+	case color.GrayModel:
+		return 1
+	case color.Gray16Model:
+		return 2
+	case color.RGBA64Model, color.NRGBA64Model:
+		return 8
+	case color.RGBAModel, color.NRGBAModel, color.CMYKModel:
+		return 4
+	default:
+		// YCbCr 实际 1.5～3 B/px，这里取 3 保守估算
+		return 3
 	}
 }
 

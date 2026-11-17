@@ -11,7 +11,7 @@ BIN    := $(SERVER)/bin/yj-forum
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev setup docker-up db-up db-down db-logs server server-run server-build web web-dev web-build web-start vet clean
+.PHONY: help dev setup docker-up db-up db-down db-logs server server-run server-build web web-dev web-build web-start vet clean bench-setup bench-db bench-seed bench-server bench-run bench-report bench-down
 
 help: ## 显示本帮助
 	@echo "妖精论坛 ov2 开发命令："
@@ -80,3 +80,28 @@ vet: ## go vet + 格式检查
 
 clean: ## 清理编译产物
 	@rm -f $(ROOT)/$(BIN) && echo "已清理 $(BIN)"
+
+# ---- 基准跑分（bench/）----
+
+bench-setup: ## 基准环境初始化（安装 k6 + 构建工具 + 建库）
+	@bash $(ROOT)/bench/scripts/setup.sh
+
+bench-db: ## 启动基准数据库容器 ouo-postgres-bench :5433
+	@bash $(ROOT)/bench/scripts/db-bench.sh
+
+bench-seed: ## 生成基准数据集（SCALE=small|medium|large）
+	@bash $(ROOT)/bench/scripts/seed.sh $(or $(SCALE),small)
+
+bench-server: ## 启动基准服务端 :8091（BENCH_DEBUG 生效）
+	@bash $(ROOT)/bench/scripts/server.sh start
+
+bench-run: ## 一键跑分（SCALE/ PROFILE=full|fast|capacity / PHASES / RATE / DURATION 可覆盖）
+	@SCALE=$(or $(SCALE),small) PROFILE=$(or $(PROFILE),fast) PHASES=$(or $(PHASES),cold,warm) \
+		bash $(ROOT)/bench/scripts/run.sh
+
+bench-report: ## 重新生成最近一次跑分报告
+	@bash $(ROOT)/bench/scripts/report.sh
+
+bench-down: ## 停止基准服务端与数据库容器
+	@bash $(ROOT)/bench/scripts/server.sh stop || true
+	@docker stop ouo-postgres-bench >/dev/null 2>&1 && echo "已停止 ouo-postgres-bench" || true

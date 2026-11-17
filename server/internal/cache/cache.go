@@ -4,6 +4,7 @@ package cache
 import (
 	"container/list"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,6 +22,34 @@ type Cache struct {
 	ttl      time.Duration
 	items    map[string]*list.Element
 	lru      *list.List
+
+	// 命中统计（基准测试用，均为原子计数，热路径开销可忽略）。
+	hits      atomic.Int64
+	misses    atomic.Int64
+	evictions atomic.Int64
+}
+
+// Stats 缓存统计快照。
+type Stats struct {
+	Entries   int   `json:"entries"`
+	Capacity  int   `json:"capacity"`
+	Hits      int64 `json:"hits"`
+	Misses    int64 `json:"misses"`
+	Evictions int64 `json:"evictions"`
+}
+
+// Stats 返回当前统计。
+func (c *Cache) Stats() Stats {
+	if c == nil {
+		return Stats{}
+	}
+	return Stats{
+		Entries:   c.Len(),
+		Capacity:  c.capacity,
+		Hits:      c.hits.Load(),
+		Misses:    c.misses.Load(),
+		Evictions: c.evictions.Load(),
+	}
 }
 
 // New 创建缓存。
@@ -42,15 +71,18 @@ func (c *Cache) Get(key string) (any, bool) {
 	defer c.mu.Unlock()
 	elem, ok := c.items[key]
 	if !ok {
+		c.misses.Add(1)
 		return nil, false
 	}
 	ent := elem.Value.(*entry)
 	if c.ttl > 0 && time.Now().After(ent.expireAt) {
 		c.lru.Remove(elem)
 		delete(c.items, key)
+		c.misses.Add(1)
 		return nil, false
 	}
 	c.lru.MoveToFront(elem)
+	c.hits.Add(1)
 	return ent.value, true
 }
 
@@ -79,6 +111,7 @@ func (c *Cache) Set(key string, value any, ttl ...time.Duration) {
 		}
 		c.lru.Remove(last)
 		delete(c.items, last.Value.(*entry).key)
+		c.evictions.Add(1)
 	}
 }
 
@@ -111,6 +144,7 @@ func (c *Cache) SetIfAbsent(key string, value any, ttl ...time.Duration) bool {
 		}
 		c.lru.Remove(last)
 		delete(c.items, last.Value.(*entry).key)
+		c.evictions.Add(1)
 	}
 	return true
 }

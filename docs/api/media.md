@@ -6,7 +6,7 @@
 
 | 字段 | 说明 |
 |---|---|
-| `file` | png/jpeg/webp/gif，≤5MB |
+| `file` | png/jpeg/webp/gif，≤10MB |
 | `scene` | `post_image` / `comment_image` / `world_message` / `chat_message` |
 | `owner_id` | 可选：帖子/评论/聊天室/世界消息 ID |
 | `guild_uuid` | 可选：会馆 UUID |
@@ -32,7 +32,7 @@
 ## 存储
 
 - 新上传：`storage_provider=s3`（SeaweedFS）或 `local`（S3 未启用时回退 `MEDIA_DIR`）。
-- 旧资源：`is_legacy=TRUE`，永不参与孤儿 GC；`/avatar/*`、`/api/v1/media/*`、`/static/*` 继续可用；新 MD 媒体走 `/ov2/api/media/<id>`；`/guild-img/*`、`/guide-img/*` 旧 GridFS 兼容代理已删除，历史会馆/指南旧资源不再提供兼容。
+- 旧资源：`is_legacy=TRUE`，永不参与孤儿 GC；`/avatar/*`、`/ov2/api/media/*`、`/static/*` 继续可用；新 MD 媒体走 `/ov2/api/media/<id>`；`/guild-img/*`、`/guide-img/*` 旧 GridFS 兼容代理已删除，历史会馆/指南旧资源不再提供兼容。
 - 删除：`status=0 + deleted_at`；7 天后 GC；`media_references` 有活跃引用时不删。
 
 ## 头像

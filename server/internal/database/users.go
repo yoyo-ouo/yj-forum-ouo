@@ -207,8 +207,8 @@ func (d *DB) HasFavoritedPost(ctx context.Context, postID, userID string) bool {
 	return n > 0
 }
 
-// GetUserFavorites 用户收藏帖子列表（仅已发布）。
-func (d *DB) GetUserFavorites(ctx context.Context, userID string, page, pageSize int) ([]models.PostListItem, error) {
+// GetUserFavorites 用户收藏帖子列表（仅已发布）。hasMore 用 pageSize+1 探测。
+func (d *DB) GetUserFavorites(ctx context.Context, userID string, page, pageSize int) ([]models.PostListItem, bool, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -216,7 +216,7 @@ func (d *DB) GetUserFavorites(ctx context.Context, userID string, page, pageSize
 		pageSize = 20
 	}
 	offset := (page - 1) * pageSize
-	return d.queryPostListItems(ctx, `SELECT p.id, p.user_id, p.title, `+postSummaryExpr+`, p.category, p.likes, p.views,
+	posts, err := d.queryPostListItems(ctx, `SELECT p.id, p.user_id, p.title, `+postSummaryExpr+`, p.category, p.likes, p.views,
 		p.created_at, u.name, u.avatar,
 		(SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = 1) AS comment_count,
 		p.guild_id, g.name, g.theme_color,
@@ -227,7 +227,15 @@ func (d *DB) GetUserFavorites(ctx context.Context, userID string, page, pageSize
 		LEFT JOIN guild_members ugm ON ugm.user_id = p.user_id
 		LEFT JOIN guilds ug ON ug.id = ugm.guild_id
 		WHERE f.user_id = $1 AND p.status = 1 AND p.published_at <= NOW() ORDER BY f.created_at DESC LIMIT $2 OFFSET $3`,
-		userID, pageSize, offset)
+		userID, pageSize+1, offset)
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(posts) > pageSize
+	if hasMore {
+		posts = posts[:pageSize]
+	}
+	return posts, hasMore, nil
 }
 
 // ToggleFollow 关注/取消（禁自关）。

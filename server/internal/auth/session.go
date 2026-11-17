@@ -15,7 +15,8 @@ type SessionManager struct {
 	DB *database.DB
 }
 
-const sessionTTL = 24 * time.Hour // 对齐 legacy PERMANENT_SESSION_LIFETIME=86400
+// SessionTTL 登录会话有效期：Cookie 与会话表统一使用该常量（14 天）。
+const SessionTTL = 14 * 24 * time.Hour
 
 // Create 创建会话，返回 token。
 func (m *SessionManager) Create(ctx context.Context, userID string) (string, error) {
@@ -25,7 +26,7 @@ func (m *SessionManager) Create(ctx context.Context, userID string) (string, err
 	}
 	t := hex.EncodeToString(token)
 	_, err := m.DB.Exec(ctx, `INSERT INTO sessions (token, user_id, expires_at)
-		VALUES ($1,$2, NOW() + INTERVAL '24 hours')`, t, userID)
+		VALUES ($1,$2, NOW() + make_interval(secs => $3::double precision))`, t, userID, SessionTTL.Seconds())
 	if err != nil {
 		return "", err
 	}

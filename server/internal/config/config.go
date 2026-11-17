@@ -4,6 +4,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -61,14 +62,15 @@ type Config struct {
 	AltchaAlgorithm string
 	AltchaCost      int
 	AltchaExpires   time.Duration
-
-	// 旧 APP 兼容层
-	LegacyTokenTTL       time.Duration
-	LegacyAppSunset      string
-	LegacyTokenNotBefore time.Time
+	// ALTCHA_APP_SECRET：APP 专用验证通道密钥（留空即关闭该通道）
+	AltchaAppSecret string
 
 	// 下载页 GitHub Releases
 	GitHubToken string
+
+	// BenchDebug 基准测试调试开关：为 true 时挂载 /debug/metrics、/debug/pprof
+	// 并旁路 IP 限流。仅在非生产环境生效（生产强制关闭）。
+	BenchDebug bool
 }
 
 // Load 从 .env + 环境变量读取配置，缺省值对齐 legacy api/config.py。
@@ -113,12 +115,16 @@ func Load() *Config {
 		AltchaAlgorithm: getEnv("ALTCHA_ALGORITHM", "PBKDF2/SHA-256"),
 		AltchaCost:      getEnvInt("ALTCHA_COST", 5000),
 		AltchaExpires:   time.Duration(getEnvInt("ALTCHA_EXPIRES_SECONDS", 600)) * time.Second,
-
-		LegacyTokenTTL:       time.Duration(getEnvInt("LEGACY_TOKEN_TTL_HOURS", 168)) * time.Hour,
-		LegacyAppSunset:      getEnv("LEGACY_APP_SUNSET", ""),
-		LegacyTokenNotBefore: parseTimeEnv("LEGACY_TOKEN_NOT_BEFORE"),
+		AltchaAppSecret: getEnv("ALTCHA_APP_SECRET", ""),
 
 		GitHubToken: getEnv("GITHUB_TOKEN", ""),
+
+		BenchDebug: getEnvBool("BENCH_DEBUG", false),
+	}
+
+	// 生产环境禁止任何基准调试能力：默认拒绝，只有显式 APP_ENV=dev 才允许。
+	if cfg.IsProd() {
+		cfg.BenchDebug = false
 	}
 
 	if cfg.ReceiverAll == "" {
@@ -131,6 +137,12 @@ func Load() *Config {
 	}
 
 	return cfg
+}
+
+// IsProd 默认拒绝：只有显式 APP_ENV=dev 才视为非生产。
+// 这样 production/Prod/尾随空格等变体都会走生产保护分支。
+func (c *Config) IsProd() bool {
+	return !strings.EqualFold(strings.TrimSpace(c.AppEnv), "dev")
 }
 
 func getEnv(key, def string) string {
@@ -156,18 +168,6 @@ func getEnvBool(key string, def bool) bool {
 		}
 	}
 	return def
-}
-
-func parseTimeEnv(key string) time.Time {
-	v := os.Getenv(key)
-	if v == "" {
-		return time.Time{}
-	}
-	t, err := time.Parse(time.RFC3339, v)
-	if err != nil {
-		return time.Time{}
-	}
-	return t
 }
 
 func splitComma(s string) []string {

@@ -200,3 +200,11 @@ server/bin/
 # SeaweedFS 本地数据与密钥（s3.json 由 s3.json.example 生成，不入库）
 /deploy/seaweedfs/data/
 /deploy/seaweedfs/s3.json
+
+# ---- bench/ 基准跑分 ----
+bench/bin/
+bench/results/
+bench/seed/ids.json
+bench/seed/seed-meta.json
+bench/config/bench.env
+bench/assets/bench.jpg

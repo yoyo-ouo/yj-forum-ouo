@@ -40,6 +40,7 @@ export default function Footer() {
             <i className="fa fa-info-circle"></i> 本二创无官方授权，仅粉丝公益创作
           </p>
           <Link href="/privacy" id="FooterPrivacy"><i className="fa fa-shield"></i> 隐私政策</Link>
+          <Link href="/terms" id="FooterTerms"><i className="fa fa-file-text-o"></i> 服务条款</Link>
         </div>
         <div className="footer-col">
           <h4 className="footer-title"><i className="fa fa-weixin"></i> 公众号</h4>

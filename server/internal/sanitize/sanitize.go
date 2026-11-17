@@ -1,7 +1,7 @@
 // Package sanitize 富文本净化：发帖 / 会馆介绍页 / 文章正文共用同一白名单。
 // 引用节点存储形态（冻结契约，admin 侧同步实现）：
 //
-//	<div data-embed="user|post|article" data-id="{1-64位[A-Za-z0-9_-]}"
+//	<div data-embed="user|post|article|character" data-id="{1-64位[A-Za-z0-9_-]}"
 //	     [data-variant="card|compact"] [data-size="sm|md|lg"]
 //	     [data-fields="intro,guild 逗号子集，空串=全不显示，缺省=全显示"]
 //	     [data-align="left|center"]></div>
@@ -16,7 +16,7 @@ import (
 
 // 引用节点属性值正则（冻结契约）。
 var (
-	reEmbedType    = regexp.MustCompile(`^(user|post|article)$`)
+	reEmbedType    = regexp.MustCompile(`^(user|post|article|character)$`)
 	reEmbedID      = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 	reEmbedVariant = regexp.MustCompile(`^(card|compact)$`)
 	reEmbedSize    = regexp.MustCompile(`^(sm|md|lg)$`)

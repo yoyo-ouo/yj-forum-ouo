@@ -46,7 +46,7 @@ func NewSiteFeatureHandlers(db *database.DB, releasesSvc *releases.Service) *Sit
 	return &SiteFeatureHandlers{DB: db, Releases: releasesSvc}
 }
 
-// RegisterSiteFeatureRoutes 注册站点功能路由（由 router 为 /ov2/api 与 /api/v1 各调用一次）。
+// RegisterSiteFeatureRoutes 注册站点功能路由（由 router 在 /ov2/api group 注册）。
 func RegisterSiteFeatureRoutes(api *gin.RouterGroup, h *SiteFeatureHandlers) {
 	if api == nil || h == nil {
 		return

@@ -6,9 +6,12 @@ import { useRouter } from "next/navigation";
 export default function BackButton({
   className = "post-back-btn",
   label = "返回",
+  onClick,
 }: {
   className?: string;
   label?: string;
+  /** 自定义返回行为（如先保存再离开）；缺省为 router.back() */
+  onClick?: () => void;
 }) {
   const router = useRouter();
   return (
@@ -17,7 +20,8 @@ export default function BackButton({
       className={className}
       onClick={(e) => {
         e.preventDefault();
-        router.back();
+        if (onClick) onClick();
+        else router.back();
       }}
     >
       <i className="fa fa-arrow-left"></i> {label}

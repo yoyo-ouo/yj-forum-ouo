@@ -155,6 +155,16 @@
     letter-spacing: 1px;
 }
 
+/* 页尾条款入口（与隐私政策页脚内的链接） */
+.privacy-footer-link {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.privacy-footer-link:hover {
+    text-decoration: underline;
+}
+
 
 #Easter-Egg_Text{
     white-space: nowrap;

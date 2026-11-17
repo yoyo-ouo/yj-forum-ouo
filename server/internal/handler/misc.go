@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +24,7 @@ import (
 	"yj-forum/server/internal/database"
 	"yj-forum/server/internal/email"
 	"yj-forum/server/internal/middleware"
+	"yj-forum/server/internal/models"
 )
 
 // MiscHandler 杂项（投票/Bug/彩蛋/验证码邮件）。
@@ -89,6 +92,17 @@ func (h *MiscHandler) SendRegisterCode(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "验证码已发送"})
 }
 
+// verifyEmailResendCooldown 同一用户邮箱验证码重发冷却时间。
+const verifyEmailResendCooldown = 60 * time.Second
+
+// verifyEmailResendAllowed 上一条未使用验证码是否已过冷却期（last 为空表示从未发送）。
+func verifyEmailResendAllowed(last *time.Time, now time.Time) bool {
+	if last == nil || last.IsZero() {
+		return true
+	}
+	return now.Sub(*last) >= verifyEmailResendCooldown
+}
+
 // SendVerifyEmailCode 邮箱验证码（需登录）。
 func (h *MiscHandler) SendVerifyEmailCode(c *gin.Context) {
 	uid := h.userFromCookie(c)
@@ -99,6 +113,17 @@ func (h *MiscHandler) SendVerifyEmailCode(c *gin.Context) {
 	u, err := h.DB.GetUserByID(c.Request.Context(), uid)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "用户不存在"})
+		return
+	}
+	// 发送侧冷却：60 秒内已发过未使用的验证码则拒绝，避免重复点发或绕过邮件隐私限流。
+	last, err := h.DB.LastUnusedVerifyCodeAt(c.Request.Context(), u.Email, "email_verify")
+	if err != nil {
+		log.Printf("[CODE] email_verify last query failed (%s): %v", u.Email, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "服务器错误"})
+		return
+	}
+	if !verifyEmailResendAllowed(last, time.Now()) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"success": false, "message": "发送太频繁，请稍后再试"})
 		return
 	}
 	code := genCode(6)
@@ -480,7 +505,52 @@ func (h *MiscHandler) BugReportDetail(c *gin.Context) {
 
 // ---- 彩蛋 ----
 
-// EasterEgg 随机彩蛋。
+// eggEntry 彩蛋响应：Kind=static 为内置彩蛋，Kind=quote 为角色设定语录。
+type eggEntry struct {
+	ID   string `json:"ID"`
+	Name string `json:"Name"`
+	Text string `json:"Text"`
+	Kind string `json:"Kind"`
+}
+
+var (
+	eggQuoteCacheMu     sync.Mutex
+	eggQuoteCacheAt     time.Time
+	eggQuoteCacheFailAt time.Time
+	eggQuoteCacheData   []models.CharacterEggQuote
+)
+
+// eggQuoteCacheTTL 语录池进程内缓存：避免每次点彩蛋都查库。
+const eggQuoteCacheTTL = 60 * time.Second
+
+// loadCharacterEggQuotes 读取参与彩蛋展示的设定语录（带 60s 缓存；失败时返回旧缓存）。
+func loadCharacterEggQuotes(db *database.DB) []models.CharacterEggQuote {
+	if db == nil {
+		return nil
+	}
+	eggQuoteCacheMu.Lock()
+	defer eggQuoteCacheMu.Unlock()
+	if !eggQuoteCacheAt.IsZero() && time.Since(eggQuoteCacheAt) < eggQuoteCacheTTL {
+		return eggQuoteCacheData
+	}
+	// 失败后 10s 内不再打库（负缓存），避免 DB 抖动时每个请求都串行重试
+	if !eggQuoteCacheFailAt.IsZero() && time.Since(eggQuoteCacheFailAt) < 10*time.Second {
+		return eggQuoteCacheData
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	rows, err := db.ListCharacterEggQuotes(ctx)
+	if err != nil {
+		eggQuoteCacheFailAt = time.Now()
+		return eggQuoteCacheData
+	}
+	eggQuoteCacheFailAt = time.Time{}
+	eggQuoteCacheData = rows
+	eggQuoteCacheAt = time.Now()
+	return rows
+}
+
+// EasterEgg 随机彩蛋：静态彩蛋与角色语录合并为一个池，等概率抽取。
 func (h *MiscHandler) EasterEgg(c *gin.Context) {
 	// 默认使用随二进制内置的数据；EASTER_EGG_PATH 非空时可覆盖（方便运营临时替换）。
 	data := easteregg.JSON()
@@ -491,17 +561,27 @@ func (h *MiscHandler) EasterEgg(c *gin.Context) {
 			log.Printf("[EASTER_EGG] 覆盖文件读取失败，回退内置数据 path=%s err=%v", p, err)
 		}
 	}
-	var list []struct {
-		ID   string `json:"ID"`
-		Name string `json:"Name"`
-		Text string `json:"Text"`
+	var static []eggEntry
+	if err := json.Unmarshal(data, &static); err != nil {
+		log.Printf("[EASTER_EGG] 内置数据解析失败: %v", err)
 	}
-	if err := json.Unmarshal(data, &list); err != nil || len(list) == 0 {
+	pool := make([]eggEntry, 0, len(static)+16)
+	for _, e := range static {
+		e.Kind = "static"
+		pool = append(pool, e)
+	}
+	for _, q := range loadCharacterEggQuotes(h.DB) {
+		if strings.TrimSpace(q.Text) == "" || strings.TrimSpace(q.Name) == "" {
+			continue
+		}
+		pool = append(pool, eggEntry{ID: "Q" + q.SheetID, Name: q.Name, Text: q.Text, Kind: "quote"})
+	}
+	if len(pool) == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "彩蛋不存在"})
 		return
 	}
-	n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(list))))
-	c.JSON(http.StatusOK, list[n.Int64()])
+	n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(pool))))
+	c.JSON(http.StatusOK, pool[n.Int64()])
 }
 
 // VerifyToken 邮箱验证 token 消费（verify-email 页）。

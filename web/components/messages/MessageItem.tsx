@@ -72,17 +72,26 @@ export default function MessageItem({ item, unread = false, showKind = false }: 
   const isLike = item.kind === "like";
   const actor = isLike ? item.like.actor : item.comment.actor;
   const postId = isLike ? item.like.post_id : item.comment.post_id;
-  const postTitle = isLike ? item.like.post_title : item.comment.post_title;
+  const postTitle = isLike
+    ? item.like.post_title || item.like.target_title || ""
+    : item.comment.post_title;
   const excerpt = isLike ? item.like.comment_excerpt : item.comment.excerpt;
   const commentId = isLike ? (item.like.target_type === "comment" ? item.like.comment_id : "") : item.comment.comment_id;
+  const isCharacterLike = isLike && item.like.target_type === "character";
   const action = isLike
     ? item.like.target_type === "post"
       ? "赞了你的帖子"
-      : "赞了你的评论"
+      : item.like.target_type === "character"
+        ? "赞了你的设定"
+        : "赞了你的评论"
     : item.comment.parent_id
       ? "回复了你的评论"
       : "评论了你的帖子";
-  const href = postHref(postId, commentId);
+  const href = isCharacterLike
+    ? item.like.target_id
+      ? `/character/${item.like.target_id}`
+      : ""
+    : postHref(postId, commentId);
 
   return (
     <button

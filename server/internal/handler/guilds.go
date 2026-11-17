@@ -43,7 +43,7 @@ func feedPage(c *gin.Context) (int, int) {
 	return page, pageSize
 }
 
-// ---- GET /api/v1/guilds ----
+// ---- GET /ov2/api/guilds ----
 
 // List 会馆列表（匿名缓存 30s，键 guilds:list）。
 func (h *GuildsHandler) List(c *gin.Context) {
@@ -63,7 +63,7 @@ func (h *GuildsHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ---- GET /api/v1/guilds/:slug ----
+// ---- GET /ov2/api/guilds/:slug ----
 
 // Detail 会馆详情（匿名缓存 30s；登录用户实时附带 my_state）。
 func (h *GuildsHandler) Detail(c *gin.Context) {
@@ -81,16 +81,34 @@ func (h *GuildsHandler) Detail(c *gin.Context) {
 	if !ok {
 		return
 	}
-	// my_state：未登录为 null，登录返回成员/馆长/待审状态
+	// my_state：未登录为 null；登录返回成员/馆长、其他会馆归属与最近一次申请详情。
+	// 前端据此决定显示「申请加入 / 查看申请进度 / 已加入其他会馆」。
 	var myState any
 	if me != "" {
-		st := models.GuildMyState{
-			IsMember: h.DB.IsGuildMember(c.Request.Context(), g.ID, me),
-			IsLeader: g.LeaderUserID != nil && *g.LeaderUserID == me,
+		st := models.GuildMyState{}
+		ms, err := h.DB.GetUserGuildMembership(c.Request.Context(), me)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
+			return
 		}
-		if req, err := h.DB.GetPendingJoinRequest(c.Request.Context(), g.ID, me); err == nil && req != nil {
-			st.HasPendingRequest = true
-			st.RequestID = req.ID
+		if ms != nil {
+			st.CurrentGuild = ms
+			if ms.ID == g.ID {
+				st.IsMember = true
+				st.IsLeader = ms.IsLeader
+			}
+		}
+		req, err := h.DB.GetLatestJoinRequest(c.Request.Context(), g.ID, me)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
+			return
+		}
+		if req != nil {
+			st.LatestRequest = req
+			if req.Status == 0 {
+				st.HasPendingRequest = true
+				st.RequestID = req.ID
+			}
 		}
 		myState = st
 	}
@@ -104,27 +122,39 @@ func (h *GuildsHandler) Detail(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ---- GET /api/v1/guilds/:slug/feed ----
+// ---- GET /ov2/api/guilds/:slug/feed ----
 
 // Feed 会馆信息流（帖子 + 文章）。
+// 缓 30s（发帖/删帖/定时转公开时由 invalidateFeedCaches 失效）；点赞/评论数允许 30s 陈旧。
 func (h *GuildsHandler) Feed(c *gin.Context) {
+	slug := c.Param("slug")
+	page, pageSize := feedPage(c)
+	category := strings.TrimSpace(c.Query("category"))
+	// 用 slug 做键：命中时连 resolveGuild 的那次查询也省了（slug 全局唯一且不随改名变化）
+	key := "feed:guild:" + slug + ":" + itoa(page) + ":" + itoa(pageSize) + ":" + category
+	if v, ok := h.Cache.Posts.Get(key); ok {
+		c.Header("X-Cache", "HIT")
+		c.JSON(http.StatusOK, v)
+		return
+	}
 	g, ok := h.resolveGuild(c)
 	if !ok {
 		return
 	}
-	page, pageSize := feedPage(c)
-	category := strings.TrimSpace(c.Query("category"))
 	items, hasMore, err := h.DB.ListGuildFeed(c.Request.Context(), g.ID, page, pageSize, category)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "items": items, "has_more": hasMore,
+	resp := gin.H{"success": true, "items": items, "has_more": hasMore,
 		"page": page, "page_size": pageSize,
-		"guild": gin.H{"id": g.ID, "slug": g.Slug, "name": g.Name, "theme_color": g.ThemeColor}})
+		"guild": gin.H{"id": g.ID, "slug": g.Slug, "name": g.Name, "theme_color": g.ThemeColor}}
+	h.Cache.Posts.Set(key, resp, 30*time.Second)
+	c.Header("X-Cache", "MISS")
+	c.JSON(http.StatusOK, resp)
 }
 
-// ---- GET /api/v1/guilds/:slug/members ----
+// ---- GET /ov2/api/guilds/:slug/members ----
 
 // Members 会馆成员列表（公开，无缓存；page_size 默认 24）。
 func (h *GuildsHandler) Members(c *gin.Context) {
@@ -141,7 +171,7 @@ func (h *GuildsHandler) Members(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "members": members, "page": page, "page_size": pageSize, "has_more": hasMore})
 }
 
-// ---- GET /api/v1/guilds/:slug/leader ----
+// ---- GET /ov2/api/guilds/:slug/leader ----
 
 // LeaderPage 馆长页（公开，无缓存；无馆长时 leader 为 null）。
 func (h *GuildsHandler) LeaderPage(c *gin.Context) {
@@ -158,7 +188,7 @@ func (h *GuildsHandler) LeaderPage(c *gin.Context) {
 		"leader_bio": pg.LeaderBio, "content": pg.Content})
 }
 
-// ---- GET /api/v1/guilds/:slug/intro ----
+// ---- GET /ov2/api/guilds/:slug/intro ----
 
 // IntroPage 会馆介绍页（公开，无缓存；slug 不存在返回 404）。
 func (h *GuildsHandler) IntroPage(c *gin.Context) {
@@ -174,9 +204,9 @@ func (h *GuildsHandler) IntroPage(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "guild": pg.Guild, "content": pg.Content})
 }
 
-// ---- GET /api/v1/feed ----
+// ---- GET /ov2/api/feed ----
 
-// GlobalFeed 全站信息流：space=all/public/guild。
+// GlobalFeed 全站信息流：space=all/public/guild（缓 30s，同会馆信息流）。
 func (h *GuildsHandler) GlobalFeed(c *gin.Context) {
 	space := c.DefaultQuery("space", "all")
 	if space != "all" && space != "public" && space != "guild" {
@@ -185,16 +215,25 @@ func (h *GuildsHandler) GlobalFeed(c *gin.Context) {
 	guildID, _ := strconv.ParseInt(c.Query("guild_id"), 10, 64)
 	category := strings.TrimSpace(c.Query("category"))
 	page, pageSize := feedPage(c)
+	key := "feed:global:" + space + ":" + strconv.FormatInt(guildID, 10) + ":" + itoa(page) + ":" + itoa(pageSize) + ":" + category
+	if v, ok := h.Cache.Posts.Get(key); ok {
+		c.Header("X-Cache", "HIT")
+		c.JSON(http.StatusOK, v)
+		return
+	}
 	items, hasMore, err := h.DB.ListGlobalFeed(c.Request.Context(), space, guildID, category, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "items": items, "has_more": hasMore,
-		"page": page, "page_size": pageSize, "space": space})
+	resp := gin.H{"success": true, "items": items, "has_more": hasMore,
+		"page": page, "page_size": pageSize, "space": space}
+	h.Cache.Posts.Set(key, resp, 30*time.Second)
+	c.Header("X-Cache", "MISS")
+	c.JSON(http.StatusOK, resp)
 }
 
-// ---- GET /api/v1/articles/:id ----
+// ---- GET /ov2/api/articles/:id ----
 
 // Article 文章详情（先查存在性，不存在返回 404 且不自增浏览量；存在时浏览量 +1 并返回自增后的值）。
 func (h *GuildsHandler) Article(c *gin.Context) {
@@ -213,7 +252,7 @@ func (h *GuildsHandler) Article(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "article": a})
 }
 
-// ---- GET /api/v1/articles/search ----
+// ---- GET /ov2/api/articles/search ----
 
 // SearchArticles 文章搜索（公开；k≥2 字符，page_size 默认 10 上限 50）。
 func (h *GuildsHandler) SearchArticles(c *gin.Context) {
@@ -235,7 +274,7 @@ func (h *GuildsHandler) SearchArticles(c *gin.Context) {
 		"page": page, "page_size": pageSize})
 }
 
-// ---- POST /api/v1/guilds/:slug/join ----
+// ---- POST /ov2/api/guilds/:slug/join ----
 
 type guildJoinReq struct {
 	Reason string `json:"reason"`
@@ -281,7 +320,7 @@ func (h *GuildsHandler) Join(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "request_id": id, "message": "申请已提交，等待馆长审核"})
 }
 
-// ---- POST /api/v1/guilds/:slug/join/cancel ----
+// ---- POST /ov2/api/guilds/:slug/join/cancel ----
 
 // CancelJoin 撤回待审申请。
 func (h *GuildsHandler) CancelJoin(c *gin.Context) {
@@ -302,7 +341,7 @@ func (h *GuildsHandler) CancelJoin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "申请已撤回"})
 }
 
-// ---- POST /api/v1/guilds/:slug/leave ----
+// ---- POST /ov2/api/guilds/:slug/leave ----
 
 // Leave 退出会馆（馆长需先卸任）。
 func (h *GuildsHandler) Leave(c *gin.Context) {

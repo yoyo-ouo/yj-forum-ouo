@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -44,6 +45,9 @@ func main() {
 	if cfg.AppEnv == "prod" && (cfg.SecretKey == "dev-secret-key" || cfg.SecretKey == "TestKeyFor1" || len(cfg.SecretKey) < 32) {
 		log.Fatalf("[FATAL] 生产环境 SECRET_KEY 过弱（需 32+ 字节且不能使用默认值）")
 	}
+
+	// ALTCHA APP 专用通道：配置了就 fail-fast 校验，避免「app_enabled=true 但签名永远失败」的静默失效。
+	checkAltchaAppSecret(cfg)
 
 	// 旧头像目录检查：仅告警，不阻塞启动；新头像走媒体服务，旧头像依赖该目录。
 	checkAvatarDir(cfg.AvatarDir)
@@ -131,6 +135,12 @@ func main() {
 				if err := db.CleanExpiredAltchaUsed(ctx); err != nil {
 					log.Printf("[DB] 清理 ALTCHA 记录失败: %v", err)
 				}
+				if err := db.CleanStaleEmptyPostDrafts(ctx, time.Now().Add(-7*24*time.Hour)); err != nil {
+					log.Printf("[DB] 清理空草稿失败: %v", err)
+				}
+				if err := db.CleanOldPostPublishKeys(ctx, time.Now().Add(-30*24*time.Hour)); err != nil {
+					log.Printf("[DB] 清理发布幂等映射失败: %v", err)
+				}
 			case <-mediaTicker.C:
 				// 每轮 GC 单独限时 5 分钟，避免卡住整个后台循环。
 				gcCtx, gcCancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -191,6 +201,37 @@ func pingS3WithRetry(ctx context.Context, p *storage.S3Provider) error {
 		}
 	}
 	return err
+}
+
+// checkAltchaAppSecret 校验 APP 专用验证通道配置，并打印零 PoW 通道的启动诊断。
+// 留空 = 关闭通道：APP 不会本地求解，登录/评论会提示「人机验证暂不可用」；
+// 配了就必须是强密钥且与 ALTCHA_HMAC_KEY 隔离，避免「app_enabled=true 但签名永远不匹配」的静默失效。
+func checkAltchaAppSecret(cfg *config.Config) {
+	secret := strings.TrimSpace(cfg.AltchaAppSecret)
+	if !cfg.AltchaEnabled {
+		if secret != "" {
+			log.Println("[WARN] ALTCHA_APP_SECRET 已配置但 ALTCHA_ENABLED=false，零 PoW 通道不会生效")
+		}
+		log.Println("[ALTCHA] ALTCHA_ENABLED=false，人机验证整体关闭（/captcha/* 与 /captcha/app/* 一律 404 CAPTCHA_DISABLED）")
+		return
+	}
+	if secret == "" {
+		// 关键告警：APP 端没有本地 PoW 求解器，通道缺失等同于 APP 无法完成人机验证。
+		log.Println("[WARN] ALTCHA_ENABLED=true 但 ALTCHA_APP_SECRET 为空：/captcha/app/* 将返回 404 CAPTCHA_DISABLED，APP 登录/评论将无法通过人机验证（APP 不会本地求解，将提示「人机验证暂不可用」）")
+		return
+	}
+	if len(secret) < 32 {
+		log.Fatalf("[FATAL] ALTCHA_APP_SECRET 过短（需 32+ 字符，建议 openssl rand -hex 32）")
+	}
+	if secret == strings.TrimSpace(cfg.AltchaHMACKey) {
+		log.Fatalf("[FATAL] ALTCHA_APP_SECRET 不能与 ALTCHA_HMAC_KEY 相同（轮换会互相影响）")
+	}
+	if strings.TrimSpace(cfg.AltchaHMACKey) == "" {
+		// 主密钥缺失时 AppEnabled() 恒为 false：即使配了 APP 密钥，两个端点仍 404。
+		log.Println("[WARN] ALTCHA_ENABLED=true 但 ALTCHA_HMAC_KEY 为空：challenge/grant 无法签发，/captcha/* 与 /captcha/app/* 均不可用（fail-closed）")
+		return
+	}
+	log.Println("[ALTCHA] APP 零 PoW 通道已开启（/captcha/app/*）")
 }
 
 // checkAvatarDir 检查旧头像目录是否可读；缺失只告警，不影响新头像（媒体服务）启动。
