@@ -6,7 +6,7 @@ import { useNav } from "../lib/nav";
 import { AppBar, Avatar, Cell, Confirm, IconButton, Screen } from "../components/mobile";
 import { Icon, type IconName } from "../components/icons";
 
-const THEME_LABEL: Record<string, string> = { auto: "跟随系统", day: "日间", night: "夜间", national: "国庆红金" };
+const THEME_LABEL: Record<string, string> = { auto: "跟随系统", day: "日间", night: "夜间", sakura: "樱花粉", national: "国庆红金" };
 
 /** 与服务端签到日界一致的上海日期（YYYY-MM-DD） */
 function shanghaiDate(): string {

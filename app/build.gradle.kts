@@ -78,9 +78,9 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            // 开发期默认指向本地 ouo（模拟器 10.0.2.2）；真机可用 -PapiBaseUrl 覆盖。
+            // 默认指向线上后端；本地联调可用 -PapiBaseUrl=http://10.0.2.2:8090 覆盖。
             val debugApi = (findProperty("apiBaseUrl") as String?)?.trim().orEmpty()
-                .ifBlank { "http://10.0.2.2:8090" }
+                .ifBlank { "https://www.yjlt.top" }
             buildConfigField("String", "API_BASE_URL", "\"$debugApi\"")
         }
         release {

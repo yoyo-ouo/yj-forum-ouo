@@ -4,8 +4,8 @@
    ============================================================ */
 
 :root {
-  --m-safe-top: env(safe-area-inset-top, 0px);
-  --m-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --m-safe-top: var(--safe-top);
+  --m-safe-bottom: var(--safe-bottom);
   --m-appbar-h: 50px;
   --m-tabbar-h: 56px;
   --m-radius-xs: 8px;
@@ -102,7 +102,7 @@ img { max-width: 100%; }
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
   scrollbar-width: none;
-  padding-bottom: 12px;
+  padding-bottom: calc(12px + var(--safe-bottom));
 }
 .m-body::-webkit-scrollbar { display: none; }
 .m-body.m-flush { padding-bottom: 0; }

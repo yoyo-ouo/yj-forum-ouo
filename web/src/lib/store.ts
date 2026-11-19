@@ -37,15 +37,17 @@ interface AppState {
 
 function resolveNight(theme: Theme): boolean {
   if (theme === "night") return true;
-  if (theme === "day") return false;
+  if (theme === "day" || theme === "sakura") return false;
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
 export function applyTheme(theme: Theme) {
   const night = resolveNight(theme);
   document.documentElement.classList.toggle("night-mode", night);
+  document.documentElement.classList.toggle("theme-sakura", theme === "sakura");
   document.documentElement.dataset.theme = night ? "night" : "day";
-  void setStatusBar(night ? "#325A64" : "#D8E6E4", !night);
+  const barColor = night ? "#325A64" : theme === "sakura" ? "#F6D6E0" : "#D8E6E4";
+  void setStatusBar(barColor, !night);
 }
 
 export const useApp = create<AppState>((set, get) => ({

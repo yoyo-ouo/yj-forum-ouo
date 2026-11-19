@@ -20,6 +20,14 @@ object BridgeStore {
     val altchaSecret: String
         get() = BuildConfig.ALTCHA_APP_SECRET.trim()
 
+    /** 顶部安全区高度（dp），由 MainActivity 监听 WindowInsets 测量后写入 */
+    @Volatile
+    var safeTopDp: Float = 0f
+
+    /** 底部安全区高度（dp），由 MainActivity 监听 WindowInsets 测量后写入 */
+    @Volatile
+    var safeBottomDp: Float = 0f
+
     fun init(context: Context) {
         appContext = context.applicationContext
         val masterKey = MasterKey.Builder(appContext)

@@ -119,7 +119,9 @@ class ForumApiPlugin : Plugin() {
                 .put("packageName", context.packageName)
                 .put("apiBaseUrl", BridgeStore.apiBaseUrl)
                 .put("apiBase", client.apiBaseUrl())
-                .put("altchaConfigured", BridgeStore.altchaSecret.isNotBlank()),
+                .put("altchaConfigured", BridgeStore.altchaSecret.isNotBlank())
+                .put("safeTop", BridgeStore.safeTopDp)
+                .put("safeBottom", BridgeStore.safeBottomDp),
         )
     }
 

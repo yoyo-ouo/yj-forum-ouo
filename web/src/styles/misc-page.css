@@ -65,7 +65,7 @@ div.guide-page .guide-content {
 /* ---------- 反馈中心 ---------- */
 /* Web 里工具条粘在 70px 的站点头部下方；APP 顶栏是 52px + 安全区，对齐后不会露出缝隙 */
 div.feedback-page .feedback-toolbar {
-    top: calc(52px + env(safe-area-inset-top));
+    top: calc(52px + var(--safe-top));
 }
 
 /* 详情在 Web 是弹窗（限高 70vh + 内部滚动）；APP 是独立页面，改成整页滚动，

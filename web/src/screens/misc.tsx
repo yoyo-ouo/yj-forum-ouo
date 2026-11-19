@@ -851,6 +851,8 @@ interface YearSide {
   year: number;
   month: number;
   day: number;
+  /** 勾选「第 1 年显示为元年」且为本纪元第 1 年（不含无限前/公元前）时为 true */
+  yuanNian?: boolean;
 }
 
 interface YearConversionResult {
@@ -1006,8 +1008,20 @@ function convertYear(
 
   const source: YearSide =
     input.calendar === "infinite"
-      ? { era: input.era === "before" ? "无限前" : "无限", year, month, day }
-      : { era: input.era === "bce" ? "公元前" : "公元", year, month, day };
+      ? {
+          era: input.era === "before" ? "无限前" : "无限",
+          year,
+          month,
+          day,
+          yuanNian: useYuanNian && year === 1 && input.era !== "before",
+        }
+      : {
+          era: input.era === "bce" ? "公元前" : "公元",
+          year,
+          month,
+          day,
+          yuanNian: useYuanNian && year === 1 && input.era !== "bce",
+        };
   const target: YearSide =
     input.calendar === "infinite"
       ? {
@@ -1015,8 +1029,15 @@ function convertYear(
           year: astronomical >= 1 ? astronomical : 1 - astronomical,
           month,
           day,
+          yuanNian: useYuanNian && astronomical >= 1 && astronomical === 1,
         }
-      : { era: infinite.before ? "无限前" : "无限", year: infinite.year, month, day };
+      : {
+          era: infinite.before ? "无限前" : "无限",
+          year: infinite.year,
+          month,
+          day,
+          yuanNian: useYuanNian && !infinite.before && infinite.year === 1,
+        };
 
   return {
     type: "success",
@@ -1024,6 +1045,17 @@ function convertYear(
     source,
     target,
   };
+}
+
+/** 单侧年号：元年时大字显示「元年」，不再补「年」单位 */
+function YearSideView({ side }: { side: YearSide }) {
+  return (
+    <div className="msc-yc-side">
+      <span className="msc-yc-era">{side.era}</span>
+      <b className="msc-yc-num">{side.yuanNian ? "元年" : side.year}</b>
+      {side.yuanNian ? null : <span className="msc-yc-unit">年</span>}
+    </div>
+  );
 }
 
 /** 结果卡片：成功显示大数字双向对照，失败/提示显示原因 */
@@ -1046,17 +1078,9 @@ function YearResultCard({ result }: { result: YearConversionResult | null }) {
   return (
     <div className="msc-yc-result is-success" role="status">
       <div className="msc-yc-pair">
-        <div className="msc-yc-side">
-          <span className="msc-yc-era">{result.source.era}</span>
-          <b className="msc-yc-num">{result.source.year}</b>
-          <span className="msc-yc-unit">年</span>
-        </div>
+        <YearSideView side={result.source} />
         <Icon name="forward" size={20} className="msc-yc-arrow" />
-        <div className="msc-yc-side">
-          <span className="msc-yc-era">{result.target.era}</span>
-          <b className="msc-yc-num">{result.target.year}</b>
-          <span className="msc-yc-unit">年</span>
-        </div>
+        <YearSideView side={result.target} />
       </div>
       <p className="msc-yc-msg">
         {result.source.month} 月 {result.source.day} 日 · 年号换算不改月日

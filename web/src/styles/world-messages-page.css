@@ -68,7 +68,7 @@
 
 /* 底部输入条：Web .world-input-bar + App 的 textarea / 发送按钮 */
 .world-page .world-input-bar {
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  padding-bottom: calc(10px + var(--safe-bottom));
 }
 
 .world-page .world-input-hint button {
@@ -125,7 +125,7 @@
   height: 100%;
   max-width: none;
   margin: 0;
-  padding: calc(8px + env(safe-area-inset-top)) 8px 10px;
+  padding: calc(8px + var(--safe-top)) 8px 10px;
   overflow: hidden;
 }
 
