@@ -141,15 +141,15 @@ JAVA_HOME=/home/yoyo/.jdks/jbr-21.0.11 bash ./gradlew testDebugUnitTest
 ## 版本与发布
 
 - 版本号唯一真相源：`app/build.gradle.kts` 的 `appVersionName`；`versionCode = major*10000 + minor*100 + patch`。
-- 当前：**2.0.0 / versionCode 20000**。
+- 当前：**2.0.1 / versionCode 20001**。
 - 包名 `top.crazying.forum`、签名证书、`Android-V*` tag、APK 命名 `forum-android-<ver>.apk` 均沿用 1.x。
 - CI Secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`、`ALTCHA_APP_SECRET`。
 - 发布流程：改版本 → `assembleRelease` 预演 → 推 `Android` 分支 → 打附注 tag：
 
 ```bash
-git tag -a --cleanup=verbatim Android-V2.0.0 -F notes.txt
+git tag -a --cleanup=verbatim Android-V2.0.1 -F notes.txt
 git push origin Android
-git push origin Android-V2.0.0
+git push origin Android-V2.0.1
 ```
 
 工作流会校验 tag 在 `Android` 分支上、用 `-PexpectedVersion` 校验版本、apksigner 校验证书 SHA-256（`bab9ac49…aa4668`），并生成 Release。
@@ -182,6 +182,7 @@ git push origin Android-V2.0.0
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| 2.0.1 | 待发布 | 全面屏安全区适配（刘海 / 手势条）、樱花粉主题、debug 默认连线上后端 |
 | [2.0.0](https://github.com/yoyo-ouo/yj-forum-ouo/releases/tag/Android-V2.0.0) | 2026-11-08 | 彻底重构为 Capacitor + Kotlin 原生桥；底部四栏、零 PoW、版本更新二级页、个人中心完整帖子 |
 | 1.3.0 | 未单独发布 | 消息中心、通知、左侧抽屉、线性图标（内容并入 2.0.0） |
 | [1.2.0](https://github.com/yoyo-ouo/yj-forum-ouo/releases/tag/Android-V1.2.0) | 2026-10-31 | 迁移 `/ov2/api`、ALTCHA 零 PoW、自建富文本 |

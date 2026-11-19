@@ -196,7 +196,7 @@ export function MeScreen() {
         {/* 关于 */}
         <div className="m-section-title">关于</div>
         <div className="m-list">
-          <Cell icon="download" label="版本更新" value={appInfo?.versionName || "2.0.0"} onClick={() => push("version")} />
+          <Cell icon="download" label="版本更新" value={appInfo?.versionName || "2.0.1"} onClick={() => push("version")} />
           <Cell icon="list" label="更新日志" onClick={() => push("changelog")} />
           <Cell icon="shield" label="隐私说明" onClick={() => push("settings", { privacy: 1 })} />
           <Cell icon="compass" label="使用指南" onClick={() => push("guides")} />

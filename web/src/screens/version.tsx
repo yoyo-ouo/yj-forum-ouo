@@ -133,8 +133,8 @@ export function VersionScreen() {
           <div className="ver-hero-logo" aria-hidden="true">妖</div>
           <div className="ver-hero-main">
             <div className="ver-hero-name">妖精论坛</div>
-            <div className="ver-hero-version">v{appInfo?.versionName || "2.0.0"}</div>
-            <div className="ver-hero-build">Build {appInfo?.versionCode ?? 20000} · {channel}</div>
+            <div className="ver-hero-version">v{appInfo?.versionName || "2.0.1"}</div>
+            <div className="ver-hero-build">Build {appInfo?.versionCode ?? 20001} · {channel}</div>
           </div>
           <button
             type="button"

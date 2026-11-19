@@ -177,8 +177,8 @@ export async function requestApi<T = any>(o: {
 export async function getAppInfo(): Promise<AppInfo> {
   if (!isNative) {
     return {
-      versionName: "2.0.0",
-      versionCode: 20000,
+      versionName: "2.0.1",
+      versionCode: 20001,
       packageName: "top.crazying.forum.debug",
       apiBase: WEB_API_BASE,
       apiBaseUrl: WEB_API_BASE,

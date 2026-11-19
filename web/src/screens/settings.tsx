@@ -166,7 +166,7 @@ export function SettingsScreen() {
           <Cell
             icon="download"
             label="版本号"
-            value={`${appInfo?.versionName || "2.0.0"}（${appInfo?.versionCode ?? 20000}）`}
+            value={`${appInfo?.versionName || "2.0.1"}（${appInfo?.versionCode ?? 20001}）`}
             onClick={() => push("version")}
           />
           <Cell icon="list" label="更新日志" onClick={() => push("changelog")} />
