@@ -1,8 +1,11 @@
 /* ===== 主样式（源自 legacy main.css，保持视觉 1:1）===== */
 :root{
-    /* 安全区：原生壳启动时用 JS 覆盖为 --safe-top/--safe-bottom；浏览器环境回落到 env() */
+    /* 安全区：原生壳启动时用 JS 覆盖为 --safe-* ；浏览器环境回落到 env()。
+       横向用于横屏时避让刘海/挖孔（配合 windowLayoutInDisplayCutoutMode=shortEdges）。 */
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
 
     --color-text-primary: #1A2423;
     --color-text-secondary: #2E4659;
@@ -55,6 +58,17 @@
 
     --color-primary: #557C79;
     --color-secondary: #457875;
+
+    /* 发帖 FAB：底色与前景成对定义（夜间是浅青底深字，需与日间区分） */
+    --m-fab-bg: linear-gradient(145deg, #5F9490, #4A807D);
+    --m-fab-fg: #F6FCFB;
+
+    /* 危险色：日间深红，夜间需提亮否则对比度仅 1.43:1 */
+    --c-danger: #c4383f;
+
+    /* 代码块：底色与字色成对（.m-rich pre 会覆盖 rich-content.css，只改背景会导致浅底浅字） */
+    --m-code-bg: rgba(24, 36, 34, .92);
+    --m-code-fg: #d6e6e4;
 }
 
 .night-mode {
@@ -98,6 +112,17 @@
     --color-shadow-card: rgba(0, 0, 0, 0.4);
     --color-shadow-primary: rgba(132, 168, 185, 0.25);
     --color-shadow-secondary: rgba(184, 210, 216, 0.25);
+
+    /* 夜间 FAB 为浅青底深字（与日间深底浅字相反），保持原有观感 */
+    --m-fab-bg: linear-gradient(145deg, #A8D3CE, #8CBDBA);
+    --m-fab-fg: #16302E;
+
+    /* 夜间危险色提亮，原 #c4383f 在深底上对比度约 1.43:1，不可读 */
+    --c-danger: #ff8f8a;
+
+    /* 夜间代码块：保持深底浅字，略提亮底色与字色 */
+    --m-code-bg: rgba(40, 56, 54, .95);
+    --m-code-fg: #e2efed;
 }
 
 /* ===== 国庆红金主题：日间（.theme-national，由根布局服务端判定 + 客户端校正注入）===== */
@@ -263,5 +288,14 @@
 
     --color-primary: #D9739A;
     --color-secondary: #E58AA6;
+
+    /* 樱花粉：FAB 用主/辅粉渐变，配深字保证对比度 */
+    --m-fab-bg: linear-gradient(145deg, #D9739A, #E58AA6);
+    --m-fab-fg: #FFF6F9;
+    --c-danger: #C75E82;
+
+    /* 樱花粉代码块：浅粉底配深字，与浅色主题一致 */
+    --m-code-bg: rgba(255, 251, 253, .96);
+    --m-code-fg: #6B4653;
 }
 

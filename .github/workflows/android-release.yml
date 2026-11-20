@@ -17,6 +17,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # 发布证书指纹（SHA-256）。CI 只能证明「打出的包用的是这个证书」，
+  # 无法证明「这个证书就是 1.x 用户已安装的那个」，因此该常量需人工核验。
+  # 已用仓库内旧实包核验（2026-11-21）：
+  #   apksigner verify --print-certs release/forum-android-1.0.18.apk  → 本值
+  #   apksigner verify --print-certs release/forum-android-1.0.17.apk  → 本值
+  # 若将来更换密钥库，必须同步更新此值，否则 CI 会「成功地」产出无法覆盖安装的包。
   CERT_SHA256: bab9ac497b3b5b4f8fe3e36fbb9fec111c08831dc6e9100889a439f019aa4668
 
 jobs:
