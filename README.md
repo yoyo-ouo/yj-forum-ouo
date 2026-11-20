@@ -182,7 +182,7 @@ git push origin Android-V2.0.1
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
-| 2.0.1 | 待发布 | 全面屏安全区适配（刘海 / 手势条）、樱花粉主题、debug 默认连线上后端 |
+| 2.0.1 | 待发布 | 全面屏安全区适配（刘海 / 手势条）、樱花粉主题 |
 | [2.0.0](https://github.com/yoyo-ouo/yj-forum-ouo/releases/tag/Android-V2.0.0) | 2026-11-08 | 彻底重构为 Capacitor + Kotlin 原生桥；底部四栏、零 PoW、版本更新二级页、个人中心完整帖子 |
 | 1.3.0 | 未单独发布 | 消息中心、通知、左侧抽屉、线性图标（内容并入 2.0.0） |
 | [1.2.0](https://github.com/yoyo-ouo/yj-forum-ouo/releases/tag/Android-V1.2.0) | 2026-10-31 | 迁移 `/ov2/api`、ALTCHA 零 PoW、自建富文本 |

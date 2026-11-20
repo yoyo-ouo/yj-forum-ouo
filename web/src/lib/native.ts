@@ -1,7 +1,7 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 import type { ApiResponse, AppInfo, CaptchaStatus, StartupState, UpdateManifest } from "./types";
 
-const WEB_API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") || "https://www.yjlt.top";
+const WEB_API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") || "http://127.0.0.1:8090";
 /** 原生壳未下发 apiBase 时的历史默认站（旧安装包） */
 const NATIVE_FALLBACK_API_BASE = "https://www.yjlt.top";
 
