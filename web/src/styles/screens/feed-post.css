@@ -314,6 +314,14 @@
   font-weight: 700;
   line-height: 1;
 }
+
+.feed-guild-swatch img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: inherit;
+}
 .feed-guild-info {
   flex: 1 1 auto;
   min-width: 0;

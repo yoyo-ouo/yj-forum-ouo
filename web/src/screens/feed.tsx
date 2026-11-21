@@ -5,13 +5,21 @@ import { useNav } from "../lib/nav";
 import { useApp } from "../lib/store";
 import { AppBar, Avatar, Empty, IconButton, Loader, Screen, Segmented, Sheet, Skeletons } from "../components/mobile";
 import { Icon } from "../components/icons";
-import { CATEGORY_LABELS, categoryColor, contrastText, stripHtml, timeAgo } from "../lib/format";
+import { CATEGORY_LABELS, avatarUrl, categoryColor, contrastText, stripHtml, timeAgo } from "../lib/format";
 import type { Post } from "../lib/types";
 
 type Space = "all" | "public" | "guild";
 
 /** 公告关闭状态（按公告版本 + 文案记录，换了公告会重新出现） */
 const NOTICE_KEY = "yj_feed_notice_dismissed";
+
+const MEDIA_ID_RE = /^MD[A-Za-z0-9]{8,62}$/;
+
+/** 会馆馆徽（新媒体直出；旧 GridFS / 无 logo 回退首字色块） */
+function guildLogoUrl(guild: any): string {
+  const id = String(guild?.logo_file_id || "");
+  return guild?.has_logo && MEDIA_ID_RE.test(id) ? avatarUrl(`/ov2/api/media/${encodeURIComponent(id)}`) : "";
+}
 
 /** 会馆身份色：明暗主题下都能读的淡色徽标 */
 function guildTint(color?: string | null): React.CSSProperties {
@@ -382,6 +390,7 @@ export function FeedScreen() {
           <div className="feed-guild-list">
             {(guilds.data?.guilds || []).map((guild: any) => {
               const tone = guild.theme_color && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(guild.theme_color) ? guild.theme_color : "";
+              const logo = guildLogoUrl(guild);
               const selected = guildId === Number(guild.id) && space === "guild";
               return (
                 <button
@@ -391,7 +400,7 @@ export function FeedScreen() {
                   aria-pressed={selected}
                 >
                   <span className="feed-guild-swatch" style={tone ? { background: tone, color: contrastText(tone) } : undefined}>
-                    {String(guild.name || "会").slice(0, 1)}
+                    {logo ? <img src={logo} alt="" loading="lazy" /> : String(guild.name || "会").slice(0, 1)}
                   </span>
                   <span className="feed-guild-info">
                     <span className="feed-guild-name">{guild.name}</span>

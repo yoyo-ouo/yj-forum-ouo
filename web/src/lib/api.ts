@@ -265,6 +265,20 @@ export const api = {
   guildIntro(slug: string) {
     return request<any>("GET", `/guilds/${slug}/intro`);
   },
+  /** 当前用户的全局待审入馆申请（匿名或没有待审时 data 为 null） */
+  myJoinRequest() {
+    return request<{ data: any }>("GET", "/join-request");
+  },
+  /** 提交入馆申请（reason 可选，≤500 字；全局同时仅允许一条待审） */
+  guildJoin(slug: string, reason = "") {
+    return request<any>("POST", `/guilds/${encodeURIComponent(slug)}/join`, undefined, { reason });
+  },
+  guildJoinCancel(slug: string) {
+    return request<any>("POST", `/guilds/${encodeURIComponent(slug)}/join/cancel`);
+  },
+  guildLeave(slug: string) {
+    return request<any>("POST", `/guilds/${encodeURIComponent(slug)}/leave`);
+  },
   article(id: number | string) {
     return request<any>("GET", `/articles/${id}`);
   },

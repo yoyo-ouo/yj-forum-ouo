@@ -91,13 +91,31 @@
     gap: 3px;
 }
 
+.gd-card-name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
 .gd-card-name {
+    min-width: 0;
     font-size: 16px;
     font-weight: 700;
     line-height: 1.3;
     color: var(--color-text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 列表：待审徽标（主题色低透明度底，不用白边高亮） */
+.gd-card-badge {
+    flex: none;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1.7;
     white-space: nowrap;
 }
 
@@ -479,6 +497,40 @@
     line-height: 1.6;
     color: var(--color-text-tertiary);
     overflow-wrap: anywhere;
+}
+
+/* ---------- 入馆申请理由 ---------- */
+.gd-apply-field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 10px;
+}
+
+.gd-apply-box {
+    position: relative;
+}
+
+.gd-apply-textarea {
+    padding-bottom: 30px;
+}
+
+.gd-apply-count {
+    position: absolute;
+    right: 12px;
+    bottom: 8px;
+    color: var(--color-text-tertiary);
+    font-size: 11px;
+    line-height: 1.4;
+    pointer-events: none;
+}
+
+.gd-apply-count.is-warn {
+    color: #b9770e;
+}
+
+.night-mode .gd-apply-count.is-warn {
+    color: #ff8f8a;
 }
 
 /* ---------- 文章详情 ---------- */

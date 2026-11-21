@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "../lib/api";
-import { requestApi, shareContent } from "../lib/native";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, ApiError } from "../lib/api";
+import { shareContent } from "../lib/native";
 import { useNav } from "../lib/nav";
 import { useApp } from "../lib/store";
 import {
@@ -105,18 +105,15 @@ function guildInitials(name?: string | null): string {
   return chars.slice(0, 2).join("") || "馆";
 }
 
-/** 加入 / 退出 / 撤回：沿用服务端会馆接口（api.ts 未封装，这里走原生 requestApi） */
-async function postGuildAction(path: string): Promise<any> {
-  const res = await requestApi<any>({
-    method: "POST",
-    path,
-    body: path.endsWith("/join") ? { reason: "" } : undefined,
-  });
-  const data: any = res.data;
-  if (!res.ok || data?.success === false) {
-    throw new Error(data?.message || data?.error || "操作失败");
-  }
-  return data;
+/** 申请理由上限（与后端 rune 计数口径一致：按码点而非 UTF-16 code unit） */
+const APPLY_REASON_MAX = 500;
+
+function reasonLength(value: string): number {
+  return Array.from(value).length;
+}
+
+function clampReason(value: string): string {
+  return Array.from(value).slice(0, APPLY_REASON_MAX).join("");
 }
 
 /* ======================= 会馆 Logo / 徽标 ======================= */
@@ -144,13 +141,21 @@ function GuildLogo({ guild, size = 44 }: { guild: any; size?: number }) {
 
 /* ======================= 会馆列表卡片 ======================= */
 
-function GuildCard({ guild, onClick }: { guild: any; onClick: () => void }) {
+function GuildCard({ guild, pending, onClick }: { guild: any; pending?: boolean; onClick: () => void }) {
   const leaderName = guild?.leader?.name ? String(guild.leader.name) : "";
+  const theme = themeColor(guild?.theme_color);
   return (
     <button type="button" className="gd-card" onClick={onClick}>
       <GuildLogo guild={guild} size={44} />
       <span className="gd-card-main">
-        <span className="gd-card-name">{guild?.name || "未命名会馆"}</span>
+        <span className="gd-card-name-row">
+          <span className="gd-card-name">{guild?.name || "未命名会馆"}</span>
+          {pending ? (
+            <span className="gd-card-badge" style={{ background: themeTint(theme, "24"), color: themeInk(theme) }}>
+              审核中
+            </span>
+          ) : null}
+        </span>
         <span className="gd-card-meta">
           {leaderName ? `馆长 ${leaderName}` : "馆长虚位以待"} · {guild?.member_count ?? 0} 位成员
         </span>
@@ -167,6 +172,8 @@ export function GuildsScreen() {
   const { push } = useNav();
   const showToast = useApp((s) => s.showToast);
   const guildsQuery = useQuery({ queryKey: ["guilds"], queryFn: () => api.guilds(), staleTime: 60_000 });
+  // 全局待审申请：只在对应会馆卡片加「审核中」徽标（匿名时 data 为 null）
+  const pendingQuery = useQuery({ queryKey: ["guild-pending-join"], queryFn: () => api.myJoinRequest(), staleTime: 30_000 });
 
   useEffect(() => {
     if (guildsQuery.error) showToast(errorText(guildsQuery.error, "会馆列表加载失败"), "error");
@@ -177,6 +184,8 @@ export function GuildsScreen() {
     return [...list].sort((a, b) => Number(a?.id ?? 0) - Number(b?.id ?? 0));
   }, [guildsQuery.data]);
 
+  const pendingGuildId = Number(pendingQuery.data?.data?.guild?.id || 0);
+
   const enter = (guild: any) => {
     const slug = String(guild?.slug || "");
     if (slug) push("guild", { slug });
@@ -186,7 +195,7 @@ export function GuildsScreen() {
     <Screen
       appbar={<AppBar back title="会馆" />}
       onRefresh={async () => {
-        await guildsQuery.refetch();
+        await Promise.all([guildsQuery.refetch(), pendingQuery.refetch()]);
       }}
     >
       <div className="gd-head">
@@ -218,7 +227,12 @@ export function GuildsScreen() {
       {guilds.length > 0 ? (
         <div className="gd-list">
           {guilds.map((guild, index) => (
-            <GuildCard key={guildKey(guild, index)} guild={guild} onClick={() => enter(guild)} />
+            <GuildCard
+              key={guildKey(guild, index)}
+              guild={guild}
+              pending={Boolean(pendingGuildId) && pendingGuildId === Number(guild?.id)}
+              onClick={() => enter(guild)}
+            />
           ))}
         </div>
       ) : null}
@@ -570,12 +584,27 @@ export function GuildDetailScreen({ slug }: { slug?: string }) {
   const { push } = useNav();
   const me = useApp((s) => s.user);
   const showToast = useApp((s) => s.showToast);
+  const queryClient = useQueryClient();
   const guildSlug = String(slug || "");
   const [tab, setTab] = useState<GuildTab>("feed");
   const [moreOpen, setMoreOpen] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const [elsewhereOpen, setElsewhereOpen] = useState(false);
+  const [applyOpen, setApplyOpen] = useState(false);
+  // 申请理由草稿：关闭弹层不清空；提交成功或切换会馆时清空
+  const [applyReason, setApplyReason] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // 切换会馆：关闭所有弹层并丢弃上一家会馆的理由草稿
+  useEffect(() => {
+    setMoreOpen(false);
+    setPendingOpen(false);
+    setLeaveOpen(false);
+    setElsewhereOpen(false);
+    setApplyOpen(false);
+    setApplyReason("");
+  }, [guildSlug]);
 
   const guildQuery = useQuery({
     queryKey: ["guild", guildSlug],
@@ -599,21 +628,74 @@ export function GuildDetailScreen({ slug }: { slug?: string }) {
   const latestRequest = myState?.latest_request || null;
   const rejected = latestRequest?.status === 2 || latestRequest?.status === 3;
   const otherGuild = myState?.current_guild && myState.current_guild.id !== guild?.id ? myState.current_guild : null;
+  // 全局仅允许一条待审：申请在其他会馆时，本馆不可再申请（服务端是唯一真相源）
+  const pendingElsewhere = myState?.pending_elsewhere || null;
+  const pendingElsewhereName = String(pendingElsewhere?.guild?.name || "其他会馆");
 
-  const act = async (kind: "join" | "leave" | "cancel") => {
-    const path = `/guilds/${encodeURIComponent(guildSlug)}/${kind === "join" ? "join" : kind === "leave" ? "leave" : "join/cancel"}`;
+  const refreshAll = async () => {
+    await guildQuery.refetch();
+    await queryClient.invalidateQueries({ queryKey: ["guild-pending-join"] });
+  };
+
+  const applyJoin = async () => {
     setBusy(true);
     try {
-      const data = await postGuildAction(path);
-      showToast(data?.message || (kind === "join" ? "申请已提交" : kind === "leave" ? "已退出会馆" : "申请已撤回"));
+      const data = await api.guildJoin(guildSlug, applyReason.trim());
+      showToast(data?.message || "申请已提交，等待馆长审核");
+      setApplyOpen(false);
+      setApplyReason("");
+      await refreshAll();
+    } catch (error) {
+      if (error instanceof ApiError && (error.code === "GUILD_JOIN_PENDING_THIS" || error.code === "GUILD_JOIN_PENDING_OTHER")) {
+        // 已有待审（本馆或他馆）：关闭弹层并按服务端最新状态刷新，避免陈旧 UI
+        setApplyOpen(false);
+        showToast(error.message || "你已提交过申请", "info");
+        await refreshAll();
+      } else {
+        // 其他错误：保留弹层与已填内容，方便修改后重试
+        showToast(errorText(error, "申请失败"), "error");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const leaveGuild = async () => {
+    setBusy(true);
+    try {
+      const data = await api.guildLeave(guildSlug);
+      showToast(data?.message || "已退出会馆");
       setLeaveOpen(false);
+      await refreshAll();
+    } catch (error) {
+      // 馆长需先卸任等由后端返回 message
+      showToast(errorText(error, "退出失败"), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const withdrawJoin = async (targetSlug: string) => {
+    if (!targetSlug) return;
+    setBusy(true);
+    try {
+      const data = await api.guildJoinCancel(targetSlug);
+      showToast(data?.message || "申请已撤回");
       setPendingOpen(false);
-      await guildQuery.refetch();
+      setElsewhereOpen(false);
+      await refreshAll();
     } catch (error) {
       showToast(errorText(error, "操作失败"), "error");
     } finally {
       setBusy(false);
     }
+  };
+
+  // 重新申请：已撤回复填上次理由；未通过不预填（后端会把拒绝理由写进 reason）。
+  // 首次申请保留当前草稿（关闭弹层不清空）。
+  const openApply = (prefill: boolean) => {
+    if (prefill) setApplyReason(latestRequest?.status === 3 ? String(latestRequest.reason || "") : "");
+    setApplyOpen(true);
   };
 
   const shareGuild = async () => {
@@ -669,16 +751,24 @@ export function GuildDetailScreen({ slug }: { slug?: string }) {
         : "退出会馆"
       : isPending
         ? "申请审核中"
-        : rejected
-          ? "重新申请"
-          : "申请加入";
-  const joinPrimary = !me || (!isMember && !isPending);
-  const joinDisabled = busy || isPending || isLeader || Boolean(otherGuild);
+        : pendingElsewhere
+          ? `审核中：「${pendingElsewhereName}」`
+          : otherGuild
+            ? "已加入其他会馆"
+            : rejected
+              ? "重新申请"
+              : "申请加入";
+  const joinPrimary = !me || (!isMember && !isPending && !pendingElsewhere && !otherGuild);
+  const joinDisabled = busy || isPending || isLeader || Boolean(otherGuild) || Boolean(pendingElsewhere);
 
   const onJoinClick = () => {
     if (!me) {
       showToast("请先登录后再申请加入", "info");
       push("auth");
+      return;
+    }
+    if (pendingElsewhere) {
+      setElsewhereOpen(true);
       return;
     }
     if (otherGuild) {
@@ -697,7 +787,7 @@ export function GuildDetailScreen({ slug }: { slug?: string }) {
       setPendingOpen(true);
       return;
     }
-    void act("join");
+    openApply(rejected);
   };
 
   return (
@@ -736,6 +826,14 @@ export function GuildDetailScreen({ slug }: { slug?: string }) {
             申请审核中，查看详情与撤回
           </button>
         ) : null}
+        {pendingElsewhere ? (
+          <button type="button" className="gd-link gd-link--center" onClick={() => setElsewhereOpen(true)}>
+            正在申请「{pendingElsewhereName}」，查看详情与撤回
+          </button>
+        ) : null}
+        {pendingElsewhere ? (
+          <p className="gd-join-note">需等待对方会馆审核或先撤回申请，才能申请其他会馆</p>
+        ) : null}
         {otherGuild ? <p className="gd-join-note">你已加入「{otherGuild.name}」，退出后才能加入本会馆</p> : null}
         {isMember && !isLeader ? <p className="gd-join-note">你是本会馆成员</p> : null}
       </div>
@@ -766,9 +864,11 @@ export function GuildDetailScreen({ slug }: { slug?: string }) {
       <Sheet
         open={pendingOpen}
         title="入馆申请"
-        onClose={() => setPendingOpen(false)}
+        onClose={() => {
+          if (!busy) setPendingOpen(false);
+        }}
         footer={
-          <button type="button" className="m-btn m-btn--ghost" disabled={busy} onClick={() => void act("cancel")}>
+          <button type="button" className="m-btn m-btn--ghost" disabled={busy} onClick={() => void withdrawJoin(guildSlug)}>
             撤回申请
           </button>
         }
@@ -778,11 +878,88 @@ export function GuildDetailScreen({ slug }: { slug?: string }) {
         {latestRequest?.created_at ? <p className="gd-sheet-sub">提交时间：{formatDate(latestRequest.created_at)}</p> : null}
       </Sheet>
 
+      {/* 他馆待审：提交前就被全局规则拦住时，这里可查看并撤回 */}
+      <Sheet
+        open={elsewhereOpen}
+        title="入馆申请"
+        onClose={() => {
+          if (!busy) setElsewhereOpen(false);
+        }}
+        footer={
+          <button
+            type="button"
+            className="m-btn m-btn--ghost"
+            disabled={busy}
+            onClick={() => void withdrawJoin(String(pendingElsewhere?.guild?.slug || ""))}
+          >
+            撤回申请
+          </button>
+        }
+      >
+        <p className="gd-sheet-text">你正在申请「{pendingElsewhereName}」，需等待对方会馆审核或先撤回。</p>
+        {pendingElsewhere?.request?.reason ? (
+          <p className="gd-sheet-sub">申请理由：{pendingElsewhere.request.reason}</p>
+        ) : null}
+        {pendingElsewhere?.request?.created_at ? (
+          <p className="gd-sheet-sub">提交时间：{formatDate(pendingElsewhere.request.created_at)}</p>
+        ) : null}
+      </Sheet>
+
+      {/* 申请理由：可选，≤500 字（按码点计数） */}
+      <Sheet
+        open={applyOpen}
+        title={`申请加入「${guildName}」`}
+        onClose={() => {
+          if (!busy) setApplyOpen(false);
+        }}
+        footer={
+          <>
+            <button type="button" className="m-btn m-btn--ghost" disabled={busy} onClick={() => setApplyOpen(false)}>
+              取消
+            </button>
+            <button type="button" className="m-btn m-btn--primary" disabled={busy} onClick={() => void applyJoin()}>
+              {busy ? "提交中…" : "提交申请"}
+            </button>
+          </>
+        }
+      >
+        <p className="gd-sheet-sub">理由会展示给馆长，建议简单说明你想加入的原因（可选）。</p>
+        <p className="gd-sheet-sub">同一时间只能申请一个会馆，提交后需等待审核或撤回。</p>
+        <div className="gd-apply-field">
+          <label className="m-label" htmlFor="gd-apply-reason">
+            申请理由
+          </label>
+          <div className="gd-apply-box">
+            <textarea
+              id="gd-apply-reason"
+              className="m-textarea gd-apply-textarea"
+              rows={5}
+              value={applyReason}
+              disabled={busy}
+              placeholder="比如：喜欢贵馆的创作氛围 / 希望参与 XX 企划…"
+              onChange={(event) => setApplyReason(clampReason(event.target.value))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                  event.preventDefault();
+                  if (!busy) void applyJoin();
+                }
+              }}
+            />
+            <span
+              className={`gd-apply-count${reasonLength(applyReason) >= APPLY_REASON_MAX - 50 ? " is-warn" : ""}`}
+              aria-live="polite"
+            >
+              {reasonLength(applyReason)}/{APPLY_REASON_MAX}
+            </span>
+          </div>
+        </div>
+      </Sheet>
+
       <Confirm
         open={leaveOpen}
         title="退出会馆"
         confirmText="退出"
-        onConfirm={() => void act("leave")}
+        onConfirm={() => void leaveGuild()}
         onCancel={() => setLeaveOpen(false)}
       >
         退出后将失去会馆成员身份，确定要退出「{guildName}」吗？
