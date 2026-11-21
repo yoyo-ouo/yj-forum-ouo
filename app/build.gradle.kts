@@ -11,7 +11,7 @@ plugins {
 
 // ── 版本号唯一真相源 ──
 // 改版本只改 appVersionName 这一行：versionCode 与 BuildConfig.APP_VERSION 均由此派生。
-val appVersionName = "2.0.1"
+val appVersionName = "2.1.0"
 val appVersionBase = appVersionName.substringBefore('-').substringBefore('+')
 val parts = appVersionBase.split(".").map { it.toIntOrNull() ?: error("versionName 非法：$appVersionName") }
 require(parts.size == 3) { "versionName 必须是 major.minor.patch[-suffix]：$appVersionName" }
