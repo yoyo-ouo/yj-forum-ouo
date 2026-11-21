@@ -7,7 +7,7 @@ import Link from "next/link";
 import FloatingWindow from "@/components/ui/FloatingWindow";
 import { useToast } from "@/components/Toast";
 import { ApiException } from "@/lib/api";
-import { characterApi, type CharacterSheet } from "@/lib/api/character";
+import { characterApi, characterSheetForDisplay, type CharacterSheet } from "@/lib/api/character";
 import CharacterSheetCard from "./CharacterSheetCard";
 
 export interface CharacterSheetWindowProps {
@@ -27,7 +27,7 @@ export default function CharacterSheetWindow({ sheetId, onClose, onLikeChange }:
     characterApi
       .detail(sheetId)
       .then((r) => {
-        if (alive) setSheet(r.item);
+        if (alive) setSheet(characterSheetForDisplay(r.item));
       })
       .catch((e) => {
         if (alive) setError(e instanceof ApiException ? e.message : "加载失败");

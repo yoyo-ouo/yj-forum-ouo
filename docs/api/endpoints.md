@@ -70,6 +70,9 @@
 | GET | `/ov2/api/character-sheets/mine` | character-sheets |
 | GET | `/ov2/api/character-sheets/search` | character-sheets |
 | POST | `/ov2/api/character-sheets` | character-sheets |
+| GET | `/ov2/api/character-sheets/quota` | character-sheets |
+| POST | `/ov2/api/character-sheets/batch/preview` | character-sheets |
+| POST | `/ov2/api/character-sheets/batch` | character-sheets |
 | POST | `/ov2/api/character-sheets/prompt-seen` | character-sheets |
 | GET | `/ov2/api/character-sheets/user/:userId` | character-sheets |
 | GET | `/ov2/api/character-sheets/:id` | character-sheets |

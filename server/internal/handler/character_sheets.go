@@ -4,6 +4,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"regexp"
@@ -193,7 +194,7 @@ func characterErrStatus(err error) (int, string) {
 	case errors.Is(err, database.ErrCharacterSheetSelfLike):
 		return http.StatusBadRequest, "不能给自己的设定点赞"
 	case errors.Is(err, database.ErrCharacterSheetLimit):
-		return http.StatusBadRequest, "角色数量已达上限（20 个）"
+		return http.StatusBadRequest, fmt.Sprintf("角色数量已达上限（%d 个）", database.CharacterMaxPerUser)
 	}
 	return http.StatusInternalServerError, "操作失败"
 }

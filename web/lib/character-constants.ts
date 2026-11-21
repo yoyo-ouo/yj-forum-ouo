@@ -38,7 +38,7 @@ export function genderLabel(value: number): string {
   return "无";
 }
 
-/** 编辑器限制（与后端校验保持一致） */
+/** 编辑器限制（与后端校验保持一致；仅用于展示/输入提示，服务端为准） */
 export const CHARACTER_LIMITS = {
   name: 24,
   short: 32,
@@ -48,4 +48,10 @@ export const CHARACTER_LIMITS = {
   images: 3,
   quotes: 20,
   quote: 120,
+  /** 每用户角色总配额（含草稿/已公开/下架） */
+  maxPerUser: 60,
+  /** 单次批量添加最多角色数 */
+  batchCharacters: 20,
+  /** 批量文本 description 单行上限 */
+  batchDescription: 2000,
 } as const;

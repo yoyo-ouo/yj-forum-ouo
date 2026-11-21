@@ -6,11 +6,13 @@
 // 展开：移动端卡片内联；桌面端开悬浮窗（与世界频道同技术）。
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useToast } from "@/components/Toast";
 import { useStore } from "@/lib/store";
 import { useIsMobile } from "@/lib/use-mobile";
 import { ApiException } from "@/lib/api";
-import { characterApi, type CharacterSheet } from "@/lib/api/character";
+import { characterApi, characterSheetForDisplay, type CharacterSheet } from "@/lib/api/character";
+import { CHARACTER_LIMITS } from "@/lib/character-constants";
 import CharacterOnboardingModal from "./CharacterOnboardingModal";
 import CharacterSheetCard from "./CharacterSheetCard";
 import CharacterSheetSwitcher from "./CharacterSheetSwitcher";
@@ -56,12 +58,18 @@ export default function CharacterSheetSection({ userId, isSelf, hidden = false }
 
   const published = useMemo(() => (sheets || []).filter((s) => s.status === 1), [sheets]);
 
+  // 本人未发布的草稿用草稿内容展示（批量创建的角色名只在 draft 里）
+  const displaySheets = useMemo(
+    () => (sheets || []).map(characterSheetForDisplay),
+    [sheets]
+  );
+
   const active = useMemo(() => {
-    if (!sheets || sheets.length === 0) return null;
-    const found = activeId ? sheets.find((s) => s.id === activeId) : null;
+    if (!displaySheets || displaySheets.length === 0) return null;
+    const found = activeId ? displaySheets.find((s) => s.id === activeId) : null;
     if (found) return found;
-    return published[0] || sheets[0] || null;
-  }, [sheets, activeId, published]);
+    return published[0] || displaySheets[0] || null;
+  }, [displaySheets, activeId, published]);
 
   // 已有设定时无需再问，把引导标记落库（避免下次又弹）
   useEffect(() => {
@@ -129,9 +137,18 @@ export default function CharacterSheetSection({ userId, isSelf, hidden = false }
         </h3>
         {sheets && sheets.length > 0 ? (
           <span className="cs-section-count">
-            {published.length > 0 ? `${published.length} 个角色` : "草稿"}
+            {isSelf
+              ? `已用 ${sheets.length} / ${CHARACTER_LIMITS.maxPerUser} 个角色`
+              : published.length > 0
+                ? `${published.length} 个角色`
+                : "草稿"}
             {isSelf && sheets.some((s) => s.status !== 1) ? " · 含草稿" : ""}
           </span>
+        ) : null}
+        {isSelf ? (
+          <Link className="cs-batch-link" href="/character/batch" title="按文本格式一次添加多个角色">
+            <i className="fa fa-files-o" aria-hidden="true"></i> 批量添加
+          </Link>
         ) : null}
       </div>
 
@@ -143,15 +160,20 @@ export default function CharacterSheetSection({ userId, isSelf, hidden = false }
         <div className="cs-section-empty">
           <p>还没有设定记录。写下第一个角色的名字，他就在这里有了落脚的地方。</p>
           {isSelf ? (
-            <button type="button" className="cs-btn cs-btn-primary" onClick={() => void createAndEdit()} disabled={creating}>
-              <i className="fa fa-plus" aria-hidden="true"></i> 创建设定
-            </button>
+            <div className="cs-section-empty-actions">
+              <button type="button" className="cs-btn cs-btn-primary" onClick={() => void createAndEdit()} disabled={creating}>
+                <i className="fa fa-plus" aria-hidden="true"></i> 创建设定
+              </button>
+              <Link className="cs-btn cs-btn-ghost" href="/character/batch">
+                <i className="fa fa-files-o" aria-hidden="true"></i> 批量添加多个角色
+              </Link>
+            </div>
           ) : null}
         </div>
       ) : (
         <>
           <CharacterSheetSwitcher
-            sheets={sheets}
+            sheets={displaySheets}
             activeId={active?.id ?? null}
             onSelect={handleSelect}
             onCreate={isSelf ? () => void createAndEdit() : undefined}

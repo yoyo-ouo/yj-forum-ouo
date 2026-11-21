@@ -10,7 +10,7 @@ import BackButton from "@/components/ui/BackButton";
 import { useToast } from "@/components/Toast";
 import { useStore } from "@/lib/store";
 import { ApiException } from "@/lib/api";
-import { characterApi, type CharacterSheet } from "@/lib/api/character";
+import { characterApi, characterSheetForDisplay, type CharacterSheet } from "@/lib/api/character";
 
 export default function CharacterPage() {
   const params = useParams<{ id: string }>();
@@ -29,7 +29,7 @@ export default function CharacterPage() {
       .detail(id)
       .then((r) => {
         if (!alive) return;
-        setSheet(r.item);
+        setSheet(characterSheetForDisplay(r.item));
         setError("");
       })
       .catch((e) => {

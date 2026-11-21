@@ -22,8 +22,9 @@ import (
 	"yj-forum/server/internal/sanitize"
 )
 
-// characterMaxPerUser 每个用户最多可创建的角色数（防刷；产品未要求上限，但需要兜底）。
-const characterMaxPerUser = 20
+// CharacterMaxPerUser 每个用户最多可创建的角色数（含草稿与已公开）。
+// 所有创建入口（单个 / 批量）都必须以本常量为唯一上限，并在事务内持用户行锁校验。
+const CharacterMaxPerUser = 60
 
 var (
 	// ErrCharacterSheetNotFound 设定不存在或尚不可见。
@@ -34,7 +35,38 @@ var (
 	ErrCharacterSheetSelfLike = errors.New("character_sheet_self_like")
 	// ErrCharacterSheetLimit 角色数量达到上限。
 	ErrCharacterSheetLimit = errors.New("character_sheet_limit")
+	// ErrCharacterBatchTokenInvalid 预览凭证不存在、不属于当前用户或与原文不匹配。
+	ErrCharacterBatchTokenInvalid = errors.New("character_batch_token_invalid")
+	// ErrCharacterBatchTokenExpired 预览凭证已过期。
+	ErrCharacterBatchTokenExpired = errors.New("character_batch_token_expired")
+	// ErrCharacterBatchTooEarly 未满 3 秒确认等待。
+	ErrCharacterBatchTooEarly = errors.New("character_batch_too_early")
 )
+
+// CharacterBatchSubmit 批量创建提交（解析后、已通过字段校验的数据）。
+type CharacterBatchSubmit struct {
+	TokenHash   string
+	UserID      string
+	ContentHash string
+	Identifiers []string
+	Payloads    []*models.CharacterSheetPayload
+}
+
+// CharacterBatchSubmitResult 批量创建结果；Replayed=true 表示同一凭证重复提交，
+// 此次没有新建任何数据，Result 为首次提交的结果。
+type CharacterBatchSubmitResult struct {
+	Result   models.CharacterBatchResult
+	Replayed bool
+}
+
+// characterQuotaFor 由当前已用数量计算配额视图。
+func characterQuotaFor(used int) models.CharacterQuota {
+	remaining := CharacterMaxPerUser - used
+	if remaining < 0 {
+		remaining = 0
+	}
+	return models.CharacterQuota{Used: used, Max: CharacterMaxPerUser, Remaining: remaining}
+}
 
 const characterSheetColumns = `
 	s.id, s.user_id, s.status, s.version, s.name, s.alias, s.title, s.gender,
@@ -335,19 +367,165 @@ func (d *DB) GetCharacterSheet(ctx context.Context, sheetID, viewerID string) (*
 }
 
 // CreateCharacterSheet 新建空设定（草稿态）。
+// 事务内锁用户行后统计数量，保证与批量创建共用同一把用户级锁，并发不可突破总配额。
 func (d *DB) CreateCharacterSheet(ctx context.Context, userID string) (string, error) {
-	var count int
-	if err := d.QueryRow(ctx, `SELECT COUNT(*) FROM character_sheets WHERE user_id = $1`, userID).Scan(&count); err != nil {
-		return "", err
-	}
-	if count >= characterMaxPerUser {
-		return "", ErrCharacterSheetLimit
-	}
 	id := GenID("CS")
-	if _, err := d.Exec(ctx, `INSERT INTO character_sheets (id, user_id, status) VALUES ($1, $2, 0)`, id, userID); err != nil {
+	err := d.Tx(ctx, func(tx pgx.Tx) error {
+		if err := lockCharacterUserTx(ctx, tx, userID); err != nil {
+			return err
+		}
+		var count int
+		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM character_sheets WHERE user_id = $1`, userID).Scan(&count); err != nil {
+			return err
+		}
+		if count >= CharacterMaxPerUser {
+			return ErrCharacterSheetLimit
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO character_sheets (id, user_id, status) VALUES ($1, $2, 0)`, id, userID)
+		return err
+	})
+	if err != nil {
 		return "", err
 	}
 	return id, nil
+}
+
+// lockCharacterUserTx 锁用户行：同一用户的「配额检查 + 创建」串行化。
+// 单个创建与批量创建都先拿这把锁，避免两个请求同时读到相同余量。
+func lockCharacterUserTx(ctx context.Context, tx pgx.Tx, userID string) error {
+	var locked string
+	return tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, userID).Scan(&locked)
+}
+
+// CountCharacterSheets 用户角色总数（含草稿/已公开/下架，与创建入口口径一致）。
+func (d *DB) CountCharacterSheets(ctx context.Context, userID string) (int, error) {
+	var n int
+	err := d.QueryRow(ctx, `SELECT COUNT(*) FROM character_sheets WHERE user_id = $1`, userID).Scan(&n)
+	return n, err
+}
+
+// CreateCharacterBatchPreview 写入一条预览凭证（只写凭证表，不碰角色数据）。
+// 顺手清理一天前已过期的旧凭证，避免表无限增长。
+func (d *DB) CreateCharacterBatchPreview(ctx context.Context, tokenHash, userID, contentHash string, itemCount int, ttl time.Duration) (time.Time, time.Time, error) {
+	if ttl <= 0 {
+		ttl = 10 * time.Minute
+	}
+	_, _ = d.Exec(ctx, `DELETE FROM character_batch_previews WHERE expires_at < now() - interval '1 day'`)
+	var createdAt, expiresAt time.Time
+	err := d.QueryRow(ctx, `INSERT INTO character_batch_previews
+		(token_hash, user_id, content_hash, item_count, expires_at)
+		VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5))
+		RETURNING created_at, expires_at`,
+		tokenHash, userID, contentHash, itemCount, ttl.Seconds()).Scan(&createdAt, &expiresAt)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return createdAt, expiresAt, nil
+}
+
+// CreateCharacterSheetsBatch 事务性批量创建草稿：
+//  1. 锁定预览凭证行，校验归属 / 原文摘要 / 有效期 / 3 秒等待；
+//  2. 已消费的凭证直接回放结果（幂等）；
+//  3. 锁用户行后重新统计配额，超限则整个批次回滚；
+//  4. 一次性插入 character_sheets 与 character_sheet_drafts，全部成功才提交。
+func (d *DB) CreateCharacterSheetsBatch(ctx context.Context, in CharacterBatchSubmit) (*CharacterBatchSubmitResult, error) {
+	if len(in.Payloads) == 0 || len(in.Payloads) != len(in.Identifiers) {
+		return nil, errors.New("character_batch_payload_mismatch")
+	}
+	var out models.CharacterBatchResult
+	replayed := false
+	err := d.Tx(ctx, func(tx pgx.Tx) error {
+		var ownerID, contentHash string
+		var consumed *time.Time
+		var resultRaw []byte
+		var ready, expired bool
+		err := tx.QueryRow(ctx, `SELECT user_id, content_hash, consumed_at, result,
+				now() >= created_at + interval '3 seconds' AS ready,
+				now() > expires_at AS expired
+			FROM character_batch_previews WHERE token_hash = $1 FOR UPDATE`, in.TokenHash).
+			Scan(&ownerID, &contentHash, &consumed, &resultRaw, &ready, &expired)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrCharacterBatchTokenInvalid
+		}
+		if err != nil {
+			return err
+		}
+		if ownerID != in.UserID || contentHash != in.ContentHash {
+			return ErrCharacterBatchTokenInvalid
+		}
+		if consumed != nil {
+			if len(resultRaw) == 0 {
+				return ErrCharacterBatchTokenInvalid
+			}
+			if err := json.Unmarshal(resultRaw, &out); err != nil {
+				return err
+			}
+			replayed = true
+			return nil
+		}
+		if expired {
+			return ErrCharacterBatchTokenExpired
+		}
+		if !ready {
+			return ErrCharacterBatchTooEarly
+		}
+
+		if err := lockCharacterUserTx(ctx, tx, in.UserID); err != nil {
+			return err
+		}
+		var used int
+		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM character_sheets WHERE user_id = $1`, in.UserID).Scan(&used); err != nil {
+			return err
+		}
+		if used+len(in.Payloads) > CharacterMaxPerUser {
+			return ErrCharacterSheetLimit
+		}
+
+		ids := make([]string, len(in.Payloads))
+		for i := range ids {
+			ids[i] = GenID("CS")
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO character_sheets (id, user_id, status)
+			SELECT t.id, $2, 0 FROM unnest($1::text[]) AS t(id)`, ids, in.UserID); err != nil {
+			return err
+		}
+		payloads := make([]string, len(in.Payloads))
+		for i, p := range in.Payloads {
+			raw, err := json.Marshal(p)
+			if err != nil {
+				return err
+			}
+			payloads[i] = string(raw)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO character_sheet_drafts (sheet_id, payload, updated_at)
+			SELECT t.sheet_id, t.payload::jsonb, now()
+			FROM unnest($1::text[], $2::text[]) AS t(sheet_id, payload)`, ids, payloads); err != nil {
+			return err
+		}
+
+		out = models.CharacterBatchResult{
+			Items: make([]models.CharacterBatchCreatedItem, 0, len(ids)),
+			Quota: characterQuotaFor(used + len(ids)),
+		}
+		for i, id := range ids {
+			out.Items = append(out.Items, models.CharacterBatchCreatedItem{
+				ID: id, Name: strings.TrimSpace(in.Payloads[i].Name), Identifier: in.Identifiers[i],
+			})
+		}
+		raw, err := json.Marshal(out)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE character_batch_previews
+			SET consumed_at = now(), result = $2 WHERE token_hash = $1`, in.TokenHash, raw); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &CharacterBatchSubmitResult{Result: out, Replayed: replayed}, nil
 }
 
 // SaveCharacterDraft 自动保存草稿（整份 JSONB），并同步草稿媒体引用。

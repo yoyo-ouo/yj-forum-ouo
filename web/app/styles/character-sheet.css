@@ -72,6 +72,40 @@
     color: var(--color-text-tertiary);
 }
 
+/* 批量添加入口：跟在计数后面，本人可见 */
+.cs-batch-link {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 9px;
+    background: rgba(106, 140, 137, 0.12);
+    color: var(--color-text-accent);
+    font-size: 11.5px;
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.cs-batch-link:hover {
+    background: rgba(106, 140, 137, 0.22);
+    color: var(--color-text-secondary);
+}
+
+.night-mode .cs-batch-link {
+    background: rgba(132, 168, 185, 0.16);
+}
+
+.night-mode .cs-batch-link:hover {
+    background: rgba(132, 168, 185, 0.28);
+}
+
+.cs-section-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
 .cs-section-hint {
     margin: 9px 2px 0;
     font-size: 11.5px;

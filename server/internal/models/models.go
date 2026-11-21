@@ -602,6 +602,28 @@ type CharacterSheet struct {
 	Draft          *CharacterSheetPayload `json:"draft,omitempty"`
 }
 
+// CharacterQuota 用户角色配额（批量预览/提交与配额接口共用）。
+// Used 统计该用户全部 character_sheets（含草稿/已公开/下架），与单个创建入口口径一致。
+type CharacterQuota struct {
+	Used      int `json:"used"`
+	Max       int `json:"max"`
+	Remaining int `json:"remaining"`
+}
+
+// CharacterBatchCreatedItem 批量创建成功的角色（幂等重放时原样返回）。
+type CharacterBatchCreatedItem struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Identifier string `json:"identifier"`
+}
+
+// CharacterBatchResult 批量创建结果：存 character_batch_previews.result，
+// 同一凭证重复提交时直接回放，避免重复创建。
+type CharacterBatchResult struct {
+	Items []CharacterBatchCreatedItem `json:"items"`
+	Quota CharacterQuota              `json:"quota"`
+}
+
 // CharacterEggQuote 彩蛋语录池条目（角色名 + 语录正文）。
 type CharacterEggQuote struct {
 	SheetID string `json:"sheet_id"`
