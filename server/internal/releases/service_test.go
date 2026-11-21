@@ -301,7 +301,9 @@ func TestParseVersionTagAndAssetPlatform(t *testing.T) {
 		{"V2.0.0", "2.0.0", true},
 		{"v1.4.0-beta", "1.4.0", true},
 		{"v2.0.0+build.5", "2.0.0", true},
-		{"Windows-V1.3.18", "", false}, // 旧式平台前缀标签不再支持
+		{"Windows-V1.3.18", "1.3.18", true},
+		{"Android-V2.1.0", "2.1.0", true},
+		{"Linux-v1.2.3", "1.2.3", true},
 		{"Docs-2026", "", false},
 		{"", "", false},
 	}
@@ -339,6 +341,29 @@ func TestParseVersionTagAndAssetPlatform(t *testing.T) {
 	}
 	if compareVersions("1.3", "1.3.18") >= 0 {
 		t.Error("1.3 should be less than 1.3.18")
+	}
+}
+
+func TestParsePlatformPrefixedReleaseTag(t *testing.T) {
+	raw := []githubRelease{{
+		TagName: "Android-V2.1.0",
+		Body:    "Android 客户端更新",
+		Assets: []githubAsset{{
+			Name:               "forum-android-2.1.0.apk",
+			Size:               4995195,
+			BrowserDownloadURL: "https://github.com/yoyo-ouo/yj-forum-ouo/releases/download/Android-V2.1.0/forum-android-2.1.0.apk",
+		}},
+	}}
+	items := parseReleases(raw)
+	if len(items) != 1 {
+		t.Fatalf("releases = %d, want 1", len(items))
+	}
+	got := items[0]
+	if got.Version != "2.1.0" || got.Platform != PlatformAndroid {
+		t.Fatalf("release = %s/%s, want 2.1.0/android", got.Version, got.Platform)
+	}
+	if got.Filename != "forum-android-2.1.0.apk" || got.Size != 4995195 {
+		t.Fatalf("asset = %+v", got)
 	}
 }
 
