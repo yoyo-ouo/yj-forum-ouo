@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import CharacterBatchAiHelp from "@/components/character/CharacterBatchAiHelp";
 import { pageMetadata } from "@/lib/seo";
 
 // 批量添加规则：静态说明页，内容必须与服务端解析器（character_batch_parse.go）一致。
@@ -40,6 +41,9 @@ export default function CharacterBatchRulesPage() {
           开始批量添加
         </Link>
       </header>
+
+      {/* 顶部第一块：不想手写时，直接复制提示词交给 AI */}
+      <CharacterBatchAiHelp />
 
       <section className="cb-card cb-doc">
         <h2>1. 基本格式</h2>

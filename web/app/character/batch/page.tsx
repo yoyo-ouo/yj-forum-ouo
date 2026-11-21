@@ -267,6 +267,20 @@ export default function CharacterBatchPage() {
         {quotaError ? <p className="cb-error-inline">{quotaError}</p> : null}
       </section>
 
+      {/* 不想手写时的捷径：去规则页复制 AI 提示词 */}
+      <Link href="/character/batch/rules#ai" className="cb-ai-callout">
+        <span className="cb-ai-callout-icon" aria-hidden="true">
+          <i className="fa fa-magic"></i>
+        </span>
+        <span className="cb-ai-callout-text">
+          <b>太麻烦了？使用 AI 来帮你</b>
+          <span>把 OC 资料和提示词一起丢给 AI，自动整理成批量格式。</span>
+        </span>
+        <span className="cb-ai-callout-go">
+          获取提示词 <i className="fa fa-angle-right" aria-hidden="true"></i>
+        </span>
+      </Link>
+
       <section className="cb-card">
         <div className="cb-card-head">
           <h2>
