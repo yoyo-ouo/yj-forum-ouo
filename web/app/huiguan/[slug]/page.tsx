@@ -8,6 +8,7 @@ import GlobalLoading from "@/components/GlobalLoading";
 import PostCard from "@/components/PostCard";
 import { useToast } from "@/components/Toast";
 import GuildLogo from "@/components/ui/GuildLogo";
+import GuildJoinApplyModal from "@/components/ui/GuildJoinApplyModal";
 import GuildJoinRequestModal from "@/components/ui/GuildJoinRequestModal";
 import { ListEmpty, LoadMoreButton } from "@/components/ui/ListState";
 import Modal from "@/components/ui/Modal";
@@ -33,7 +34,17 @@ export default function GuildDetailPage() {
   const [bioOpen, setBioOpen] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
+  const [applyOpen, setApplyOpen] = useState(false);
+  // 申请理由草稿：关闭弹窗不清空（同一会馆页面会话内保留）；提交成功或切换会馆时清空
+  const [applyReason, setApplyReason] = useState("");
   const pageRef = useRef(1);
+
+  // 切换会馆：关闭弹窗并丢弃上一家会馆的理由草稿
+  useEffect(() => {
+    setApplyOpen(false);
+    setRequestOpen(false);
+    setApplyReason("");
+  }, [slug]);
 
   // 会馆详情（my_state：未登录为 null）
   useEffect(() => {
@@ -118,16 +129,45 @@ export default function GuildDetailPage() {
   // 已通过但当前不是成员（例如后来退出了会馆）：不再显示「查看申请进度」，直接允许重新申请。
   const activeRequest = latestRequest && latestRequest.status !== 1 ? latestRequest : null;
   const currentOtherGuild = myState?.current_guild && myState.current_guild.id !== guild?.id ? myState.current_guild : null;
+  // 全局仅允许一条待审：申请在其他会馆时，本馆不可再申请（服务端是唯一真相源）
+  const pendingElsewhere = myState?.pending_elsewhere || null;
 
-  const doJoin = async () => {
+  const doJoin = async (reason: string) => {
     setBusy(true);
     try {
-      await guildApi.join(slug);
+      await guildApi.join(slug, reason.trim());
       await refreshDetail();
+      setApplyOpen(false);
       setRequestOpen(false);
+      setApplyReason("");
       toast("申请已提交，等待馆长审核", "success");
     } catch (e) {
-      toast(e instanceof ApiException ? e.message : "申请失败", "error");
+      const msg = e instanceof ApiException ? e.message : "申请失败";
+      const code = e instanceof ApiException ? e.code : undefined;
+      if (code === "GUILD_JOIN_PENDING_THIS" || code === "GUILD_JOIN_PENDING_OTHER") {
+        // 已有待审（本馆或他馆）：关闭弹窗并按服务端最新状态刷新，避免陈旧 UI
+        setApplyOpen(false);
+        await refreshDetail();
+        toast(msg, "warning");
+      } else {
+        // 其他错误：保留弹窗与已填内容，方便修改后重试
+        toast(msg, "error");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 撤回「他馆待审」：成功后本馆立即可申请
+  const doCancelElsewhere = async () => {
+    if (!pendingElsewhere) return;
+    setBusy(true);
+    try {
+      await guildApi.cancelJoin(pendingElsewhere.guild.slug);
+      await refreshDetail();
+      toast("申请已撤回，可以重新选择会馆", "success");
+    } catch (e) {
+      toast(e instanceof ApiException ? e.message : "操作失败", "error");
     } finally {
       setBusy(false);
     }
@@ -247,38 +287,66 @@ export default function GuildDetailPage() {
           </div>
         </div>
 
-        {/* 加入区：已加入其他会馆时整块隐藏（不显示任何提示） */}
-        {!currentOtherGuild && (
-          <div className="guild-join-area">
-            {!myState ? (
-              <Link className="guild-join-btn" href="/auth">
-                <i className="fa fa-sign-in"></i> 登录后加入
-              </Link>
-            ) : isMember ? (
-              <>
-                <span className="guild-joined-badge">
-                  <i className="fa fa-check"></i> 已加入
-                </span>
-                <button className="guild-leave-btn" disabled={busy} onClick={() => setConfirmLeave(true)}>
-                  {busy ? "处理中..." : "退出会馆"}
-                </button>
-              </>
-            ) : isPending || activeRequest ? (
-              <>
-                <button className="guild-join-btn pending" disabled={busy} onClick={() => setRequestOpen(true)}>
-                  <i className="fa fa-hourglass-half"></i> 查看申请进度
-                </button>
-                <span className="guild-request-inline-status">
-                  {isPending ? "审核中" : activeRequest?.status === 2 ? "未通过" : "已撤回"}
-                </span>
-              </>
-            ) : (
-              <button className="guild-join-btn" disabled={busy} onClick={doJoin}>
-                <i className="fa fa-plus"></i> {busy ? "提交中..." : "申请加入"}
+        {/* 加入区：登录 / 已加入 / 本馆待审 / 他馆待审 / 历史申请 / 已加入他馆 / 可申请 */}
+        <div className="guild-join-area">
+          {!myState ? (
+            <Link className="guild-join-btn" href="/auth">
+              <i className="fa fa-sign-in"></i> 登录后加入
+            </Link>
+          ) : isMember ? (
+            <>
+              <span className="guild-joined-badge">
+                <i className="fa fa-check"></i> 已加入
+              </span>
+              <button className="guild-leave-btn" disabled={busy} onClick={() => setConfirmLeave(true)}>
+                {busy ? "处理中..." : "退出会馆"}
               </button>
-            )}
-          </div>
-        )}
+            </>
+          ) : isPending ? (
+            <>
+              <button className="guild-join-btn pending" disabled={busy} onClick={() => setRequestOpen(true)}>
+                <i className="fa fa-hourglass-half"></i> 查看申请进度
+              </button>
+              <span className="guild-request-inline-status">审核中</span>
+            </>
+          ) : pendingElsewhere ? (
+            <>
+              <button
+                className="guild-join-btn pending"
+                disabled
+                title={`你正在申请「${pendingElsewhere.guild.name}」`}
+              >
+                <i className="fa fa-hourglass-half"></i> 审核中：「{pendingElsewhere.guild.name}」
+              </button>
+              <p className="guild-pending-other-note">需等待对方会馆审核或先撤回申请，才能申请其他会馆。</p>
+              <div className="guild-pending-other-actions">
+                <Link className="guild-pending-other-link" href={`/huiguan/${pendingElsewhere.guild.slug}`}>
+                  查看该申请
+                </Link>
+                <button type="button" className="guild-cancel-link" disabled={busy} onClick={doCancelElsewhere}>
+                  {busy ? "处理中..." : "撤回申请"}
+                </button>
+              </div>
+            </>
+          ) : activeRequest ? (
+            <>
+              <button className="guild-join-btn pending" disabled={busy} onClick={() => setRequestOpen(true)}>
+                <i className="fa fa-hourglass-half"></i> 查看申请进度
+              </button>
+              <span className="guild-request-inline-status">
+                {activeRequest.status === 2 ? "未通过" : "已撤回"}
+              </span>
+            </>
+          ) : currentOtherGuild ? (
+            <p className="guild-other-member-note">
+              <i className="fa fa-info-circle"></i> 你已加入「{currentOtherGuild.name}」会馆，退出后才能申请其他会馆。
+            </p>
+          ) : (
+            <button className="guild-join-btn" disabled={busy} onClick={() => setApplyOpen(true)}>
+              <i className="fa fa-plus"></i> 申请加入
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 馆长条 */}
@@ -409,7 +477,27 @@ export default function GuildDetailPage() {
         request={activeRequest}
         busy={busy}
         onCancel={isPending ? doCancelJoin : undefined}
-        onReapply={activeRequest && (activeRequest.status === 2 || activeRequest.status === 3) ? doJoin : undefined}
+        onReapply={
+          activeRequest && (activeRequest.status === 2 || activeRequest.status === 3)
+            ? () => {
+                // 已撤回：预填上次填写的理由；未通过：后端会把拒绝理由写进 reason，不能当草稿
+                setApplyReason(activeRequest.status === 3 ? activeRequest.reason || "" : "");
+                setRequestOpen(false);
+                setApplyOpen(true);
+              }
+            : undefined
+        }
+      />
+
+      {/* 入馆申请理由（可选，≤500 字） */}
+      <GuildJoinApplyModal
+        open={applyOpen}
+        guildName={guild.name}
+        reason={applyReason}
+        busy={busy}
+        onReasonChange={setApplyReason}
+        onSubmit={() => doJoin(applyReason)}
+        onClose={() => setApplyOpen(false)}
       />
 
       {/* 退出会馆二次确认（取消不动作） */}

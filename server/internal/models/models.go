@@ -288,6 +288,21 @@ type GuildJoinRequest struct {
 	CreatedAt   *time.Time `json:"created_at"`
 }
 
+// GuildBrief 会馆简要信息（跨馆待审提示、列表徽标等场景用）。
+type GuildBrief struct {
+	ID         int64  `json:"id"`
+	Slug       string `json:"slug"`
+	Name       string `json:"name"`
+	ThemeColor string `json:"theme_color"`
+}
+
+// PendingJoinApplication 用户当前的待审入馆申请与目标会馆摘要。
+// 迁移 0037 起全局至多一条待审，是跨馆待审的唯一真相源。
+type PendingJoinApplication struct {
+	Request *GuildJoinRequest `json:"request"`
+	Guild   *GuildBrief       `json:"guild"`
+}
+
 // GuildArticleAuthor 文章作者摘要。
 type GuildArticleAuthor struct {
 	ID     string `json:"id"`
@@ -407,6 +422,8 @@ type GuildMyState struct {
 	CurrentGuild *GuildMembership `json:"current_guild,omitempty"`
 	// LatestRequest 用户对当前会馆最近一次入馆申请（含已处理状态，供「查看申请进度」）。
 	LatestRequest *GuildJoinRequest `json:"latest_request,omitempty"`
+	// PendingElsewhere 待审申请在「其他会馆」：详情页据此阻止跨馆申请并提示撤回/等待。
+	PendingElsewhere *PendingJoinApplication `json:"pending_elsewhere,omitempty"`
 }
 
 // Stats 用户统计。

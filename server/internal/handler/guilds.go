@@ -105,9 +105,19 @@ func (h *GuildsHandler) Detail(c *gin.Context) {
 		}
 		if req != nil {
 			st.LatestRequest = req
-			if req.Status == 0 {
+		}
+		// 全局待审（迁移 0037 起至多一条）：本馆 → 查看进度；他馆 → 阻止跨馆申请。
+		pending, err := h.DB.GetPendingJoinRequestByUser(c.Request.Context(), me)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
+			return
+		}
+		if pending != nil && pending.Request != nil {
+			if pending.Guild != nil && pending.Guild.ID == g.ID {
 				st.HasPendingRequest = true
-				st.RequestID = req.ID
+				st.RequestID = pending.Request.ID
+			} else {
+				st.PendingElsewhere = pending
 			}
 		}
 		myState = st
@@ -274,7 +284,50 @@ func (h *GuildsHandler) SearchArticles(c *gin.Context) {
 		"page": page, "page_size": pageSize})
 }
 
+// ---- GET /ov2/api/join-request ----
+
+// MyJoinRequest 当前用户的全局待审入馆申请（匿名或没有待审时 data 为 null）。
+// 会馆详情页已由 my_state.pending_elsewhere 携带；列表页/移动端用本接口。
+func (h *GuildsHandler) MyJoinRequest(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-store")
+	me := currentUserFromCookie(c, h.Sessions)
+	if me == "" {
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": nil})
+		return
+	}
+	pending, err := h.DB.GetPendingJoinRequestByUser(c.Request.Context(), me)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": pending})
+}
+
 // ---- POST /ov2/api/guilds/:slug/join ----
+
+// 入馆申请错误码：前端据此切换「本馆待审 / 他馆待审」状态（message 保持人类可读）。
+const (
+	CodeGuildJoinPendingThis  = "GUILD_JOIN_PENDING_THIS"
+	CodeGuildJoinPendingOther = "GUILD_JOIN_PENDING_OTHER"
+)
+
+// writeJoinPending 按待审会馆与当前会馆的关系返回 400（本馆重复 / 跨馆占用）。
+func writeJoinPending(c *gin.Context, pending *models.PendingJoinApplication, guildID int64) {
+	if pending != nil && pending.Guild != nil && pending.Guild.ID != guildID {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"code":    CodeGuildJoinPendingOther,
+			"message": "你正在申请「" + pending.Guild.Name + "」，请等待审核或先撤回",
+			"guild":   pending.Guild,
+		})
+		return
+	}
+	c.JSON(http.StatusBadRequest, gin.H{
+		"success": false,
+		"code":    CodeGuildJoinPendingThis,
+		"message": "你已提交申请，请等待馆长审核",
+	})
+}
 
 type guildJoinReq struct {
 	Reason string `json:"reason"`
@@ -303,15 +356,25 @@ func (h *GuildsHandler) Join(c *gin.Context) {
 		}
 		return
 	}
-	if pending, err := h.DB.GetPendingJoinRequest(c.Request.Context(), g.ID, uid); err == nil && pending != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "你已提交申请，请等待馆长审核"})
+	// 全局仅允许一条待审申请：本馆重复提交提示等待；跨馆申请提示先撤回/等待
+	pending, err := h.DB.GetPendingJoinRequestByUser(c.Request.Context(), uid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询失败"})
+		return
+	}
+	if pending != nil {
+		writeJoinPending(c, pending, g.ID)
 		return
 	}
 	id, err := h.DB.CreateJoinRequest(c.Request.Context(), g.ID, uid, reason)
 	if err != nil {
-		// 并发提交时命中部分唯一索引（每馆每人仅一条待审）：等同已有待审申请
+		// 并发提交时命中用户级部分唯一索引：回查全局待审后给出准确文案
 		if database.IsUniqueViolation(err) {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "你已提交申请，请等待馆长审核"})
+			if p, qerr := h.DB.GetPendingJoinRequestByUser(c.Request.Context(), uid); qerr == nil && p != nil {
+				writeJoinPending(c, p, g.ID)
+				return
+			}
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "code": CodeGuildJoinPendingThis, "message": "你已提交申请，请等待馆长审核"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "申请提交失败"})

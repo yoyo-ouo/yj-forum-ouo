@@ -7,12 +7,12 @@ import ArticleCard from "@/components/ArticleCard";
 import GlobalLoading from "@/components/GlobalLoading";
 import PostCard from "@/components/PostCard";
 import GuildLogo from "@/components/ui/GuildLogo";
-import { guildApi, FeedItem, GuildListItem } from "@/lib/api";
-import { contrastText, themeColor } from "@/lib/constants";
+import { guildApi, FeedItem, GuildListItem, GuildPendingJoinApplication } from "@/lib/api";
+import { contrastText, themeColor, themeInk, themeTint } from "@/lib/constants";
 import { feedItemToPost } from "@/lib/feed";
 
 /** 会馆行：顶部栏（会馆名/馆长 + 进入会馆）+ 横向滚动内容区（每页 10 条，到边界自动续拉） */
-function GuildFeedRow({ guild }: { guild: GuildListItem }) {
+function GuildFeedRow({ guild, pendingGuildId }: { guild: GuildListItem; pendingGuildId?: number }) {
   const [visible, setVisible] = useState(false);
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,9 +150,19 @@ function GuildFeedRow({ guild }: { guild: GuildListItem }) {
             className="guild-logo guild-row-logo"
           />
           <div className="guild-row-names">
-            <Link className="guild-row-name" href={`/huiguan/${guild.slug}`}>
-              {guild.name}
-            </Link>
+            <div className="guild-row-name-line">
+              <Link className="guild-row-name" href={`/huiguan/${guild.slug}`}>
+                {guild.name}
+              </Link>
+              {pendingGuildId === guild.id && (
+                <span
+                  className="guild-pending-badge theme-ink"
+                  style={{ background: themeTint(guild.theme_color), "--guild-ink": themeInk(guild.theme_color) } as React.CSSProperties}
+                >
+                  审核中
+                </span>
+              )}
+            </div>
             <span className="guild-row-leader">
               馆长：
               {leader?.id ? (
@@ -248,6 +258,7 @@ function GuildFeedRow({ guild }: { guild: GuildListItem }) {
 export default function HuiGuanPage() {
   const router = useRouter();
   const [guilds, setGuilds] = useState<GuildListItem[] | null>(null);
+  const [pending, setPending] = useState<GuildPendingJoinApplication | null>(null);
   const [view, setView] = useState<"rows" | "list">("rows");
   const count = guilds?.length || 0;
 
@@ -260,6 +271,20 @@ export default function HuiGuanPage() {
         setGuilds([]);
       }
     })();
+  }, []);
+
+  // 全局待审申请：列表页只在对应会馆加徽标（匿名时接口返回 null）
+  useEffect(() => {
+    let alive = true;
+    guildApi
+      .myJoinRequest()
+      .then((r) => {
+        if (alive) setPending(r.data ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, []);
 
   return (
@@ -289,7 +314,7 @@ export default function HuiGuanPage() {
       ) : view === "rows" ? (
         <div className="guild-rows">
           {guilds.map((g) => (
-            <GuildFeedRow key={g.uuid || g.slug} guild={g} />
+            <GuildFeedRow key={g.uuid || g.slug} guild={g} pendingGuildId={pending?.guild?.id} />
           ))}
         </div>
       ) : (
@@ -308,6 +333,14 @@ export default function HuiGuanPage() {
                 <div className="guild-list-body">
                   <div className="guild-list-name-row">
                     <span className="guild-list-name">{g.name}</span>
+                    {pending?.guild?.id === g.id && (
+                      <span
+                        className="guild-pending-badge theme-ink"
+                        style={{ background: themeTint(g.theme_color), "--guild-ink": themeInk(g.theme_color) } as React.CSSProperties}
+                      >
+                        审核中
+                      </span>
+                    )}
                     <span
                       className="guild-list-id"
                       style={{ background: themeColor(g.theme_color), color: contrastText(themeColor(g.theme_color)) }}

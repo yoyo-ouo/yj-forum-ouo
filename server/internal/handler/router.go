@@ -202,6 +202,8 @@ func registerAPIRoutes(api *gin.RouterGroup, h apiHandlers) {
 	api.POST("/comments/:id/like", postsH.AuthRequired(), postsH.LikeComment)
 
 	// ---- 会馆 / 信息流 ----
+	// 全局待审入馆申请（匿名返回 data:null；详情页/列表页/移动端共用）
+	api.GET("/join-request", guildsH.MyJoinRequest)
 	api.GET("/guilds", guildsH.List)
 	api.GET("/guilds/:slug", guildsH.Detail)
 	api.GET("/guilds/:slug/feed", guildsH.Feed)

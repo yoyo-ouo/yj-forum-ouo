@@ -5,15 +5,23 @@ export type ApiError = { message: string; status: number };
 
 export class ApiException extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** 业务错误码（如 GUILD_JOIN_PENDING_OTHER）；旧接口可能为空。 */
+  code?: string;
+  /** 原始响应体：页面可按需读取附加字段（如跨馆待审的 guild 摘要）。 */
+  payload?: ApiResponse;
+  constructor(status: number, message: string, payload?: ApiResponse) {
     super(message);
     this.status = status;
+    this.code = typeof payload?.code === "string" ? payload.code : undefined;
+    this.payload = payload;
   }
 }
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
   message?: string;
+  /** 业务错误码（向后兼容新增字段） */
+  code?: string;
   [key: string]: unknown;
 }
 
@@ -218,6 +226,20 @@ export interface GuildJoinRequestInfo {
   created_at?: string | null;
 }
 
+/** 会馆摘要（跨馆待审提示 / 列表徽标）。 */
+export interface GuildBrief {
+  id: number;
+  slug: string;
+  name: string;
+  theme_color: string;
+}
+
+/** 全局待审的入馆申请（迁移 0037 起同一用户至多一条）。 */
+export interface GuildPendingJoinApplication {
+  request: GuildJoinRequestInfo;
+  guild: GuildBrief;
+}
+
 export interface GuildMyState {
   is_member: boolean;
   is_leader: boolean;
@@ -227,6 +249,8 @@ export interface GuildMyState {
   current_guild?: GuildMembership | null;
   /** 对该会馆最近一次申请（含已处理状态）。 */
   latest_request?: GuildJoinRequestInfo | null;
+  /** 待审申请在其他会馆（本馆不可再申请，需等待或先撤回）。 */
+  pending_elsewhere?: GuildPendingJoinApplication | null;
 }
 
 // 动态流条目（帖子或文章）
@@ -476,7 +500,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || (data && data.success === false)) {
-    throw new ApiException(res.status, (data as ApiResponse).message || `请求失败 (${res.status})`);
+    throw new ApiException(res.status, (data as ApiResponse).message || `请求失败 (${res.status})`, data as ApiResponse);
   }
   return data as T;
 }
@@ -709,11 +733,14 @@ export const guildApi = {
     ),
   article: (id: string) =>
     request<{ article: GuildArticle }>(`/articles/${encodeURIComponent(id)}`),
+  // 入馆申请（reason 可选，≤500 字；全局同时仅允许一条待审）
   join: (slug: string, reason = "") =>
     request<{ request_id: number; message: string }>(`/guilds/${encodeURIComponent(slug)}/join`, {
       method: "POST",
       body: JSON.stringify({ reason }),
     }),
+  // 当前用户的全局待审申请（匿名或没有待审时 data 为 null）
+  myJoinRequest: () => request<{ data: GuildPendingJoinApplication | null }>("/join-request"),
   cancelJoin: (slug: string) =>
     request<{ message: string }>(`/guilds/${encodeURIComponent(slug)}/join/cancel`, { method: "POST" }),
   leave: (slug: string) =>

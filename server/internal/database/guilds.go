@@ -329,14 +329,22 @@ func (d *DB) LeaveGuild(ctx context.Context, userID string) (bool, error) {
 
 // ---- 入馆申请 ----
 
-// GetPendingJoinRequest 该用户对该会馆的待审申请（无则 nil）。
-func (d *DB) GetPendingJoinRequest(ctx context.Context, guildID int64, userID string) (*models.GuildJoinRequest, error) {
+// GetPendingJoinRequestByUser 该用户当前全局唯一的一条待审申请（含目标会馆摘要；无则 nil）。
+// 迁移 0037 起 guild_join_requests 对 user_id（status = 0）全局唯一。
+func (d *DB) GetPendingJoinRequestByUser(ctx context.Context, userID string) (*models.PendingJoinApplication, error) {
 	var req models.GuildJoinRequest
+	var g models.GuildBrief
 	var handledAt, createdAt *time.Time
-	err := d.QueryRow(ctx, `SELECT id, guild_id, user_id, status, reason, handled_by, handled_at, created_at
-		FROM guild_join_requests WHERE guild_id = $1 AND user_id = $2 AND status = 0
-		ORDER BY id DESC LIMIT 1`, guildID, userID).
-		Scan(&req.ID, &req.GuildID, &req.UserID, &req.Status, &req.Reason, &req.HandledBy, &handledAt, &createdAt)
+	err := d.QueryRow(ctx, `SELECT r.id, r.guild_id, r.user_id, r.status, COALESCE(r.reason, ''),
+			COALESCE(r.handled_note, ''), COALESCE(r.handled_by, ''), r.handled_at, r.created_at,
+			g.id, g.slug, g.name, COALESCE(g.theme_color, '')
+		FROM guild_join_requests r
+		JOIN guilds g ON g.id = r.guild_id
+		WHERE r.user_id = $1 AND r.status = 0
+		ORDER BY r.id DESC LIMIT 1`, userID).
+		Scan(&req.ID, &req.GuildID, &req.UserID, &req.Status, &req.Reason, &req.HandledNote,
+			&req.HandledBy, &handledAt, &createdAt,
+			&g.ID, &g.Slug, &g.Name, &g.ThemeColor)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -345,7 +353,7 @@ func (d *DB) GetPendingJoinRequest(ctx context.Context, guildID int64, userID st
 	}
 	req.HandledAt = handledAt
 	req.CreatedAt = createdAt
-	return &req, nil
+	return &models.PendingJoinApplication{Request: &req, Guild: &g}, nil
 }
 
 // GetLatestJoinRequest 该用户对该会馆的最近一次申请（任意状态；含处理备注）。

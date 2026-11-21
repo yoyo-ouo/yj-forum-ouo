@@ -1128,3 +1128,153 @@
 .guild-request-hint i {
     margin-right: 4px;
 }
+
+/* ---- 加入区：他馆待审 / 已加入其他会馆 ---- */
+.guild-other-member-note,
+.guild-pending-other-note {
+    max-width: 250px;
+    margin: 0;
+    color: var(--guild-fg, #fff) !important;
+    font-size: 12px;
+    line-height: 1.6;
+    text-align: center;
+    text-shadow: var(--guild-ts, none);
+    opacity: 0.92;
+    word-break: break-word;
+}
+
+.guild-pending-other-note {
+    opacity: 0.82;
+}
+
+.guild-other-member-note i {
+    margin-right: 4px;
+}
+
+.guild-pending-other-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.guild-pending-other-link {
+    color: var(--guild-fg, #fff) !important;
+    font-size: 12px;
+    text-decoration: underline;
+    opacity: 0.9;
+}
+
+.guild-pending-other-link:hover {
+    opacity: 1;
+}
+
+.guild-cancel-link:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+/* ---- 列表：待审徽标（主题色低透明度底，不用白边高亮） ---- */
+.guild-row-name-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.guild-pending-badge {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1.7;
+    white-space: nowrap;
+}
+
+/* ---- 入馆申请理由弹窗 ---- */
+.guild-apply-note {
+    margin: 0 0 6px;
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+    line-height: 1.65;
+}
+
+.guild-apply-field {
+    position: relative;
+    margin: 12px 0 18px;
+}
+
+.guild-apply-label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.guild-apply-textarea {
+    display: block;
+    width: 100%;
+    min-height: 118px;
+    padding: 10px 12px 26px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-bg-item);
+    color: var(--color-text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.7;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.guild-apply-textarea::placeholder {
+    color: var(--color-text-tertiary);
+}
+
+.guild-apply-textarea:hover:not(:disabled) {
+    border-color: var(--color-border-search-hover);
+}
+
+.guild-apply-textarea:focus {
+    border-color: var(--color-primary);
+    background: var(--color-bg-card);
+    /* 品牌色低透明度聚焦环（不用白色/近白色 ring） */
+    box-shadow: 0 0 0 3px var(--color-bg-item-active);
+}
+
+.guild-apply-textarea:disabled {
+    opacity: 0.7;
+    cursor: default;
+}
+
+.guild-apply-counter {
+    position: absolute;
+    right: 12px;
+    bottom: 8px;
+    color: var(--color-text-tertiary);
+    font-size: 11px;
+    line-height: 1.4;
+    pointer-events: none;
+}
+
+.guild-apply-counter.is-warn {
+    color: #b9770e;
+}
+
+/* 主按钮用加深后的品牌色：白字对比度 ≥ 4.5（共享 .report-submit 原色仅 ~3.1） */
+.guild-apply-actions .report-submit {
+    background: color-mix(in srgb, var(--color-primary) 68%, #0e1a19);
+    color: #fff;
+}
+
+.guild-apply-actions .report-submit:hover {
+    opacity: 1;
+    background: color-mix(in srgb, var(--color-primary) 60%, #0e1a19);
+}
+
+.night-mode .guild-apply-counter.is-warn {
+    color: #f0b65c;
+}
