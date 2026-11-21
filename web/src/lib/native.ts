@@ -18,6 +18,19 @@ export function setNativeApiBase(base?: string | null) {
   nativeApiBase = base ? base.trim().replace(/\/$/, "") || null : null;
 }
 
+/**
+ * 把原生壳测量的安全区高度写入根节点 CSS 变量 --safe-top / --safe-bottom。
+ * Android WebView 不识别 env(safe-area-inset-*)，必须用原生下发的数值避让刘海与手势条；
+ * 浏览器环境缺省为 0，样式里再用 env() 作为 iOS 兜底。
+ */
+export function applySafeArea(info?: Pick<AppInfo, "safeTop" | "safeBottom"> | null) {
+  const root = document.documentElement;
+  const top = Math.max(0, Number(info?.safeTop) || 0);
+  const bottom = Math.max(0, Number(info?.safeBottom) || 0);
+  root.style.setProperty("--safe-top", `${top}px`);
+  root.style.setProperty("--safe-bottom", `${bottom}px`);
+}
+
 export interface ForumApiPlugin {
   request(o: {
     method: string;
@@ -164,12 +177,14 @@ export async function requestApi<T = any>(o: {
 export async function getAppInfo(): Promise<AppInfo> {
   if (!isNative) {
     return {
-      versionName: "2.0.0",
-      versionCode: 20000,
+      versionName: "2.0.1",
+      versionCode: 20001,
       packageName: "top.crazying.forum.debug",
       apiBase: WEB_API_BASE,
       apiBaseUrl: WEB_API_BASE,
       altchaConfigured: false,
+      safeTop: 0,
+      safeBottom: 0,
     };
   }
   if (cachedAppInfo) return cachedAppInfo;
@@ -177,6 +192,7 @@ export async function getAppInfo(): Promise<AppInfo> {
   // 旧壳只下发 apiBaseUrl：统一归一到 apiBase，并让 mediaUrl 立刻跟随该基址
   cachedAppInfo = { ...info, apiBase: info.apiBase || info.apiBaseUrl || NATIVE_FALLBACK_API_BASE };
   setNativeApiBase(cachedAppInfo.apiBase);
+  applySafeArea(cachedAppInfo);
   return cachedAppInfo;
 }
 

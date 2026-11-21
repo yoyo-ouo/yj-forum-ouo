@@ -391,7 +391,8 @@ export function Sheet({
   if (!open) return null;
   return (
     <div className="m-mask" onClick={onClose}>
-      <div className="m-sheet" onClick={(event) => event.stopPropagation()}>
+      {/* 无 footer 时容器自己留底部安全区，有 footer 则由 .m-sheet-foot 独占，避免双倍空白 */}
+      <div className={`m-sheet ${footer ? "" : "m-sheet--nofoot"}`.trim()} onClick={(event) => event.stopPropagation()}>
         <div className="m-sheet-grip" />
         <div className="m-sheet-head">
           <strong style={{ flex: 1 }}>{title}</strong>

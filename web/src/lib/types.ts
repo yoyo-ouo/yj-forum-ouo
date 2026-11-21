@@ -14,6 +14,10 @@ export interface AppInfo {
   /** 旧壳字段：与 apiBase 同义，getAppInfo 会归一后保留 */
   apiBaseUrl?: string;
   altchaConfigured: boolean;
+  /** 原生壳测量的顶部安全区高度（dp），Android WebView 下 env(safe-area-inset-top) 恒为 0，由原生下发 */
+  safeTop?: number;
+  /** 原生壳测量的底部安全区高度（dp），同上 */
+  safeBottom?: number;
 }
 
 export interface StartupState {
@@ -24,7 +28,7 @@ export interface StartupState {
   lastName?: string | null;
 }
 
-export type Theme = "day" | "night" | "auto";
+export type Theme = "day" | "night" | "auto" | "sakura";
 
 /* ---------------- 世界频道 ---------------- */
 

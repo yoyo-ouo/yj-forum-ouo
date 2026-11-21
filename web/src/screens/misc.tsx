@@ -8,8 +8,15 @@ import { AppBar, Cell, Empty, IconButton, Screen, Sheet, Skeletons } from "../co
 import { Icon } from "../components/icons";
 import { RichContent } from "../components/ui";
 import { formatDate, stripHtml, timeAgo } from "../lib/format";
-import { astronomicalToInfinite, infiniteToAstronomical } from "../lib/year";
-import type { GregorianEra, InfiniteEra } from "../lib/year";
+import {
+  astronomicalToInfinite,
+  convertYear,
+  formatGregorianYear,
+  formatInfiniteYear,
+  infiniteToAstronomical,
+  shanghaiToday,
+} from "../lib/year";
+import type { GregorianEra, InfiniteEra, Today, YearConversionResult, YearSide } from "../lib/year";
 
 /* 杂项页：指南 / 反馈 / 更新日志 / 年制换算（msc-*） */
 
@@ -837,33 +844,12 @@ export function ChangelogScreen() {
 
 type YearDirection = "infinite-to-gregorian" | "gregorian-to-infinite";
 type YearEra = InfiniteEra | GregorianEra;
-type YearResultType = "success" | "warning" | "error";
 
 interface YearForm {
   era: YearEra;
   year: string;
   month: string;
   day: string;
-}
-
-interface YearSide {
-  era: string;
-  year: number;
-  month: number;
-  day: number;
-}
-
-interface YearConversionResult {
-  type: YearResultType;
-  message: string;
-  source?: YearSide;
-  target?: YearSide;
-}
-
-interface TodayParts {
-  year: number;
-  month: number;
-  day: number;
 }
 
 /** 换算方向元信息（口径同 Web lib/year-conversion 的 DIRECTION_META） */
@@ -885,145 +871,15 @@ const YEAR_DIRECTIONS: Record<
   },
 };
 
-/** 全角数字转半角（中文输入法下也能正常解析） */
-function normalizeDigits(raw: string): string {
-  return raw.replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0));
-}
-
-/** 解析非负整数年份：支持半角/全角数字与「元年」；空串、负数、小数、溢出返回 null */
-function parseYearInput(raw: string): number | null {
-  const text = normalizeDigits(raw).trim();
-  if (text === "元年" || text === "元") return 1;
-  if (!/^\d+$/.test(text)) return null;
-  const value = Number(text);
-  return Number.isSafeInteger(value) ? value : null;
-}
-
-function parsePositiveInt(raw: string): number | null {
-  const text = normalizeDigits(raw).trim();
-  if (!/^\d+$/.test(text)) return null;
-  const value = Number(text);
-  return Number.isSafeInteger(value) ? value : null;
-}
-
-/** 公历闰年（天文纪年；天文年 0 = 公元前 1 年，按 400 年周期为闰年） */
-function isLeapYear(year: number): boolean {
-  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-}
-
-function daysInMonth(year: number, month: number): number {
-  if (month === 2) return isLeapYear(year) ? 29 : 28;
-  if (month === 4 || month === 6 || month === 9 || month === 11) return 30;
-  return 31;
-}
-
-/** 公元年展示：1 年可显示为「公元元年」 */
-function formatGregorianLabel(astronomicalYear: number, useYuanNian: boolean): string {
-  if (astronomicalYear >= 1) {
-    return astronomicalYear === 1 && useYuanNian ? "公元元年" : `公元 ${astronomicalYear} 年`;
-  }
-  return `公元前 ${1 - astronomicalYear} 年`;
-}
-
-/** 无限年展示：无限元年 / 无限 N 年 / 无限前 N 年 */
-function formatInfiniteLabel(year: number, before: boolean, useYuanNian: boolean): string {
-  if (before) return `无限前 ${year} 年`;
-  return year === 1 && useYuanNian ? "无限元年" : `无限 ${year} 年`;
-}
-
-/** 上海时区「今天」（与论坛签到 / 时间展示口径一致） */
-function shanghaiToday(): TodayParts {
-  try {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Shanghai",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(new Date());
-    const pick = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? 0);
-    return { year: pick("year"), month: pick("month"), day: pick("day") };
-  } catch {
-    const now = new Date();
-    return { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() };
-  }
-}
-
-/**
- * 统一换算入口（移植 Web lib/year-conversion 的 convertYear）：
- * 年月日不改变月日，只换算年份；目标年日期非法时返回 warning / error。
- */
-function convertYear(
-  input: { calendar: "infinite" | "gregorian"; era: YearEra; year: string; month: string; day: string },
-  useYuanNian: boolean,
-): YearConversionResult {
-  const year = parseYearInput(input.year);
-  if (year === null) {
-    return {
-      type: "error",
-      message: input.calendar === "infinite" ? "请输入有效的无限年年份（可填「元年」）" : "请输入有效的公元年份（可填「元年」）",
-    };
-  }
-  if (year === 0) {
-    return {
-      type: "error",
-      message:
-        input.calendar === "infinite"
-          ? "无限历没有 0 年（元年即公元 1604 年）"
-          : "公元纪年没有 0 年（公元前 1 年之后即公元 1 年）",
-    };
-  }
-
-  const month = parsePositiveInt(input.month);
-  if (month === null || month < 1 || month > 12) return { type: "error", message: "请输入 1-12 的月份" };
-  const day = parsePositiveInt(input.day);
-  if (day === null || day < 1 || day > 31) return { type: "error", message: "请输入 1-31 的日期" };
-
-  const astronomical =
-    input.calendar === "infinite"
-      ? infiniteToAstronomical(year, input.era as InfiniteEra)
-      : input.era === "bce"
-        ? 1 - year
-        : year;
-
-  const max = daysInMonth(astronomical, month);
-  if (day > max) {
-    const label = formatGregorianLabel(astronomical, useYuanNian);
-    if (month === 2 && day === 29 && !isLeapYear(astronomical)) {
-      return { type: "warning", message: `目标${label}不是闰年，2 月 29 日不存在` };
-    }
-    return { type: "error", message: `${label}的 ${month} 月只有 ${max} 天` };
-  }
-
-  const infinite = astronomicalToInfinite(astronomical);
-  const sourceLabel =
-    input.calendar === "infinite"
-      ? formatInfiniteLabel(year, input.era === "before", useYuanNian)
-      : formatGregorianLabel(astronomical, useYuanNian);
-  const targetLabel =
-    input.calendar === "infinite"
-      ? formatGregorianLabel(astronomical, useYuanNian)
-      : formatInfiniteLabel(infinite.year, infinite.before, useYuanNian);
-
-  const source: YearSide =
-    input.calendar === "infinite"
-      ? { era: input.era === "before" ? "无限前" : "无限", year, month, day }
-      : { era: input.era === "bce" ? "公元前" : "公元", year, month, day };
-  const target: YearSide =
-    input.calendar === "infinite"
-      ? {
-          era: astronomical >= 1 ? "公元" : "公元前",
-          year: astronomical >= 1 ? astronomical : 1 - astronomical,
-          month,
-          day,
-        }
-      : { era: infinite.before ? "无限前" : "无限", year: infinite.year, month, day };
-
-  return {
-    type: "success",
-    message: `${sourceLabel} ${month} 月 ${day} 日 = ${targetLabel} ${month} 月 ${day} 日`,
-    source,
-    target,
-  };
+/** 单侧年号：元年时大字显示「元年」，不再补「年」单位 */
+function YearSideView({ side }: { side: YearSide }) {
+  return (
+    <div className="msc-yc-side">
+      <span className="msc-yc-era">{side.era}</span>
+      <b className="msc-yc-num">{side.yuanNian ? "元年" : side.year}</b>
+      {side.yuanNian ? null : <span className="msc-yc-unit">年</span>}
+    </div>
+  );
 }
 
 /** 结果卡片：成功显示大数字双向对照，失败/提示显示原因 */
@@ -1046,17 +902,9 @@ function YearResultCard({ result }: { result: YearConversionResult | null }) {
   return (
     <div className="msc-yc-result is-success" role="status">
       <div className="msc-yc-pair">
-        <div className="msc-yc-side">
-          <span className="msc-yc-era">{result.source.era}</span>
-          <b className="msc-yc-num">{result.source.year}</b>
-          <span className="msc-yc-unit">年</span>
-        </div>
+        <YearSideView side={result.source} />
         <Icon name="forward" size={20} className="msc-yc-arrow" />
-        <div className="msc-yc-side">
-          <span className="msc-yc-era">{result.target.era}</span>
-          <b className="msc-yc-num">{result.target.year}</b>
-          <span className="msc-yc-unit">年</span>
-        </div>
+        <YearSideView side={result.target} />
       </div>
       <p className="msc-yc-msg">
         {result.source.month} 月 {result.source.day} 日 · 年号换算不改月日
@@ -1066,7 +914,7 @@ function YearResultCard({ result }: { result: YearConversionResult | null }) {
 }
 
 export function YearConverterScreen() {
-  const [today, setToday] = useState<TodayParts | null>(null);
+  const [today, setToday] = useState<Today | null>(null);
   const [direction, setDirection] = useState<YearDirection>("infinite-to-gregorian");
   const [form, setForm] = useState<YearForm>({ era: "after", year: "", month: "", day: "" });
   const [useYuanNian, setUseYuanNian] = useState(true);
@@ -1107,10 +955,10 @@ export function YearConverterScreen() {
           <Icon name="clock" size={14} />
           <span>
             {today
-              ? `今天 ${formatGregorianLabel(today.year, useYuanNian)} ${today.month} 月 ${today.day} 日`
+              ? `今天 ${formatGregorianYear(today.year, useYuanNian)} ${today.month} 月 ${today.day} 日`
               : "正在读取今天的日期…"}
             {today && todayInfinite
-              ? ` · ${formatInfiniteLabel(todayInfinite.year, todayInfinite.before, useYuanNian)} ${today.month} 月 ${today.day} 日`
+              ? ` · ${formatInfiniteYear(todayInfinite.year, todayInfinite.before, useYuanNian)} ${today.month} 月 ${today.day} 日`
               : ""}
           </span>
         </div>

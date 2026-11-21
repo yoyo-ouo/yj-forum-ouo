@@ -1752,7 +1752,7 @@
     }
 
     .cs-window-header {
-        padding-top: calc(10px + env(safe-area-inset-top));
+        padding-top: calc(10px + var(--safe-top));
         cursor: default;
         touch-action: auto;
     }
@@ -1795,7 +1795,7 @@
     }
 
     .cs-window-footer {
-        padding: 9px 12px calc(9px + env(safe-area-inset-bottom));
+        padding: 9px 12px calc(9px + var(--safe-bottom));
         flex-wrap: wrap;
     }
 
