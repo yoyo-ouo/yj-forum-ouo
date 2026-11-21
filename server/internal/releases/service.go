@@ -391,7 +391,8 @@ func (s *Service) fetchPage(page int) ([]githubRelease, error) {
 //
 // NSH 一次构建多平台，一个 Release 里同时带 Windows/Android/Linux 安装包，
 // 因此 tag 只放版本号，平台由附件名识别（见 assetPlatform）。
-var versionTagRe = regexp.MustCompile(`(?i)^v?(\d+(?:\.\d+)*)(?:[-+][0-9A-Za-z._-]+)?$`)
+// versionTagRe 兼容普通版本标签和旧式平台前缀标签（如 Android-V2.1.0）。
+var versionTagRe = regexp.MustCompile(`(?i)^(?:(?:windows|android|linux|macos|darwin)-)?v?(\d+(?:\.\d+)*)(?:[-+][0-9A-Za-z._-]+)?$`)
 
 // assetNameRe 附件名白名单（防目录穿越）。
 var assetNameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
