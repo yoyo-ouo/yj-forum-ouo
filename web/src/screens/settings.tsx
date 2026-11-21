@@ -16,11 +16,12 @@ interface ThemeOption {
   toast: string;
 }
 
-/** 三套可选色板 + 站庆「国庆红金」叠层（后者由站方统一启用，不在此切换） */
+/** 四套可选色板 + 站庆「国庆红金」叠层（后者由站方统一启用，不在此切换） */
 const THEME_OPTIONS: ThemeOption[] = [
   { value: "auto", label: "跟随系统", sub: "随手机的深色模式自动切换", icon: "refresh", toast: "已跟随系统外观" },
   { value: "day", label: "日间", sub: "明亮米白界面，白天更清晰", icon: "sun", toast: "已切换为日间模式" },
   { value: "night", label: "夜间", sub: "深色界面，弱光环境更舒服", icon: "moon", toast: "已切换为夜间模式" },
+  { value: "sakura", label: "樱花粉", sub: "温柔粉色调，少女心满满", icon: "heart", toast: "已切换为樱花粉主题" },
 ];
 
 const YEAR_ITEMS: Array<{ key: "wuxian" | "ce"; label: string }> = [
@@ -165,7 +166,7 @@ export function SettingsScreen() {
           <Cell
             icon="download"
             label="版本号"
-            value={`${appInfo?.versionName || "2.0.0"}（${appInfo?.versionCode ?? 20000}）`}
+            value={`${appInfo?.versionName || "2.0.1"}（${appInfo?.versionCode ?? 20001}）`}
             onClick={() => push("version")}
           />
           <Cell icon="list" label="更新日志" onClick={() => push("changelog")} />

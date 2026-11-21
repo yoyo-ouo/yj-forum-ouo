@@ -75,7 +75,7 @@ div.post-create-container {
     top: 0;
     z-index: 20;
     margin: 0 -12px 14px;
-    padding: calc(env(safe-area-inset-top) + 8px) 12px 10px;
+    padding: calc(var(--safe-top) + 8px) 12px 10px;
     background: color-mix(in srgb, var(--color-bg-body) 88%, transparent);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);

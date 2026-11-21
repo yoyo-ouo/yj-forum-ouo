@@ -83,8 +83,8 @@
   z-index: 2;
 }
 .lb-nav:active { background: rgba(20, 32, 31, 0.85); }
-.lb-nav--prev { left: 6px; }
-.lb-nav--next { right: 6px; }
+.lb-nav--prev { left: max(6px, var(--safe-left)); }
+.lb-nav--next { right: max(6px, var(--safe-right)); }
 
 /* ================= 验证说明 cap-* ================= */
 
@@ -194,7 +194,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  /* 横屏挖孔机两侧避让；竖屏 inset=0 时仍是原来的 16px */
+  padding: 16px max(16px, var(--safe-right)) 16px max(16px, var(--safe-left));
 }
 .ic-panel {
   width: min(560px, 100%);

@@ -18,10 +18,14 @@ import kotlin.math.min
 class ForumSsePlugin : Plugin() {
     private val client by lazy { ForumHttpClient() }
     private val factory by lazy { EventSources.createFactory(client.okHttp) }
-    private val sources = mutableMapOf<String, EventSource>()
-    private val lastIds = mutableMapOf<String, String>()
-    private val retries = mutableMapOf<String, Int>()
-    private val stopped = mutableSetOf<String>()
+    // 主线程（start/stop、handler.postDelayed）与 OkHttp 回调线程（onEvent/onFailure）
+    // 会并发读写这些表，必须用线程安全容器，否则 HashMap 并发写可能死循环/丢事件。
+    private val sources = java.util.concurrent.ConcurrentHashMap<String, EventSource>()
+    private val lastIds = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val retries = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private val stopped: MutableSet<String> = java.util.Collections.newSetFromMap(
+        java.util.concurrent.ConcurrentHashMap<String, Boolean>(),
+    )
     private val handler = Handler(Looper.getMainLooper())
 
     @PluginMethod

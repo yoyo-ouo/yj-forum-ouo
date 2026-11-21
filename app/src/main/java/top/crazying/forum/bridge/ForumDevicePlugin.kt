@@ -50,7 +50,8 @@ class ForumDevicePlugin : Plugin() {
         activity.runOnUiThread {
             runCatching {
                 activity.window.statusBarColor = Color.parseColor(color)
-                activity.window.navigationBarColor = Color.parseColor(color)
+                // 全面屏边缘到边缘：导航栏保持透明，底部留白由前端 safe-area-inset-bottom 避让，避免出现实色色带
+                activity.window.navigationBarColor = Color.TRANSPARENT
                 WindowInsetsControllerCompat(activity.window, activity.window.decorView).apply {
                     isAppearanceLightStatusBars = darkIcons
                     isAppearanceLightNavigationBars = darkIcons

@@ -843,7 +843,7 @@
     }
 
     .world-window-header {
-        padding-top: calc(10px + env(safe-area-inset-top));
+        padding-top: calc(10px + var(--safe-top));
         cursor: default;
         touch-action: auto;
     }
@@ -868,7 +868,7 @@
     }
 
     .world-input-bar {
-        padding-bottom: calc(10px + env(safe-area-inset-bottom));
+        padding-bottom: calc(10px + var(--safe-bottom));
     }
 
     .world-input-bar .comment-editor-body {
