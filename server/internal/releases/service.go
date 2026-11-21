@@ -387,11 +387,12 @@ func (s *Service) fetchPage(page int) ([]githubRelease, error) {
 	return raw, nil
 }
 
-// versionTagRe 解析版本标签：v1.3.18 / 1.3.18 / v1.4.0-beta，以及旧式 Android-V2.1.0 等平台前缀标签。
+// versionTagRe 解析版本标签：v1.3.18 / 1.3.18 / v1.4.0-beta。
 //
 // NSH 一次构建多平台，一个 Release 里同时带 Windows/Android/Linux 安装包，
 // 因此 tag 只放版本号，平台由附件名识别（见 assetPlatform）。
-var versionTagRe = regexp.MustCompile(`(?i)^(?:(?:windows|android|linux|macos|darwin)-)?v?(\d+(?:\.\d+)*)(?:[-+][0-9A-Za-z._-]+)?$`)
+// versionTagRe 兼容普通版本标签和旧式平台前缀标签（如 Android-V2.1.0）。
+var versionTagRe = regexp.MustCompile(`(?i)^(?:(?:windows|android|linux|macos|darwin)-)?v?(\d+(?:\.\d+)*)(?:[-+][0-9A-Za-z._-]+)?// Package releases 读取 GitHub Releases 并提供下载页/客户端更新所需的清单与版本检查。
 //
 // 唯一数据源是 GitHub（默认 yoyo-ouo/yj-forum-nsh，即跨平台客户端的聚合发布仓库），
 // 读不到时返回 error，不回退内置清单。
