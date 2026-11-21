@@ -1,7 +1,7 @@
 openapi: "3.1.0"
 info:
   title: "妖精论坛 ov2 API"
-  version: "2.1.0"
+  version: "2.2.0"
   description: "唯一 API 前缀 `/ov2/api`；旧 `/api/v1` 别名与 `/api/*` 兼容层已于 2026-11-07 移除。SSE：`/ov2/api/world/stream`、`/ov2/api/messages/stream`。媒体统一经 `/ov2/api/media/<id>` 代理。"
 servers:
   -
