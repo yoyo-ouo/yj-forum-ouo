@@ -1014,7 +1014,12 @@
 
 .cs-resize {
     position: absolute;
-    z-index: 2;
+    /* 抬到滚动条 / 页脚之上，与世界频道一致 */
+    z-index: 6;
+    display: block;
+    background: transparent;
+    /* 触屏 / 触控笔拖动时不要被浏览器滚动手势抢走（世界频道手柄同样声明） */
+    touch-action: none;
 }
 
 /* 缩放手柄：FloatingWindow 实际输出的是 fw-resize-*（与 cs-resize 基类叠加），
@@ -1027,6 +1032,13 @@
     cursor: ew-resize;
 }
 
+/* 详情浮窗右侧有滚动条：让出外侧 6px 给滚动条，缩放手柄放内侧，
+   避免想拖动滚动条时把窗口改宽/改窄（世界频道的 .world-resize-e 同口径）。 */
+.cs-viewer .fw-resize-e {
+    right: 6px;
+    width: 4px;
+}
+
 .fw-resize-s {
     left: 12px;
     right: 12px;
@@ -1035,11 +1047,13 @@
     cursor: ns-resize;
 }
 
+/* 20px 圆角会把「贴着角」的点击裁掉：手柄放大到 18px、斜纹内移到 6px，
+   让看得见的抓握纹理整块都可点。 */
 .fw-resize-se {
     right: 0;
     bottom: 0;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     cursor: nwse-resize;
 }
 
@@ -1047,8 +1061,8 @@
 .fw-resize-se::after {
     content: "";
     position: absolute;
-    right: 3px;
-    bottom: 3px;
+    right: 6px;
+    bottom: 6px;
     width: 9px;
     height: 9px;
     background-image: repeating-linear-gradient(
